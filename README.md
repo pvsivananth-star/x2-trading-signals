@@ -205,6 +205,14 @@ Run a deterministic 25% warmup and then pump one-minute fixture ticks once per s
 
 The runtime initializes every enabled symbol with the warmup window, advances Actors 02/04/06 on every tick, and routes only demo BUY/SELL fills to the in-process broker. Positive `--ticks` limits the replay; omit it to process the fixture to completion.
 
+Generate an audited 252-session summary as a terminal table:
+
+```bash
+./.venv/bin/python -m app.cli backtest-report --days 252 --ticks-per-day 20
+```
+
+The report is deterministic from the local fixture corpus and must be labeled synthetic in external use. It is not broker-verified live or historical performance.
+
 ## Backtesting and AI Policy
 
 Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.

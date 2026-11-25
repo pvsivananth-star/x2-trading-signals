@@ -113,6 +113,30 @@ class Phase89Tests(unittest.TestCase):
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
 
+    def test_audited_backtest_report_contract(self):
+        from app.backtest.report import run_audited_backtest
+
+        config = load_feed_config("config/feeds.yaml")
+        store = FeedStore(config)
+        strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
+                                         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+        actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m")
+        broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
+
+        report = run_audited_backtest(store, actor, broker, days=3, ticks_per_day=2)
+        table = report.as_table()
+
+        self.assertEqual(report.days, 3)
+        self.assertEqual(report.starting_kitty, Decimal(25000))
+        self.assertIn("Ending Kitty", table)
+        self.assertIn("Net P&L", table)
+        self.assertIn("Total Trades", table)
+        self.assertIn("Overall Win Rate", table)
+        self.assertIn("Overall Profit Factor", table)
+        self.assertIn("Max Drawdown", table)
+        self.assertIn("Synthetic deterministic fixture", report.audit_warning)
+
     def test_tick_pump_warmup_and_every_tick_actor_execution(self):
         from app.backtest.tick_pump import TickPumpRuntime
 
