@@ -56,10 +56,15 @@ class ActorRuntime:
             self.cards[spec.symbol] = card
             cards.append(card)
             if card.rejected_gates:
-                self._log.info("action=reject symbol=%s card=%s gates=%s", spec.symbol,
-                               card.signal_id, ",".join(card.rejected_gates))
+                self._log.info("action=HOLD symbol=%s card=%s reason=%s", spec.symbol,
+                               card.signal_id, card.reason)
+            elif card.display_action in {"BUY", "SELL"}:
+                params = " ".join(f"{key}={value}" for key, value in card.parameters.items())
+                self._log.warning("action=%s symbol=%s card=%s parameters=%s reason=%s",
+                                  card.display_action, spec.symbol, card.signal_id, params, card.reason)
             else:
-                self._log.info("action=%s symbol=%s card=%s", card.action, spec.symbol, card.signal_id)
+                self._log.info("action=HOLD symbol=%s card=%s reason=%s", spec.symbol,
+                               card.signal_id, card.reason)
         return cards
 
     def start(self) -> None:

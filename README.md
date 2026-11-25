@@ -192,6 +192,8 @@ python -m app.cli start-api --host 127.0.0.1 --port 8080
 
 If `X2_API_TOKEN` is configured, clients must send `X2_API_TOKEN`; otherwise loopback clients are allowed. All `/v1/*` contracts are read-only (`GET`) and support `limit`/`offset` pagination. Write, control, and live broker endpoints are absent. The dashboard consumes only API endpoints and must not receive database credentials or secrets.
 
+Every BUY or SELL card includes concise rule parameters (`trend`, `RVOL`, RVOL threshold, Fibonacci zones, `MoveRoom`, threshold, stale age/limit) and one rule-based sentence explaining the decision. BUY/SELL decisions are logged with warning-level detail to `logs/x2.log`; HOLD/rejections include the rejected gates or unmet thresholds. A BUY/SELL label is a signal decision only and does not place an order automatically.
+
 ### Market feed runtime
 
 `config/feeds.yaml` tracks AAPL, SPY, SPX/^GSPC, GC=F, CL=F, and BTC-USD across provider-neutral market categories. Providers are optional Yahoo Chart REST, Stooq CSV, and Binance public klines adapters; every entry has `unknown` license/status and no redistribution claim is made. Configure `X2_LOG_DIR` and `X2_LOG_LEVEL` for rotating file and console logs. No credentials or live order route are used.
