@@ -60,6 +60,7 @@ Import a local public dump without database writes while developing the parser:
 
 ```bash
 python -m app.cli import-dump /path/to/BTCUSDT-trades.zip --no-database
+python -m app.cli load-fixtures
 ```
 
 An allow-listed HTTPS Binance historical-dump URL can be supplied instead of a local path. For a PostgreSQL-backed import, set `DATABASE_URL` to the restricted `x2_ingestion` role and omit `--no-database`. Public data terms and the source file checksum must be verified before storing or redistributing downloaded data.

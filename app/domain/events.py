@@ -52,6 +52,18 @@ def decimal_value(value: Decimal | str | int | float, field_name: str) -> Decima
     return parsed
 
 
+def decimal_non_negative(value: Decimal | str | int | float, field_name: str) -> Decimal:
+    if isinstance(value, float):
+        raise ValueError(f"{field_name} must not be supplied as a float")
+    try:
+        parsed = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a decimal: {value!r}") from exc
+    if not parsed.is_finite() or parsed < 0:
+        raise ValueError(f"{field_name} must be finite and non-negative")
+    return parsed
+
+
 def _canonical_json(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
 
@@ -163,3 +175,91 @@ class NormalizedTrade:
             "source_run_id": self.source_run_id,
             "payload_json": json.dumps(self.payload, sort_keys=True, default=str),
         }
+
+
+@dataclass(frozen=True, slots=True)
+class RawQuoteEvent:
+    """A top-of-book quote parsed from a provider, before instrument mapping."""
+
+    venue_id: str
+    venue_symbol: str
+    event_time: datetime
+    received_time: datetime
+    bid_price: Decimal | None = None
+    bid_quantity: Decimal | None = None
+    ask_price: Decimal | None = None
+    ask_quantity: Decimal | None = None
+    sequence_no: int | None = None
+    venue_quote_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.venue_id or not self.venue_symbol:
+            raise ValueError("venue_id and venue_symbol are required")
+        object.__setattr__(self, "event_time", ensure_utc(self.event_time))
+        object.__setattr__(self, "received_time", ensure_utc(self.received_time))
+        if self.bid_price is not None:
+            object.__setattr__(self, "bid_price", decimal_value(self.bid_price, "bid_price"))
+        if self.ask_price is not None:
+            object.__setattr__(self, "ask_price", decimal_value(self.ask_price, "ask_price"))
+        if self.bid_quantity is not None:
+            object.__setattr__(self, "bid_quantity", decimal_non_negative(self.bid_quantity, "bid_quantity"))
+        if self.ask_quantity is not None:
+            object.__setattr__(self, "ask_quantity", decimal_non_negative(self.ask_quantity, "ask_quantity"))
+        if self.bid_price is None and self.ask_price is None:
+            raise ValueError("at least one quote side is required")
+        if self.bid_price is not None and self.ask_price is not None and self.bid_price > self.ask_price:
+            raise ValueError("bid_price cannot exceed ask_price")
+
+    @property
+    def deduplication_key(self) -> str:
+        if self.venue_quote_id is not None:
+            identity = f"quote:{self.venue_id}:{self.venue_quote_id}"
+        elif self.sequence_no is not None:
+            identity = f"quote-sequence:{self.venue_id}:{self.venue_symbol}:{self.sequence_no}"
+        else:
+            digest = hashlib.sha256(_canonical_json(self.payload)).hexdigest()
+            identity = f"quote-payload:{self.venue_id}:{self.venue_symbol}:{digest}"
+        return identity
+
+    def normalize(self, canonical_symbol: str, source_object_id: str, source_run_id: str | None = None) -> "NormalizedQuote":
+        return NormalizedQuote(
+            venue_id=self.venue_id,
+            venue_symbol=self.venue_symbol,
+            canonical_symbol=canonical_symbol,
+            event_time=self.event_time,
+            received_time=self.received_time,
+            bid_price=self.bid_price,
+            bid_quantity=self.bid_quantity,
+            ask_price=self.ask_price,
+            ask_quantity=self.ask_quantity,
+            sequence_no=self.sequence_no,
+            deduplication_key=self.deduplication_key,
+            source_object_id=source_object_id,
+            source_run_id=source_run_id,
+            payload=self.payload,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedQuote:
+    venue_id: str
+    venue_symbol: str
+    canonical_symbol: str
+    event_time: datetime
+    received_time: datetime
+    deduplication_key: str
+    source_object_id: str
+    bid_price: Decimal | None = None
+    bid_quantity: Decimal | None = None
+    ask_price: Decimal | None = None
+    ask_quantity: Decimal | None = None
+    sequence_no: int | None = None
+    source_run_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.canonical_symbol or not self.source_object_id:
+            raise ValueError("canonical_symbol and source_object_id are required")
+        object.__setattr__(self, "event_time", ensure_utc(self.event_time))
+        object.__setattr__(self, "received_time", ensure_utc(self.received_time))

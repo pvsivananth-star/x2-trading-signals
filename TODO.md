@@ -6,13 +6,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 0 — Safety and project bootstrap
 
-- [ ] Confirm the initial public provider's current API/dump terms, endpoints, retention, and redistribution restrictions.
-- [ ] Record the provider decision and symbol mapping in source configuration; keep the provider behind an adapter interface.
+- [~] Confirm the initial public provider's current API/dump terms, endpoints, retention, and redistribution restrictions (Binance public dumps are integrated; redistribution terms remain unverified).
+- [x] Record the provider decision and symbol mapping in source configuration; keep the provider behind an adapter interface.
 - [x] Choose and document the Python runtime/dependency policy.
 - [x] Add package metadata, pinned dependencies, formatting/linting, type-checking, and test commands.
 - [x] Add `.env.example` with non-secret local settings only; keep credentials out of Git.
 - [x] Add data-directory and credential patterns to `.gitignore`.
-- [ ] Add a configuration validator that rejects live broker mode in the initial local implementation.
+- [x] Add a configuration validator that rejects live broker mode in the initial local implementation.
 - [x] Add a CI check for formatting, compilation, unit tests, and secret/file hygiene.
 
 **Exit criteria:** a clean checkout can install dependencies and run an empty application/test command without broker credentials.
@@ -24,20 +24,20 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Add an applied-migrations table and ordered SQL migration runner.
 - [x] Apply and integration-test the `market_data` migrations against PostgreSQL 16 locally.
 - [x] Add Docker startup, migration, test, shell, and reset scripts.
-- [ ] Add local partition creation/maintenance for the initial tick range.
-- [ ] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
+- [x] Add local partition creation/maintenance for the initial 2026-11 tick range.
+- [x] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
 - [ ] Add `trading` tables for signals, decision cards, orders, fills, positions, cash, fees, and P&L.
 - [ ] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
-- [~] Add seed data for one venue, one instrument, and one public ingestion source (the importer creates this metadata on demand).
+- [x] Add seed data for Binance, BTCUSDT/BTC-USDT, and the public ingestion source.
 - [x] Add database reset commands for local Docker development.
-- [ ] Add fixture-loading commands for local development.
+- [x] Add fixture-loading and validation commands for local development.
 
 **Exit criteria:** `docker compose up` creates a usable local database, migrations are repeatable, and seed metadata is queryable.
 
 ## Phase 2 — Canonical market-data contracts
 
-- [~] Define typed raw trade/quote envelopes (trade envelope implemented; quote envelope remains).
-- [x] Define normalized trade/quote contracts with UTC event time, receipt time, instrument ID, venue ID, provenance, and dedupe key (trade contract implemented; quote contract remains).
+- [x] Define typed raw trade/quote envelopes with validation.
+- [x] Define normalized trade/quote contracts with UTC event time, receipt time, instrument ID, venue ID, provenance, and dedupe key.
 - [x] Define ingestion run, raw object, checkpoint, and quality-event contracts for the historical path.
 - [x] Define provider-neutral interfaces for historical dumps and WebSocket streams; REST metadata remains.
 - [x] Add a provider/source registry covering Binance, Yahoo, Google Finance, and Stooq metadata. License status remains unverified until reviewed.
@@ -54,7 +54,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Preserve the original downloaded file under `data/raw/` and calculate a checksum before processing.
 - [x] Register the raw object and ingestion run before processing rows when PostgreSQL is configured.
 - [x] Stream compressed/uncompressed rows without loading the full dump into memory.
-- [~] Normalize rows and write partitioned Parquet under `data/normalized/` (implementation added; runtime dependency not installed locally).
+- [x] Normalize rows and write partitioned Parquet under `data/normalized/` (runtime dependency is included in Docker; unit fixtures verify deterministic rollups).
 - [x] Upsert normalized ticks into PostgreSQL using idempotent deduplication.
 - [x] Persist accepted, duplicate, invalid, out-of-order, and gap counts.
 - [x] Make rerunning the same dump safe and produce the same counts/results with the repository deduplication path.

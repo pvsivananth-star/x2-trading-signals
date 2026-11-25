@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write the archive without PostgreSQL (useful for parser/archive development)",
     )
+
+    subparsers.add_parser("load-fixtures", help="validate the deterministic local market-data fixtures")
     return parser
 
 
@@ -56,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "import-dump":
             return _import_dump(args, settings)
+        if args.command == "load-fixtures":
+            return _load_fixtures(settings)
     except SystemExit:
         raise
     except Exception as exc:
@@ -107,6 +111,36 @@ def _import_dump(args: argparse.Namespace, settings: Settings) -> int:
         if finding["event_time"] is not None:
             finding["event_time"] = finding["event_time"].isoformat()
     print(json.dumps(output, default=str, indent=2))
+    return 0
+
+
+def _load_fixtures(settings: Settings) -> int:
+    import csv
+
+    fixture_dir = settings.archive_root / "fixtures" / "binance" / "BTCUSDT" / "5-day-2026-11-20-to-2026-11-24"
+    manifest_path = fixture_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise SystemExit(f"fixture manifest not found: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected = {"1m": 7200, "5m": 1440, "15m": 480}
+    header = ["bar_start", "bar_end", "open", "high", "low", "close", "volume", "trade_count"]
+    summary: dict[str, int] = {}
+    bars_dir = fixture_dir / "bars"
+    for interval, expected_count in expected.items():
+        path = bars_dir / f"BTCUSDT-{interval}.csv"
+        if not path.is_file():
+            raise SystemExit(f"fixture bar file not found: {path}")
+        with path.open("r", encoding="utf-8", newline="") as source:
+            reader = csv.reader(source)
+            if next(reader, None) != header:
+                raise SystemExit(f"unexpected fixture header: {path}")
+            count = sum(1 for row in reader if row)
+        if count != expected_count:
+            raise SystemExit(f"fixture row count mismatch: {path}: {count} != {expected_count}")
+        summary[interval] = count
+    if manifest.get("bar_counts") != summary:
+        raise SystemExit("fixture manifest bar counts do not match CSV files")
+    print(json.dumps({"fixture": manifest["fixture"], "bars": summary}, indent=2))
     return 0
 
 
