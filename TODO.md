@@ -22,13 +22,15 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Add local Docker Compose for PostgreSQL and application workers.
 - [x] Add PostgreSQL health checks and internal-only database networking.
 - [x] Add an applied-migrations table and ordered SQL migration runner.
-- [ ] Apply and integration-test the existing `market_data` migration against PostgreSQL 15+.
+- [x] Apply and integration-test the `market_data` migrations against PostgreSQL 16 locally.
+- [x] Add Docker startup, migration, test, shell, and reset scripts.
 - [ ] Add local partition creation/maintenance for the initial tick range.
 - [ ] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
 - [ ] Add `trading` tables for signals, decision cards, orders, fills, positions, cash, fees, and P&L.
 - [ ] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
-- [ ] Add seed data for one venue, one instrument, and one public ingestion source.
-- [ ] Add database reset and fixture-loading commands for local development.
+- [~] Add seed data for one venue, one instrument, and one public ingestion source (the importer creates this metadata on demand).
+- [x] Add database reset commands for local Docker development.
+- [ ] Add fixture-loading commands for local development.
 
 **Exit criteria:** `docker compose up` creates a usable local database, migrations are repeatable, and seed metadata is queryable.
 
@@ -38,6 +40,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Define normalized trade/quote contracts with UTC event time, receipt time, instrument ID, venue ID, provenance, and dedupe key (trade contract implemented; quote contract remains).
 - [x] Define ingestion run, raw object, checkpoint, and quality-event contracts for the historical path.
 - [x] Define provider-neutral interfaces for historical dumps and WebSocket streams; REST metadata remains.
+- [x] Add a provider/source registry covering Binance, Yahoo, Google Finance, and Stooq metadata. License status remains unverified until reviewed.
+- [x] Add EQ, ETF, Metal, FX, Crypto, futures, options, bond, and index asset-class support plus instrument aliases and RSS/news feed storage.
 - [x] Define decimal/timestamp serialization rules and reject floating-point prices/quantities at persistence boundaries.
 - [x] Add unit tests for serialization, timezone conversion, malformed input, and deterministic dedupe-key generation.
 
@@ -155,7 +159,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [ ] Define and validate tier resolution order: symbol override, explicit disabled/excluded state, explicit probation, market profile, then broad tier defaults; fail closed on conflicts such as the duplicate crypto tier listing.
 - [ ] Confirm Python 3.12 as the implementation runtime.
 - [ ] Confirm the first instrument (`BTCUSDT`) and historical date range.
-- [ ] Confirm whether local PostgreSQL should run in Docker or use an existing installation.
+- [x] Confirm whether local PostgreSQL should run in Docker or use an existing installation (Docker Compose PostgreSQL 16 is the local default).
 - [ ] Confirm the desired first UI milestone: API-only first or API plus a minimal dashboard after paper execution.
 
 ## First coding milestone

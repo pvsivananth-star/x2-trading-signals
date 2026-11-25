@@ -23,7 +23,8 @@ Deterministic intraday trading and signal-generation architecture supporting **1
 - [Data ingestion architecture](docs/data-ingestion-architecture.md) — local-first historical and live tick ingestion design.
 - [Local-first implementation plan](docs/local-first-implementation-plan.md) — target architecture, local runtime, data lifecycle, strategy/backtest boundaries, and acceptance criteria.
 - [Implementation TODO](TODO.md) — phased checklist for building the local system before cloud hosting or live routing.
-- [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, ingestion runs, trades, quotes, bars, and quality events.
+- [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, aliases, ingestion runs, trades, quotes, bars, feed events, and quality events.
+- **Multi-asset foundation:** EQ/ETF, Metal, FX, Crypto, futures, options, bonds, and indices use the same provenance and canonical event model. Provider aliases and news/RSS events are persisted separately from trade ticks.
 
 ## Local Phase 0–3 setup
 
@@ -62,3 +63,11 @@ python -m app.cli import-dump /path/to/BTCUSDT-trades.zip --no-database
 ```
 
 An allow-listed HTTPS Binance historical-dump URL can be supplied instead of a local path. For a PostgreSQL-backed import, set `DATABASE_URL` to the restricted `x2_ingestion` role and omit `--no-database`. Public data terms and the source file checksum must be verified before storing or redistributing downloaded data.
+
+### Provider status
+
+- **Binance:** implemented historical trade-dump adapter and WebSocket payload parser for `BTCUSDT`; Redistributing public dumps still requires verified terms.
+- **Yahoo Finance:** source endpoint registered for future OHLC adapters. No live or historical ticker ingestion is enabled automatically.
+- **Google Finance:** source endpoint registered for future reference/news adapters. Its terms and attribution requirements remain unverified.
+- **Stooq:** source endpoint registered for future historical dump adapters. Access behavior and redistribution terms remain unverified.
+- **RSS/news:** generic `feed_events` storage is available; feed parsing and deduplication are not yet implemented.
