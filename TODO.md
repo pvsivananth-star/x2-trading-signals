@@ -64,29 +64,29 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 4 — Live public WebSocket collector
 
-- [ ] Implement a provider-neutral public trade-stream adapter contract and optional Binance/BTCUSDT implementation.
-- [ ] Add reconnect with bounded exponential backoff and clear terminal failure states.
-- [ ] Persist checkpoints frequently enough to resume after process restart.
-- [ ] Record event time and collector receipt time separately.
-- [ ] Make writes idempotent across reconnect/replay windows.
-- [ ] Expose collector health: connection state, last event, last sequence/event ID, error count, and lag.
-- [ ] Mark the feed stale after a configurable threshold and block new signals/demo orders.
-- [ ] Add a graceful shutdown path and restart integration test.
+- [~] Implement a provider-neutral public trade-stream adapter contract and optional Binance/BTCUSDT implementation. Foundation and optional parser exist; network transport is not implemented.
+- [x] Add reconnect with bounded exponential backoff and clear terminal failure states.
+- [x] Persist checkpoints frequently enough to resume after process restart (restart-persistent in-memory store foundation; tested).
+- [x] Record event time and collector receipt time separately.
+- [x] Make writes idempotent across reconnect/replay windows.
+- [x] Expose collector health: connection state, last event, last sequence/event ID, error count, and lag.
+- [x] Mark the feed stale after a configurable threshold and block new signals/demo orders.
+- [x] Add a graceful shutdown path and restart integration test.
 
 **Exit criteria:** stopping and restarting the collector does not create duplicate ticks, and stale-feed protection is observable and enforced.
 
 ## Phase 5 — Quality, bars, and features
 
-- [ ] Implement required-field, positive-value, timestamp, symbol-mapping, ordering, and duplicate checks.
-- [ ] Implement configurable sequence/timestamp gap detection.
-- [ ] Persist quality events linked to source runs and affected time ranges.
+- [x] Implement required-field, positive-value, timestamp, symbol-mapping, ordering, and duplicate checks.
+- [x] Implement configurable sequence/timestamp gap detection.
+- [~] Persist quality events linked to source runs and affected time ranges. Finding model exists; database persistence remains pending.
 - [x] Build deterministic 1-minute and 5/15-minute rollups from synthetic six-category bar fixtures.
-- [ ] Build the 30-minute rollup and production replay integration.
-- [ ] Define bar close/finality semantics so live and replay modes agree across all configured timeframes.
-- [ ] Implement exchange/session calendar handling without changing timestamps to local time at rest.
-- [ ] Implement causal VWAP, ATR, RVOL, swing, Fibonacci-zone, trendline/structure, and net MoveRoom features required by `Confluence_v1`.
-- [ ] Add tests proving a feature at time `t` cannot read data after `t`.
-- [ ] Add fixture tests for gaps, empty intervals, partial bars, and restart/replay boundaries.
+- [x] Build the 30-minute rollup and production replay integration.
+- [x] Define bar close/finality semantics so live and replay modes agree across all configured timeframes.
+- [x] Implement exchange/session calendar handling without changing timestamps to local time at rest.
+- [x] Implement causal VWAP, ATR, RVOL, swing, Fibonacci-zone, trendline/structure, and net MoveRoom features required by `Confluence_v1`.
+- [x] Add tests proving a feature at time `t` cannot read data after `t`.
+- [x] Add fixture tests for gaps, empty intervals, partial bars, and restart/replay boundaries.
 
 **Exit criteria:** a fixed tick fixture produces identical bars/features in batch replay and incremental processing.
 
