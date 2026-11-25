@@ -86,7 +86,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Build the 30-minute rollup and production replay integration.
 - [x] Define bar close/finality semantics so live and replay modes agree across all configured timeframes.
 - [x] Implement exchange/session calendar handling without changing timestamps to local time at rest.
-- [x] Implement causal VWAP, ATR, RVOL, swing, Fibonacci-zone, trendline/structure, and net MoveRoom features required by `Confluence_v1`.
+- [~] Implement causal VWAP, ATR, RVOL, swing, Fibonacci-zone, trendline/structure, and net MoveRoom features required by `Confluence_v1`. Causal and tested, but not yet spec-conformant: VWAP is not session-anchored, RVOL is not slot-normalized, swings lack the 15m/0.60×ATR/2-bar-confirmation rules, and MoveRoom does not net spread/slippage/fees (see Phase 12).
 - [x] Add tests proving a feature at time `t` cannot read data after `t`.
 - [x] Add fixture tests for gaps, empty intervals, partial bars, and restart/replay boundaries.
 
@@ -97,10 +97,10 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Implement the regime interface for `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY`.
 - [x] Implement a versioned policy layer that enforces configured risk/session/market gates in one place.
 - [x] Keep probationary and disabled markets blocked according to the existing configuration.
-- [x] Implement `Confluence_v1` using the configured timeframes and thresholds.
-- [x] Produce explainable signal decision cards containing inputs, rejected gates, selected zone, expected MoveRoom, and configuration version.
+- [~] Implement `Confluence_v1` using the configured timeframes and thresholds. Reaction zones, VWAP-hold/reclaim requirements, confirmed trend-break exits, and pre-close flatten now enforced (review v1). Swing, RVOL, VWAP, and MoveRoom conformance remains (Phase 12).
+- [x] Produce explainable signal decision cards containing inputs, rejected gates, selected zone, expected MoveRoom, configuration version, size weight, and max-risk cap.
 - [x] Add deterministic signal IDs and deduplication.
-- [x] Add unit tests for every entry/exit gate and negative case.
+- [~] Add unit tests for every entry/exit gate and negative case. Zone boundaries, VWAP hold/reclaim, single-bar vs confirmed break, pre-close flatten, and missing-input fail-closed are covered. Not yet covered: regime-gated exits, daily-stop interaction, and sizing.
 
 **Exit criteria:** a fixture generates expected signals with an explanation, and no signal bypasses regime, stale-data, session, probation, or disabled-market gates.
 
@@ -108,7 +108,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 - [x] Add deterministic 1/5/15-minute fixtures for EQ, ETF, Index, Gold, Oil, and BTC-USD, plus market-buy replay primitives.
 - [x] Implement an event replay clock over normalized in-memory event feeds, reusable with canonical Bar/Trade replay abstractions.
-- [~] Reuse the production bar and feature paths in replay; full strategy/decision-card orchestration remains pending for a later integration pass.
+- [~] Reuse the production bar and feature paths in replay. The tick pump now evaluates the strategy at bar time with previous-snapshot confirmation; the golden backtest fixture still needs regeneration against the review v1 rules (Phase 12).
 - [x] Implement an order simulator with market/limit behavior needed by the first strategy.
 - [x] Implement configurable spread, slippage, fees, and partial/rejected fill behavior.
 - [x] Define gap policies and fail or annotate runs when quality thresholds are exceeded.
@@ -127,7 +127,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Implement fills, positions, cash, fees, realized P&L, unrealized P&L, and equity snapshots.
 - [x] Reconcile position/P&L calculations from fills in tests.
 - [x] Record signal-to-order-to-fill lineage and decision/audit cards.
-- [~] Enforce pre-close cutoff, mandatory flatten, session stops, and correlation caps from configuration. Crypto uses existing policy blocking; explicit rolling-session fields remain pending because no approved rolling-session policy exists.
+- [~] Enforce pre-close cutoff, mandatory flatten, session stops, and correlation caps from configuration. Pre-close entry cutoff and mandatory flatten exit are enforced in the strategy. Session stops and correlation caps are not implemented (Phase 12). Crypto uses existing policy blocking; explicit rolling-session fields remain pending because no approved rolling-session policy exists.
 - [x] Keep probationary/zero-allocation crypto blocked in production policy; demo accounting tests use the non-probationary US equities fixture without changing risk policy.
 
 **Exit criteria:** a paper run produces internally consistent orders, fills, positions, cash, and P&L with no live network route, and no safety gate is bypassed to create a fill.
@@ -163,6 +163,31 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [ ] Require an explicit, separately reviewed authorization before implementing any live broker route.
 
 **Exit criteria:** the local acceptance target passes in CI and the hosted deployment can be configured without changing strategy/backtest behavior.
+
+## Phase 12 — Strategy spec conformance (from code review v1)
+
+Items found by reviewing `Confluence_v1`, `actors/02`, `actors/04`, and `actors/06` against the code. Each needs a test before it is marked done.
+
+- [ ] Swing detection: enforce 15-minute swing timeframe, minimum `3` candles, minimum size `>= 0.60 × ATR(14, 15m)`, and confirmation after `M = 2` closed 15-minute bars. Currently `causal_swing` has none of these.
+- [ ] VWAP: reset causal VWAP per exchange session, not cumulative across all supplied bars.
+- [ ] RVOL: implement 30-minute slot-normalized RVOL (time-of-day profile) per `actors/02` Stage 1 instead of last-bar-vs-prior-19-bars.
+- [ ] MoveRoom: net of spread, slippage, and market-specific fees/taxes per `strategies/confluence_pullback_continuation.md`, instead of fib-618 target / fib-382 stop.
+- [ ] Sizing: apply `size_weight` (1.00 core, 0.68 shallow/deep) and the `max_risk_pct` cap (CHOP 0.08%, TREND 0.25% A-tier / 0.17% B-tier) in execution. Cards emit the values; nothing consumes them yet.
+- [ ] Exit rules: add target/runner rule and daily stop (soft/hard) per `actors/04`. Drawdown throttle is also pending.
+- [ ] Session stops: daily soft and hard loss stops, and drawdown throttles from `actors/04`.
+- [ ] Correlation caps: enforce per-cluster exposure limits across sleeves (`actors/04`).
+- [ ] Actor 02 Stage 1: replace configured `slot_rvol` flags with computed discovery at 30-minute cadence, excluding first 15 minutes, lunch, and final 60 minutes, and excluding `NEWS_DAY` and gap-exhausted names.
+- [ ] Actor 02 Stage 2: 5-minute streaming evaluation on promoted candidates only. Current scanner reaction input is a boolean passed in by the caller.
+- [ ] Actor 06 probation gates: enforce `NVDA` PF > 1.25 and `HKEX` PF > 1.10 re-enable, `SLV` exclusion, and monthly/quarterly/out-of-sample metrics.
+- [ ] Regime: confirm the `NEWS_DAY` classifier is causal and point-in-time; currently a regime provider stub.
+- [ ] Golden regression: regenerate the golden backtest fixture after the review v1 rule changes and record the reason for each changed count.
+- [ ] Naming: align the strategy ID. Code and YAML use `confluence_pullback_v1`; the strategy doc and README use `Confluence_v1`. Pick one and update the others.
+- [ ] Repo governance: `AGENTS.md` on `main` allows agents to push feature branches automatically. This conflicts with the owner-pushes rule. Decide which applies and update `AGENTS.md` to match.
+
+## Data (blocked by sandbox network)
+
+- [ ] Bring in additional historical backtest data. Required before strategy tuning. Blocked: the build sandbox can reach only GitHub, PyPI, and Ubuntu mirrors, so Binance, Yahoo, and Stooq cannot be fetched there. Use a machine with network access and the verified provider terms in Phase 10.
+- [ ] Optional: extend `scripts/build_five_day_bars_streaming.py` to longer synthetic ranges for stress tests only. Must stay labeled `synthetic` and cannot support performance claims.
 
 ## Decisions still required before implementation
 
