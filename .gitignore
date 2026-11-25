@@ -221,3 +221,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local market data and runtime state
+data/raw/
+data/normalized/
+data/downloads/
+data/*.sqlite*
+*.parquet
+.env
