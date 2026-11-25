@@ -103,7 +103,9 @@ class Phase89Tests(unittest.TestCase):
         os.environ["TRADING_MODE"] = "demo"
         self.assertFalse(modes.live_feed_allowed())
         dashboard_broker = MockBrokerDashboardAdapter()
-        self.assertTrue(hasattr(dashboard_broker, "positions"))
+        self.assertEqual(dashboard_broker.positions, ())
+        snapshot = dashboard_broker.snapshot(self.now, {})
+        self.assertEqual(snapshot.positions_value if hasattr(snapshot, "positions_value") else None, 0)
         os.environ.pop("TRADING_MODE", None)
 
     def test_feed_config_fallback_grouping_and_stale(self):

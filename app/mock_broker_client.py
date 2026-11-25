@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime
 from decimal import Decimal
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -28,12 +29,18 @@ class MockBrokerClient:
             with urlopen(request, timeout=self.timeout) as response:
                 code = response.status
                 body = json.loads(response.read().decode())
-        except Exception as exc:
-            if hasattr(exc, "code"):
-                code = int(exc.code)
+        except HTTPError as exc:
+            try:
                 body = json.loads(exc.read().decode())
-            else:
-                raise
+            except json.JSONDecodeError:
+                body = {"error": "mock_broker_invalid_error_response"}
+            return int(exc.code), body
+        except URLError:
+            return 503, {"error": "mock_broker_unavailable"}
+        except OSError:
+            return 503, {"error": "mock_broker_unavailable"}
+        except json.JSONDecodeError:
+            return 502, {"error": "mock_broker_invalid_response"}
         return code, body
 
     def health(self) -> tuple[int, dict[str, object]]: return self._request("GET", "/health")
