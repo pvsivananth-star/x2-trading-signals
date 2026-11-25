@@ -17,6 +17,7 @@ runtime = [
   "PyYAML>=6,<7",
 ]
 dev = [
+  "PyYAML>=6,<7",
   "pytest>=8,<9",
   "ruff>=0.9,<1",
   "mypy>=1.13,<2",

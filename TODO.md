@@ -119,29 +119,38 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 8 — Demo execution and accounting
 
-- [ ] Implement a demo broker adapter that consumes signals but never contacts a real broker.
-- [ ] Add explicit environment checks preventing live routing in local mode.
-- [ ] Implement order lifecycle states and immutable order-state transitions.
-- [ ] Implement fills, positions, cash, fees, realized P&L, unrealized P&L, and equity snapshots.
-- [ ] Reconcile position/P&L calculations from fills in tests.
-- [ ] Record signal-to-order-to-fill lineage and decision/audit cards.
-- [ ] Enforce pre-close cutoff, mandatory flatten, session stops, and correlation caps from configuration; use an explicit rolling-session policy for 24/7 crypto instead of fixed exchange-close arithmetic.
-- [ ] Keep probationary/zero-allocation crypto blocked in production policy; test demo-fill accounting with a non-probationary fixture or an explicitly approved policy change.
+- [x] Implement a demo broker adapter that consumes signals but never contacts a real broker.
+- [x] Add explicit environment checks preventing live routing in local mode.
+- [x] Implement order lifecycle states and immutable order-state transitions.
+- [x] Implement fills, positions, cash, fees, realized P&L, unrealized P&L, and equity snapshots.
+- [x] Reconcile position/P&L calculations from fills in tests.
+- [x] Record signal-to-order-to-fill lineage and decision/audit cards.
+- [~] Enforce pre-close cutoff, mandatory flatten, session stops, and correlation caps from configuration. Crypto uses existing policy blocking; explicit rolling-session fields remain pending because no approved rolling-session policy exists.
+- [x] Keep probationary/zero-allocation crypto blocked in production policy; demo accounting tests use the non-probationary US equities fixture without changing risk policy.
 
 **Exit criteria:** a paper run produces internally consistent orders, fills, positions, cash, and P&L with no live network route, and no safety gate is bypassed to create a fill.
 
 ## Phase 9 — Read API and dashboard foundation
 
-- [ ] Define versioned read-only API contracts for health, ingestion, quality, bars, signals, orders, fills, positions, P&L, and backtests.
-- [ ] Implement API pagination and UTC timestamp serialization.
-- [ ] Add authentication/authorization before exposing the API outside localhost.
-- [ ] Add a dashboard for collector freshness, data quality, signals, working demo orders, trades, positions, and P&L.
-- [ ] Keep write/control endpoints separate and disabled by default.
-- [ ] Add API contract and authorization tests.
+- [x] Define versioned read-only API contracts for health, ingestion, quality, bars, signals, orders, fills, positions, P&L, and backtests.
+- [x] Implement API pagination and UTC timestamp serialization.
+- [x] Add authentication/authorization before exposing the API outside localhost.
+- [x] Add a minimal localhost read-only HTML dashboard foundation for API data; persisted PostgreSQL source wiring remains for future integrations.
+- [x] Keep write/control endpoints separate and disabled by default.
+- [x] Add API contract and authorization tests.
 
 **Exit criteria:** the dashboard can display a paper run from persisted data without reading the database directly or handling secrets.
 
-## Phase 10 — Cloud preparation (after local acceptance)
+## Phase 10 — Configurable feeds and market dashboard
+
+- [x] Add `config/feeds.yaml` for EQ, ETF, Index, Gold, Oil, and Crypto symbols with provider, license/status, refresh, timeframe, and enabled fields.
+- [x] Implement provider-neutral candle, Yahoo Chart REST, Stooq CSV, Binance public klines, cache, stale, quality, and deterministic synthetic-fallback support.
+- [x] Implement in-process regime/scanner/decision actors using existing policy, Confluence_v1, and causal features; synthetic/stale feeds are rejected and live orders remain disabled.
+- [x] Add rotating file/console logging and `start-api --with-feeds`, `start-feed`, and `status` CLI integration.
+- [x] Extend the read-only API and vanilla dashboard with market grouping, symbol/timeframe bars, candlesticks, 20/50/200 DMAs, Fibonacci zones, and OHLC/volume metadata.
+- [ ] Verify public provider terms and redistribution/attribution status before changing the configured `unknown` provider status.
+
+## Phase 11 — Cloud preparation (after local acceptance)
 
 - [ ] Containerize the validated workers/API without cloud-specific domain logic.
 - [ ] Replace local filesystem paths with an object-storage interface while retaining a local implementation.

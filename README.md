@@ -179,4 +179,37 @@ Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar
 
 Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.
 
-Live execution is intentionally unavailable until demo/paper accounting, separate authorization, and a broker adapter are implemented and reviewed.
+Live execution is intentionally unavailable: only the provider-neutral in-process demo broker is implemented. It validates policy gates, uses immutable order lifecycle transitions, records fills/positions/cash/fees/P&L and signal-order-fill audit cards, and rejects every live/unknown routing environment. The existing crypto probationary policy remains blocked; no risk parameters are changed.
+
+## Configurable Public Feeds and Read-Only Demo Dashboard
+
+Start the read-only API and dashboard on loopback only:
+
+```bash
+python -m app.cli start-api --host 127.0.0.1 --port 8080
+# open http://127.0.0.1:8080/dashboard
+```
+
+If `X2_API_TOKEN` is configured, clients must send `X2_API_TOKEN`; otherwise loopback clients are allowed. All `/v1/*` contracts are read-only (`GET`) and support `limit`/`offset` pagination. Write, control, and live broker endpoints are absent. The dashboard consumes only API endpoints and must not receive database credentials or secrets. `--with-feeds` creates an in-process `DemoBroker` with $25,000 demo cash and no order routing; the portfolio bar reports demo kitty cash, open-position value, overall equity, and unrealized P&L. The Positions and Others tabs partition configured symbols without creating positions or submitting orders. The chart marks an executed fill at its fill timestamp and an expected exit only when the latest actor card has a selected Fibonacci zone.
+
+Every BUY or SELL card includes concise rule parameters (`trend`, `RVOL`, RVOL threshold, Fibonacci zones, `MoveRoom`, threshold, stale age/limit) and one rule-based sentence explaining the decision. BUY/SELL decisions are logged with warning-level detail to `logs/x2.log`; HOLD/rejections include the rejected gates or unmet thresholds. A BUY/SELL label is a signal decision only and does not place an order automatically.
+
+### Market feed runtime
+
+`config/feeds.yaml` tracks AAPL, SPY, SPX/^GSPC, GC=F, CL=F, and BTC-USD across provider-neutral market categories. Providers are optional Yahoo Chart REST, Stooq CSV, and Binance public klines adapters; every entry has `unknown` license/status and no redistribution claim is made. Configure `X2_LOG_DIR` and `X2_LOG_LEVEL` for rotating file and console logs. No credentials or live order route are used.
+
+```bash
+python -m app.cli start-api --with-feeds --config config/feeds.yaml
+python -m app.cli start-feed --config config/feeds.yaml
+python -m app.cli status --config config/feeds.yaml
+```
+
+Real fetches are cached and quality validated. Unavailable, disabled, or unimplemented providers fall back to the existing deterministic synthetic fixtures, labeled `synthetic` in API responses and never accepted as live observations. Actors run only in demo/read-only mode and reject synthetic, stale, disabled, and policy-blocked cards.
+
+### Verified current runtime status
+
+- **Docker/PostgreSQL:** runnable; `./scripts/docker-up.sh` builds the app, applies migrations 000–006, starts PostgreSQL, and runs the container tests.
+- **Synthetic fixtures:** runnable with `python -m app.cli load-fixtures`; AAPL, SPY, SPX, GC=F, CL=F, and BTC-USD provide 1/5/15-minute test bars.
+- **Read API/dashboard:** runnable now on `127.0.0.1:8080`. `GET /v1/health` and `GET /dashboard` are verified. API data arrays are currently empty unless supplied in-process; PostgreSQL-backed read persistence is not yet wired into the HTTP server.
+- **Demo execution:** runnable only as an in-process library/demo broker. It does not expose live order or broker control endpoints.
+- **Ticker feed:** not live. The Binance parser exists, and the collector framework supports replay/checkpoints/deduplication/stale blocking, but no live WebSocket transport or real ticker ingestion process is implemented.

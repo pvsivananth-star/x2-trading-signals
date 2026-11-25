@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -14,6 +14,10 @@ from typing import Any
 from app.features import FeatureSnapshot
 from app.policy import TradingPolicy
 from app.regime import Regime
+
+
+def _decimal_text(value: Decimal | None) -> str:
+    return "N/A" if value is None else format(value.normalize(), "f")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +32,9 @@ class DecisionCard:
     config_version: str
     signal_id: str
     dedupe_key: str
+    display_action: str = "HOLD"
+    parameters: Mapping[str, str] = field(default_factory=dict)
+    reason: str = ""
 
 
 class ConfluenceV1:
@@ -120,6 +127,48 @@ class ConfluenceV1:
             "regime": regime.value,
             "stale_feed_seconds": stale_feed_seconds,
         }
+        try:
+            _market_name, market = self.policy.resolve_market(symbol)
+            slot_rvol = Decimal(str(market["slot_rvol_min"]))
+            required_room = Decimal(str(market["min_net_moveroom_pct"]))
+        except (ValueError, KeyError):
+            slot_rvol = None
+            required_room = None
+        parameters = {
+            "trend": snapshot.trend,
+            "rvol": _decimal_text(snapshot.rvol),
+            "rvol_threshold": _decimal_text(slot_rvol),
+            "fib_382": _decimal_text(snapshot.fib_382),
+            "fib_618": _decimal_text(snapshot.fib_618),
+            "move_room": _decimal_text(snapshot.move_room),
+            "move_room_threshold": _decimal_text(required_room),
+            "stale_seconds": _decimal_text(Decimal(str(stale_feed_seconds))),
+            "stale_limit": _decimal_text(Decimal(str(stale_threshold_seconds))),
+        }
+        if action == "enter_long":
+            display_action = "BUY"
+            reason = (
+                f"BUY {symbol}: trend is up (RVOL {_decimal_text(snapshot.rvol)} >= {_decimal_text(slot_rvol)} "
+                f"and MoveRoom {_decimal_text(snapshot.move_room)} meets {_decimal_text(required_room)})"
+            )
+        elif action == "exit_long":
+            display_action = "SELL"
+            reason = (
+                f"SELL {symbol}: trend/structure turned down ({snapshot.trend}, {snapshot.structure})"
+            )
+        else:
+            display_action = "HOLD"
+            if gates:
+                reason = f"HOLD {symbol}: blocked by {', '.join(gates)}"
+            elif snapshot.trend != "up":
+                reason = f"HOLD {symbol}: trend is {snapshot.trend}, not an uptrend"
+            elif snapshot.rvol is None:
+                reason = f"HOLD {symbol}: RVOL is unavailable"
+            else:
+                reason = (
+                    f"HOLD {symbol}: RVOL {_decimal_text(snapshot.rvol)} < {_decimal_text(slot_rvol)} "
+                    f"or MoveRoom {_decimal_text(snapshot.move_room)} does not meet {_decimal_text(required_room)}"
+                )
         payload = json.dumps(
             {
                 "timestamp": timestamp.isoformat(),
@@ -134,14 +183,17 @@ class ConfluenceV1:
         digest = hashlib.sha256(payload.encode()).hexdigest()
         dedupe = f"{symbol}:{timestamp.isoformat()}:{action}:{digest[:16]}"
         return DecisionCard(
-            timestamp,
-            symbol,
-            action,
-            inputs,
-            tuple(dict.fromkeys(gates)),
-            zone,
-            snapshot.move_room,
-            self.policy.config_version,
-            digest,
-            dedupe,
+            timestamp=timestamp,
+            symbol=symbol,
+            action=action,
+            inputs=inputs,
+            rejected_gates=tuple(dict.fromkeys(gates)),
+            selected_fib_zone=zone,
+            expected_move_room=snapshot.move_room,
+            config_version=self.policy.config_version,
+            signal_id=digest,
+            dedupe_key=dedupe,
+            display_action=display_action,
+            parameters=parameters,
+            reason=reason,
         )

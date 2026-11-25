@@ -98,6 +98,9 @@ class Phase67Tests(unittest.TestCase):
         self.assertEqual(card1.signal_id, card2.signal_id)
         self.assertEqual(card1.dedupe_key, card2.dedupe_key)
         self.assertEqual(card1.selected_fib_zone, "CORE_382_618")
+        self.assertEqual(card1.display_action, "BUY")
+        self.assertIn("RVOL", card1.reason)
+        self.assertIn("move_room", card1.parameters)
 
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")
@@ -153,6 +156,8 @@ class Phase67Tests(unittest.TestCase):
             minutes_to_close=120,
         )
         self.assertEqual(card.action, "exit_long")
+        self.assertEqual(card.display_action, "SELL")
+        self.assertIn("turned down", card.reason)
 
     def test_replay_clock_split_walk_forward_and_gap_policy(self):
         now = datetime(2026, 11, 20, tzinfo=UTC)
