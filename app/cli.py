@@ -44,6 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
     start_api.add_argument("--host", default="127.0.0.1")
     start_api.add_argument("--port", type=int, default=8080)
+    start_api.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
+    start_api.add_argument("--with-feeds", action="store_true", help="start feed and actor runtime")
+
+    subparsers.add_parser("start-feed", help="start one-shot feed and actor refresh; use start-api --with-feeds for runtime")
+
+    status = subparsers.add_parser("status", help="show configured feed status without network access")
+    status.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
     return parser
 
 
@@ -64,11 +71,50 @@ def main(argv: list[str] | None = None) -> int:
             return _import_dump(args, settings)
         if args.command == "load-fixtures":
             return _load_fixtures(settings)
-        if args.command == "start-api":
+        if args.command in {"start-api", "start-feed", "status"}:
+            from app.feeds import FeedRuntime, FeedStore, load_feed_config
+            from app.logging_config import configure_logging
+            configure_logging()
+            config_path = getattr(args, "config", Path("config/feeds.yaml"))
+            feed_config = load_feed_config(config_path)
+            store = FeedStore(feed_config)
+            if args.command == "status":
+                print(json.dumps({"symbols": store.market_symbols(), "live_write_enabled": False,
+                                  "fallback": str(feed_config.fallback_fixture)}, indent=2))
+                return 0
+            if args.command == "start-feed":
+                runtime = FeedRuntime(feed_config, store)
+                statuses = runtime.refresh_once()
+                print(json.dumps({"status": "refreshed", "sources": statuses,
+                                  "synthetic_fallback": True, "live_write_enabled": False}))
+                return 0
+
             from app.api import ReadAPI, ReadAPIServer
-            server = ReadAPIServer(ReadAPI(), host=args.host, port=args.port)
-            print(json.dumps({"status": "started", "host": args.host, "port": args.port, "mode": "read-only"}))
-            server.serve_forever()
+            feed_runtime = None
+            actor_runtime = None
+            if getattr(args, "with_feeds", False):
+                feed_runtime = FeedRuntime(feed_config, store)
+                feed_runtime.refresh_once()
+                feed_runtime.start()
+                from app.policy import TradingPolicy
+                policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+                from app.strategy import ConfluenceV1
+                strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", policy)
+                from app.actors import ActorRuntime
+                actor_runtime = ActorRuntime(store, policy, strategy,
+                                             stale_threshold_seconds=feed_config.stale_threshold_seconds)
+                actor_runtime.evaluate_once()
+                actor_runtime.start()
+            server = ReadAPIServer(ReadAPI(store=store, actor=actor_runtime), host=args.host, port=args.port)
+            print(json.dumps({"status": "started", "host": args.host, "port": args.port,
+                              "mode": "read-only", "feeds": bool(feed_runtime)}))
+            try:
+                server.serve_forever()
+            finally:
+                if actor_runtime:
+                    actor_runtime.stop()
+                if feed_runtime:
+                    feed_runtime.stop()
             return 0
     except SystemExit:
         raise

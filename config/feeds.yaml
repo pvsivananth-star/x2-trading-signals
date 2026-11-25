@@ -1,0 +1,22 @@
+feeds:
+  refresh_seconds: 60
+  stale_threshold_seconds: 300
+  fallback_fixture: data/fixtures/multi_asset/5-day-2026-11-20-to-2026-11-24
+  providers:
+    yahoo_chart:
+      base_url: https://query1.finance.yahoo.com
+      endpoint: /v8/finance/chart/{symbol}
+    stooq:
+      base_url: https://stooq.com
+      endpoint: /q/d/l/?s={symbol}&i={interval}
+    binance:
+      base_url: https://api.binance.com
+      endpoint: /api/v3/klines
+  symbols:
+    - {symbol: AAPL, market: EQ, category: eq, provider: yahoo_chart, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: SPY, market: ETF, category: etf, provider: yahoo_chart, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: SPX, market: Index, category: index, provider: stooq, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: "^GSPC", market: Index, category: index, provider: yahoo_chart, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: "GC=F", market: Gold, category: gold, provider: yahoo_chart, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: "CL=F", market: Oil, category: oil, provider: yahoo_chart, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
+    - {symbol: BTC-USD, market: Crypto, category: crypto, provider: binance, refresh_seconds: 60, timeframes: [1m, 5m, 15m, 30m, 1d], enabled: true, license_status: unknown}
