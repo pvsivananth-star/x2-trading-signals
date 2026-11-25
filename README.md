@@ -71,3 +71,11 @@ An allow-listed HTTPS Binance historical-dump URL can be supplied instead of a l
 - **Google Finance:** source endpoint registered for future reference/news adapters. Its terms and attribution requirements remain unverified.
 - **Stooq:** source endpoint registered for future historical dump adapters. Access behavior and redistribution terms remain unverified.
 - **RSS/news:** generic `feed_events` storage is available; feed parsing and deduplication are not yet implemented.
+
+### Five-day replay fixture
+
+A Binance `BTCUSDT` fixture covering 2026-11-20 through 2026-11-24 provides 1-minute, 5-minute, and 15-minute bars derived from 26,239,494 trade rows. Raw ZIPs remain local and ignored by Git; checksums and derived CSVs are committed. The source terms remain unverified until redistribution approval is documented.
+
+### Backtesting and AI policy
+
+Backtests run locally through deterministic bar/replay code. Gemini or another LLM may only summarize results or propose hypotheses. It must not set prices, bypass risk/session gates, alter fills, or place broker orders.

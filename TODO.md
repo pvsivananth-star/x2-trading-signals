@@ -80,7 +80,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [ ] Implement required-field, positive-value, timestamp, symbol-mapping, ordering, and duplicate checks.
 - [ ] Implement configurable sequence/timestamp gap detection.
 - [ ] Persist quality events linked to source runs and affected time ranges.
-- [ ] Build deterministic 1-minute base bars and 5-minute, 15-minute, and 30-minute rollups from canonical trades.
+- [x] Build deterministic 1-minute and 5/15-minute rollups from canonical BTCUSDT trade fixtures.
+- [ ] Build the 30-minute rollup and production replay integration.
 - [ ] Define bar close/finality semantics so live and replay modes agree across all configured timeframes.
 - [ ] Implement exchange/session calendar handling without changing timestamps to local time at rest.
 - [ ] Implement causal VWAP, ATR, RVOL, swing, Fibonacci-zone, trendline/structure, and net MoveRoom features required by `Confluence_v1`.
@@ -103,9 +104,10 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 7 — Deterministic replay and backtesting
 
+- [x] Add deterministic 1/5/15-minute BTCUSDT fixture and market-buy replay primitives.
 - [ ] Implement an event replay clock over normalized Parquet/PostgreSQL data.
 - [ ] Reuse the production bar, feature, regime, and strategy path; only the event source differs.
-- [ ] Implement an order simulator with market/limit behavior needed by the first strategy.
+- [~] Implement an order simulator with market/limit behavior needed by the first strategy (market-fill replay exists; limit/partial/rejected fills remain).
 - [ ] Implement configurable spread, slippage, fees, and partial/ rejected fill behavior.
 - [ ] Define gap policies and fail or annotate runs when quality thresholds are exceeded.
 - [ ] Add chronological train/validation/test or walk-forward split support.
