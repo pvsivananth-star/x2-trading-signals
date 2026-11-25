@@ -21,4 +21,6 @@ Deterministic intraday trading and signal-generation architecture supporting **1
 ## Data Ingestion
 
 - [Data ingestion architecture](docs/data-ingestion-architecture.md) — local-first historical and live tick ingestion design.
+- [Local-first implementation plan](docs/local-first-implementation-plan.md) — target architecture, local runtime, data lifecycle, strategy/backtest boundaries, and acceptance criteria.
+- [Implementation TODO](TODO.md) — phased checklist for building the local system before cloud hosting or live routing.
 - [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, ingestion runs, trades, quotes, bars, and quality events.
