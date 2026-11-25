@@ -40,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("load-fixtures", help="validate the deterministic local market-data fixtures")
+
+    start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
+    start_api.add_argument("--host", default="127.0.0.1")
+    start_api.add_argument("--port", type=int, default=8080)
     return parser
 
 
@@ -60,6 +64,12 @@ def main(argv: list[str] | None = None) -> int:
             return _import_dump(args, settings)
         if args.command == "load-fixtures":
             return _load_fixtures(settings)
+        if args.command == "start-api":
+            from app.api import ReadAPI, ReadAPIServer
+            server = ReadAPIServer(ReadAPI(), host=args.host, port=args.port)
+            print(json.dumps({"status": "started", "host": args.host, "port": args.port, "mode": "read-only"}))
+            server.serve_forever()
+            return 0
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001 - CLI boundary translates all operational failures

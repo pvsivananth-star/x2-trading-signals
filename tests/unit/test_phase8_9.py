@@ -1,0 +1,104 @@
+import os
+import unittest
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from app.api import ReadAPI, ReadAPIServer
+from app.execution import DemoBroker
+from app.policy import TradingPolicy
+from app.regime import Regime
+
+MARKETS = {
+    "engine": {"mode": "demo", "base_currency": "USD", "pre_close_entry_cutoff_mins": 60,
+               "mandatory_pre_close_flat_mins": 15,
+               "regime_rules": {"TREND_DAY": {"allow_new_entries": True, "a_tier_risk_pct": 0.0025}}},
+    "markets": {"US_EQUITIES": {"tier": "TIER_A", "enabled": True, "core_symbols": ["AAPL"],
+                                  "cluster": "US_TECH_INDEX", "cluster_risk_cap": 0.005,
+                                  "slot_rvol_min": 1.05, "min_net_moveroom_pct": 0.0045},
+                "CRYPTO_MAJORS": {"tier": "TIER_C_PROBATION", "enabled": True, "core_symbols": ["BTC-USD"]},
+                "HONGKONG_HKEX": {"tier": "TIER_D_DISABLED", "enabled": False, "core_symbols": ["0700.HK"]}},
+}
+
+
+class Phase89Tests(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop("TRADING_MODE", None)
+        os.environ.pop("X2_LIVE_BROKER_URL", None)
+        os.environ.pop("LIVE_BROKER_URL", None)
+        self.policy = TradingPolicy(MARKETS, "phase89")
+        self.now = datetime(2026, 11, 20, 12, tzinfo=UTC)
+
+    def test_accounting_partial_duplicate_fill_and_reconciliation(self):
+        broker = DemoBroker(self.policy, starting_cash=Decimal(1000000), fee_rate=Decimal("0.001"))
+        order = broker.submit_signal(signal_id="signal-1", symbol="AAPL", side="buy", quantity=Decimal(10),
+                                     timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY,
+                                     limit_price=Decimal(100))
+        first = broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(4), timestamp=self.now)
+        second = broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(6), timestamp=self.now)
+        self.assertEqual(order.state, "working")
+        self.assertEqual(broker.orders[0].state, "filled")
+        self.assertEqual(first.order_id, second.order_id)
+        pos = broker.positions[0]
+        self.assertEqual(pos.quantity, Decimal(10))
+        self.assertEqual(pos.average_cost, Decimal(100))
+        snap = broker.snapshot(self.now, {"AAPL": Decimal(110)})
+        self.assertEqual(snap.cash, Decimal("998999.000"))
+        self.assertEqual(snap.positions_value, Decimal(1100))
+        self.assertEqual(snap.unrealized_pnl, Decimal(100))
+        self.assertEqual(snap.equity, Decimal("1000099.000"))
+        self.assertEqual(snap.cash + snap.positions_value, snap.equity)
+
+    def test_duplicate_fill_is_idempotent_and_rejected_transition_fails(self):
+        broker = DemoBroker(self.policy)
+        order = broker.submit_signal(signal_id="signal-2", symbol="AAPL", side="buy", quantity=Decimal(1),
+                                     timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY,
+                                     limit_price=Decimal(100))
+        f1 = broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(1), timestamp=self.now)
+        f2 = broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(1), timestamp=self.now)
+        if f2 is not None:
+            self.assertEqual(f1.fill_id, f2.fill_id)
+        with self.assertRaises(ValueError):
+            order.transition("submitted", timestamp=self.now)
+
+    def test_cutoff_probation_live_and_flatten_lineage(self):
+        broker = DemoBroker(self.policy)
+        cutoff = broker.submit_signal(signal_id="cutoff", symbol="AAPL", side="buy", quantity=Decimal(1),
+                                      timestamp=self.now, minutes_to_close=30, regime=Regime.TREND_DAY)
+        self.assertEqual(cutoff.state, "rejected")
+        disabled = broker.submit_signal(signal_id="crypto", symbol="BTC-USD", side="buy", quantity=Decimal(1),
+                                        timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY)
+        self.assertEqual(disabled.state, "rejected")
+        os.environ["TRADING_MODE"] = "live"
+        with self.assertRaises(RuntimeError):
+            DemoBroker(self.policy)
+        os.environ.pop("TRADING_MODE", None)
+
+        broker = DemoBroker(self.policy)
+        order = broker.submit_signal(signal_id="line", symbol="AAPL", side="buy", quantity=Decimal(1),
+                                     timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY,
+                                     limit_price=Decimal(100))
+        broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(1), timestamp=self.now)
+        flat_fills = broker.flatten(timestamp=self.now, marks={"AAPL": Decimal(105)})
+        self.assertEqual(len(flat_fills), 1)
+        ids = {(card.signal_id, card.order_id) for card in broker.audit_cards}
+        self.assertTrue(all(order_id for _, order_id in ids))
+
+    def test_api_contract_pagination_authorization_and_readonly(self):
+        api = ReadAPI({"orders": [{"id": 1}, {"id": 2}], "positions": []})
+        self.assertTrue(api.authorized("127.0.0.1", None))
+        self.assertFalse(api.authorized("10.0.0.2", None))
+        code, body = api.get("/v1/orders", {"limit": ["1"], "offset": ["1"]})
+        self.assertEqual(code, 200)
+        self.assertEqual(body["total"], 2)
+        self.assertEqual(body["items"], [{"id": 2}])
+        token_api = ReadAPI({}, token="secret")
+        self.assertFalse(token_api.authorized("127.0.0.1", None))
+        self.assertTrue(token_api.authorized("127.0.0.1", "secret"))
+        code, body = api.get("/v1/health")
+        self.assertFalse(body["live_write_enabled"])
+        with self.assertRaises(ValueError):
+            ReadAPIServer(api, host="0.0.0.0", port=8081)
+
+
+if __name__ == "__main__":
+    unittest.main()

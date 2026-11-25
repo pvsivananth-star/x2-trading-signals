@@ -179,4 +179,15 @@ Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar
 
 Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.
 
-Live execution is intentionally unavailable until demo/paper accounting, separate authorization, and a broker adapter are implemented and reviewed.
+Live execution is intentionally unavailable: only the provider-neutral in-process demo broker is implemented. It validates policy gates, uses immutable order lifecycle transitions, records fills/positions/cash/fees/P&L and signal-order-fill audit cards, and rejects every live/unknown routing environment. The existing crypto probationary policy remains blocked; no risk parameters are changed.
+
+## Phase 8/9 Local Demo API
+
+Start the read-only API and dashboard on loopback only:
+
+```bash
+python -m app.cli start-api --host 127.0.0.1 --port 8080
+# open http://127.0.0.1:8080/dashboard
+```
+
+If `X2_API_TOKEN` is configured, clients must send `X2_API_TOKEN`; otherwise loopback clients are allowed. All `/v1/*` contracts are read-only (`GET`) and support `limit`/`offset` pagination. Write, control, and live broker endpoints are absent. The dashboard consumes only API endpoints and must not receive database credentials or secrets.
