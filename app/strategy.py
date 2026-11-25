@@ -99,7 +99,7 @@ class ConfluenceV1:
                 sufficient_room = snapshot.move_room is not None
                 if snapshot.move_room is not None:
                     required_room = Decimal(str(market["min_net_moveroom_pct"]))
-                    sufficient_room = abs(snapshot.move_room) >= required_room
+                    sufficient_room = snapshot.move_room >= required_room
                     if not sufficient_room:
                         gates.append("insufficient_move_room")
                 if snapshot.fib_382 is not None and snapshot.fib_618 is not None:
@@ -164,6 +164,11 @@ class ConfluenceV1:
                 reason = f"HOLD {symbol}: trend is {snapshot.trend}, not an uptrend"
             elif snapshot.rvol is None:
                 reason = f"HOLD {symbol}: RVOL is unavailable"
+            elif snapshot.move_room is not None and snapshot.move_room < 0:
+                reason = (
+                    f"HOLD {symbol}: MoveRoom {_decimal_text(snapshot.move_room)} is negative, "
+                    f"so downside is not smaller than upside; required {_decimal_text(required_room)}"
+                )
             else:
                 reason = (
                     f"HOLD {symbol}: RVOL {_decimal_text(snapshot.rvol)} < {_decimal_text(slot_rvol)} "

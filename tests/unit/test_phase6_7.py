@@ -102,6 +102,27 @@ class Phase67Tests(unittest.TestCase):
         self.assertIn("RVOL", card1.reason)
         self.assertIn("move_room", card1.parameters)
 
+    def test_negative_move_room_rejects_buy(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        negative = FeatureSnapshot(
+            snapshot().timestamp, Decimal(100), Decimal(2), Decimal("1.2"),
+            Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102),
+            "up", "higher-highs-higher-lows", Decimal("-0.10"),
+        )
+        card = engine.evaluate(
+            timestamp=negative.timestamp,
+            symbol="AAPL",
+            snapshot=negative,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+        )
+        self.assertEqual(card.action, "hold")
+        self.assertEqual(card.display_action, "HOLD")
+        self.assertIn("insufficient_move_room", card.rejected_gates)
+
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")
         engine = ConfluenceV1(STRATEGY, policy)
