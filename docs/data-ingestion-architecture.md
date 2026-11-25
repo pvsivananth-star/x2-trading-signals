@@ -191,7 +191,7 @@ A source event should be considered a duplicate using the strongest available ke
 
 Deduplication must be idempotent. Replaying the same dump or reconnecting a collector must not create a second logical trade.
 
-The database schema intentionally keeps source IDs and sequences indexed but leaves final deduplication policy in the normalizer, because different venues provide different identifiers.
+The normalizer must persist the selected identity as a deterministic `deduplication_key`; the database enforces uniqueness for an instrument, event time, and key. The final key construction remains source-specific because different venues provide different identifiers.
 
 ## Time model
 

@@ -70,7 +70,9 @@ CREATE TABLE IF NOT EXISTS market_data.raw_objects (
     status              text NOT NULL CHECK (status IN ('discovered', 'validated', 'imported', 'rejected')),
     metadata            jsonb NOT NULL DEFAULT '{}'::jsonb,
     discovered_at       timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (source_id, object_uri)
+    UNIQUE (source_id, object_uri),
+    UNIQUE (source_id, raw_object_id),
+    CHECK (last_event_time IS NULL OR first_event_time IS NULL OR last_event_time >= first_event_time)
 );
 
 -- One historical import, live session, or replay operation.
@@ -78,7 +80,7 @@ CREATE TABLE IF NOT EXISTS market_data.ingestion_runs (
     run_id              uuid PRIMARY KEY,
     source_id           uuid NOT NULL REFERENCES market_data.ingestion_sources (source_id),
     instrument_id       bigint REFERENCES market_data.instruments (instrument_id),
-    raw_object_id       uuid REFERENCES market_data.raw_objects (raw_object_id),
+    raw_object_id       uuid,
     run_kind            text NOT NULL CHECK (run_kind IN ('backfill', 'live', 'replay', 'reprocess')),
     status              text NOT NULL CHECK (status IN ('created', 'running', 'completed', 'completed_with_errors', 'failed', 'cancelled')),
     requested_start     timestamptz,
@@ -95,7 +97,9 @@ CREATE TABLE IF NOT EXISTS market_data.ingestion_runs (
     configuration       jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at          timestamptz NOT NULL DEFAULT now(),
     CHECK (finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at),
-    CHECK (requested_end IS NULL OR requested_start IS NULL OR requested_end > requested_start)
+    CHECK (requested_end IS NULL OR requested_start IS NULL OR requested_end > requested_start),
+    FOREIGN KEY (source_id, raw_object_id)
+        REFERENCES market_data.raw_objects (source_id, raw_object_id)
 );
 
 -- Resume state for live collectors. Update this transactionally with accepted events.
@@ -119,12 +123,14 @@ CREATE TABLE IF NOT EXISTS market_data.trades (
     received_time       timestamptz NOT NULL,
     venue_trade_id      text,
     sequence_no         bigint,
+    deduplication_key   text NOT NULL,
     price               numeric(38, 18) NOT NULL CHECK (price > 0),
     quantity            numeric(38, 18) NOT NULL CHECK (quantity > 0),
     aggressor_side      text CHECK (aggressor_side IN ('buy', 'sell', 'unknown')),
     source_run_id       uuid NOT NULL REFERENCES market_data.ingestion_runs (run_id),
     payload_ref         text,
-    PRIMARY KEY (event_time, trade_row_id)
+    PRIMARY KEY (event_time, trade_row_id),
+    UNIQUE (instrument_id, event_time, deduplication_key)
 ) PARTITION BY RANGE (event_time);
 
 -- Safety partition for data received before a managed time partition exists.
@@ -147,6 +153,7 @@ CREATE TABLE IF NOT EXISTS market_data.quotes (
     event_time          timestamptz NOT NULL,
     received_time       timestamptz NOT NULL,
     sequence_no         bigint,
+    deduplication_key   text NOT NULL,
     bid_price           numeric(38, 18),
     bid_quantity        numeric(38, 18),
     ask_price           numeric(38, 18),
@@ -154,8 +161,10 @@ CREATE TABLE IF NOT EXISTS market_data.quotes (
     source_run_id       uuid NOT NULL REFERENCES market_data.ingestion_runs (run_id),
     payload_ref         text,
     PRIMARY KEY (event_time, quote_row_id),
+    UNIQUE (instrument_id, event_time, deduplication_key),
     CHECK (bid_price IS NOT NULL OR ask_price IS NOT NULL),
     CHECK (bid_price IS NULL OR bid_price > 0),
+    CHECK (bid_price IS NULL OR ask_price IS NULL OR bid_price <= ask_price),
     CHECK (ask_price IS NULL OR ask_price > 0),
     CHECK (bid_quantity IS NULL OR bid_quantity >= 0),
     CHECK (ask_quantity IS NULL OR ask_quantity >= 0)
@@ -190,6 +199,7 @@ CREATE TABLE IF NOT EXISTS market_data.bars (
     updated_at          timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (instrument_id, interval_seconds, bar_start),
     CHECK (bar_end > bar_start),
+    CHECK (bar_end = bar_start + interval '1 second' * interval_seconds),
     CHECK (high_price >= GREATEST(open_price, close_price)),
     CHECK (low_price <= LEAST(open_price, close_price)),
     CHECK (vwap IS NULL OR vwap > 0)
