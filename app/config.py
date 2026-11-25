@@ -12,22 +12,20 @@ class Settings:
     database_url: str | None
     archive_root: Path
     migrations_dir: Path
-    provider: str = "binance"
-    venue_symbol: str = "BTCUSDT"
-    canonical_symbol: str = "BTC-USDT"
+    provider: str = "generic"
+    venue_symbol: str | None = None
+    canonical_symbol: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         mode = os.getenv("TRADING_MODE", "demo").strip().lower()
         if mode not in {"demo", "offline"}:
             raise ValueError("initial local implementation rejects live broker mode")
-        provider = os.getenv("DATA_PROVIDER", "binance").strip().lower()
+        provider = os.getenv("DATA_PROVIDER", "generic").strip().lower()
         if not provider:
             raise ValueError("DATA_PROVIDER is required")
-        venue_symbol = os.getenv("VENUE_SYMBOL", "BTCUSDT").strip()
-        canonical_symbol = os.getenv("CANONICAL_SYMBOL", "BTC-USDT").strip()
-        if not venue_symbol or not canonical_symbol:
-            raise ValueError("venue and canonical symbols are required")
+        venue_symbol = os.getenv("VENUE_SYMBOL") or None
+        canonical_symbol = os.getenv("CANONICAL_SYMBOL") or None
         return cls(
             database_url=os.getenv("DATABASE_URL") or None,
             archive_root=Path(os.getenv("ARCHIVE_ROOT", "./data")),

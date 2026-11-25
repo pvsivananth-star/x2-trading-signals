@@ -134,25 +134,36 @@ Raw source bytes, checksums, ingestion runs, canonical instruments, normalized t
 
 ## Provider and Fixture Status
 
-- **Binance** is an implemented sample crypto trade-dump adapter only. It is not required for equity, FX, metal, or other market support.
-- **BTCUSDT** is a local replay fixture and is not the platform's canonical default instrument.
+- **Binance** is an optional sample crypto trade-dump adapter only. It is not required for equity, ETF, index, gold, oil, or provider-neutral support.
+- **BTC-USD** is the crypto fixture; **AAPL, SPY, SPX, GC=F, and CL=F** provide the five other required test categories.
 - **Yahoo Finance, Google Finance, and Stooq** are registered source definitions; their bulk adapters and term verification remain pending.
 - **RSS/news** uses generic feed-event storage. Feed parsing and deduplication remain pending.
 - **Open exchange dumps** can be added through provider-neutral historical-dump adapters; no provider or license is assumed automatically.
 
 Redistributed source data must have checked licensing and attribution. Raw fixtures must not contain secrets or broker credentials.
 
-## Replay Fixture
+## Replay Fixtures
 
-A five-day BTCUSDT fixture demonstrates the deterministic replay pipeline:
+The local fixture set covers one ticker in every required test category:
 
-- Range: 2026-11-20 through 2026-11-24 UTC
-- Bars: 1-minute, 5-minute, and 15-minute
-- Raw source ZIPs: retained locally, ignored by Git
-- Derived bar CSVs: committed with checksum and manifest metadata
-- Source terms: unverified; redistribution is disabled until reviewed
+- **EQ:** AAPL
+- **ETF:** SPY
+- **Index:** SPX
+- **Gold:** GC=F
+- **Oil:** CL=F
+- **Crypto:** BTC-USD
 
-Validate the fixture:
+All categories contain deterministic, synthetic 1-minute, 5-minute, and 15-minute bars for 2026-11-20 through 2026-11-24 UTC. The bar module also supports 30-minute rollups, UTC-preserving session calendars, empty/gapped and partial-bar semantics. These synthetic files support tests and replay development; they are not real market data and must not be described or used as live or historical observations.
+
+## Collector and Phase 4/5 Foundations
+
+The provider-neutral live collector foundation supports replay, bounded exponential reconnect backoff, terminal failure, in-memory restart checkpoints, event/sequence/venue-ID dedupe, health and lag reporting, stale-feed blocking, and graceful stop/restart. The existing Binance parser supplies trade payload adaptation only; no live WebSocket socket or network transport is implemented.
+
+Quality findings cover required fields, positive values, UTC timestamps, symbol mapping, ordering, dedupe, sequence gaps, and timestamp gaps. Causal VWAP, ATR, RVOL, swing, Fibonacci zones, trend/structure, and net MoveRoom calculations are cutoff at time `t` and exclude bars ending after `t`.
+
+The existing Binance BTCUSDT files remain an optional crypto sample implementation. They are not a system default or required for EQ, ETF, index, gold, oil, or provider-neutral tests.
+
+Validate the fixtures:
 
 ```bash
 python -m app.cli load-fixtures

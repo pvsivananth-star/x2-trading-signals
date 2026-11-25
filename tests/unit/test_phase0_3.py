@@ -33,6 +33,18 @@ class Phase0to3Tests(unittest.TestCase):
         )
         self.assertEqual(quote.deduplication_key.startswith("quote-payload:"), True)
 
+    def test_multi_asset_fixture_covers_required_categories(self) -> None:
+        fixture_path = (
+            os.path.join("data", "fixtures", "multi_asset", "5-day-2026-11-20-to-2026-11-24")
+        )
+        import json
+
+        with open(os.path.join(fixture_path, "manifest.json"), encoding="utf-8") as source:
+            manifest = json.load(source)
+
+        categories = {details["category"] for details in manifest["symbols"].values()}
+        self.assertEqual(categories, {"eq", "etf", "index", "gold", "oil", "crypto"})
+
     def test_crossed_quote_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "bid_price"):
             RawQuoteEvent(
