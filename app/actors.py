@@ -33,7 +33,7 @@ class ActorRuntime:
         self.scanner = Actor02RegimeScanner(symbols, regime_provider=self.regime_provider)
         self.analyzer = Actor06TradeAnalyzer()
 
-    def evaluate_once(self) -> list[object]:
+    def evaluate_once(self, *, allow_synthetic: bool = False) -> list[object]:
         now = datetime.now(UTC)
         cards: list[object] = []
         for spec in self.store.config.symbols:
@@ -43,7 +43,7 @@ class ActorRuntime:
             candle_bars = self.store.bars(spec.symbol, self.interval, 500)
             stale = self.store.stale_seconds(spec.symbol, now)
             synthetic = bool(candle_bars and all(c.synthetic for c in candle_bars))
-            if synthetic:
+            if synthetic and not allow_synthetic:
                 self._log.info("action=reject symbol=%s reason=synthetic_feed_not_live", spec.symbol)
                 continue
             if not candle_bars:

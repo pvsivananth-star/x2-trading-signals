@@ -195,6 +195,24 @@ Phases 6 and 7 now provide provider-neutral `NEWS_DAY`, `CHOP_DAY`, and `TREND_D
 
 Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar` rollups; replay currently reuses the causal feature/bar path, while the Phase-6 strategy card API remains available for callers rather than an internal replay-loop dependency. The replay run exposes chronological and walk-forward splits, market/limit/partial/rejected simulation, spread/slippage/fee configuration, quality gap thresholds, deterministic provenance, and backtest metrics (profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover). Migration `005_backtest_tables.sql` adds optional PostgreSQL audit storage; unit tests do not require PostgreSQL.
 
+## Tick backtest pump
+
+Run a deterministic 25% warmup and then pump one-minute fixture ticks once per second:
+
+```bash
+./.venv/bin/python -m app.cli tick-pump --ticks 20 --interval 1 --warmup 0.25
+```
+
+The runtime initializes every enabled symbol with the warmup window, advances Actors 02/04/06 on every tick, and routes only demo BUY/SELL fills to the in-process broker. Positive `--ticks` limits the replay; omit it to process the fixture to completion.
+
+Generate an audited 252-session summary as a terminal table:
+
+```bash
+./.venv/bin/python -m app.cli backtest-report --days 252 --ticks-per-day 20
+```
+
+The report is deterministic from the local fixture corpus and must be labeled synthetic in external use. It is not broker-verified live or historical performance.
+
 ## Backtesting and AI Policy
 
 Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.

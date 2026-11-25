@@ -41,6 +41,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("load-fixtures", help="validate the deterministic local market-data fixtures")
 
+    tick_pump = subparsers.add_parser("tick-pump", help="backtest 25% warmup then pump fixture ticks once per second")
+    tick_pump.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
+    tick_pump.add_argument("--ticks", type=int, default=None)
+    tick_pump.add_argument("--interval", type=float, default=1.0)
+    tick_pump.add_argument("--warmup", type=float, default=0.25)
+
+    audited = subparsers.add_parser("backtest-report", help="produce an audited 252-session multi-market summary")
+    audited.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
+    audited.add_argument("--days", type=int, default=252)
+    audited.add_argument("--ticks-per-day", type=int, default=20)
+
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
     start_api.add_argument("--host", default="127.0.0.1")
     start_api.add_argument("--port", type=int, default=8080)
@@ -77,6 +88,66 @@ def main(argv: list[str] | None = None) -> int:
             return _import_dump(args, settings)
         if args.command == "load-fixtures":
             return _load_fixtures(settings)
+        if args.command == "tick-pump":
+            from decimal import Decimal
+
+            from app.actors import ActorRuntime
+            from app.backtest.tick_pump import TickPumpRuntime
+            from app.execution import DemoBroker
+            from app.feeds import FeedStore, load_feed_config
+            from app.logging_config import configure_logging
+            from app.policy import TradingPolicy
+            from app.strategy import ConfluenceV1
+
+            configure_logging()
+            config = load_feed_config(args.config)
+            store = FeedStore(config)
+            policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+            strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", policy)
+            actor = ActorRuntime(store, policy, strategy, interval="1m",
+                                 stale_threshold_seconds=config.stale_threshold_seconds)
+            broker = DemoBroker(policy, starting_cash=Decimal(25000))
+            pump = TickPumpRuntime(store, actor, broker, warmup_fraction=args.warmup,
+                                   interval_seconds=args.interval)
+            result = pump.run(max_ticks=args.ticks)
+            print(json.dumps({
+                "status": "completed", "mode": "backtest",
+                "ticks_processed": result.ticks_processed,
+                "warmup_ticks": result.warmup_ticks,
+                "decision_count": len(result.decisions),
+                "execution_audit_count": len(result.audit),
+                "portfolio": {"cash": str(broker.cash), "positions": len(broker.positions),
+                              "fills": len(broker.fills), "orders": len(broker.orders)},
+            }, indent=2))
+            return 0
+
+        if args.command == "backtest-report":
+            from decimal import Decimal
+
+            from app.actors import ActorRuntime
+            from app.backtest.report import run_audited_backtest
+            from app.execution import DemoBroker
+            from app.feeds import FeedStore, load_feed_config
+            from app.logging_config import configure_logging
+            from app.policy import TradingPolicy
+            from app.strategy import ConfluenceV1
+
+            configure_logging()
+            config = load_feed_config(args.config)
+            store = FeedStore(config)
+            policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+            strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", policy)
+            actor = ActorRuntime(store, policy, strategy, interval="1m",
+                                 stale_threshold_seconds=config.stale_threshold_seconds)
+            broker = DemoBroker(policy, starting_cash=Decimal(25000))
+            report = run_audited_backtest(store, actor, broker, days=args.days,
+                                          ticks_per_day=args.ticks_per_day)
+            print(json.dumps({**report.as_table(), "BUY signals": report.buy_signals,
+                              "SELL signals": report.sell_signals,
+                              "HOLD signals": report.held_signals,
+                              "Audit warning": report.audit_warning}, indent=2))
+            return 0
+
         if args.command == "start-mock-broker":
             from app.mock_broker import MockBroker, MockBrokerServer
             env_broker = MockBroker.from_env()
