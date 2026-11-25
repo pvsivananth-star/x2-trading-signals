@@ -15,6 +15,7 @@ class Fill:
     quantity: Decimal
     fill_price: Decimal
     fee: Decimal
+    status: str = "filled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,61 @@ class ReplayResult:
     ending_cash: Decimal
     ending_quantity: Decimal
     ending_equity: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationConfig:
+    spread_bps: Decimal = Decimal(0)
+    slippage_bps: Decimal = Decimal(0)
+    fee_rate: Decimal = Decimal(0)
+    partial_fill_ratio: Decimal = Decimal(1)
+
+
+class OrderSimulator:
+    """Small deterministic market/limit fill engine for replay runs."""
+
+    def __init__(self, config: SimulationConfig | None = None) -> None:
+        self.config = config or SimulationConfig()
+
+    def submit(
+        self,
+        bar: Bar,
+        side: str,
+        order_type: str,
+        quantity: Decimal,
+        limit_price: Decimal | None = None,
+    ) -> Fill:
+        if side not in {"buy", "sell"} or order_type not in {"market", "limit"}:
+            return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+        if quantity <= 0:
+            return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+        if order_type == "limit":
+            if limit_price is None:
+                return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+            if side == "buy" and limit_price < bar.low:
+                return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+            if side == "sell" and limit_price > bar.high:
+                return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+
+        ratio = self.config.partial_fill_ratio
+        if ratio <= 0 or ratio > 1:
+            return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+        filled_qty = quantity * ratio
+        reference = bar.close
+        if side == "buy":
+            base = reference * (Decimal(1) + self.config.spread_bps / Decimal(20000))
+        else:
+            base = reference * (Decimal(1) - self.config.spread_bps / Decimal(20000))
+        slippage = self.config.slippage_bps / Decimal(10000)
+        fill_price = base * (Decimal(1) + slippage if side == "buy" else Decimal(1) - slippage)
+        if order_type == "limit" and limit_price is not None:
+            fill_price = (
+                min(fill_price, limit_price) if side == "buy" else max(fill_price, limit_price)
+            )
+        notional = fill_price * filled_qty
+        fee = notional * self.config.fee_rate
+        status = "partial" if ratio < 1 else "filled"
+        return Fill(bar.bar_start, side, filled_qty, fill_price, fee, status)
 
 
 def replay_market_buys(
@@ -34,7 +90,6 @@ def replay_market_buys(
     slippage_bps: Decimal = Decimal(0),
 ) -> ReplayResult:
     """Buy one fixed quantity at each bar close, then mark the final position."""
-
     if starting_cash <= 0 or quantity_per_fill <= 0:
         raise ValueError("starting_cash and quantity_per_fill must be positive")
     if fee_rate < 0 or slippage_bps < 0:
@@ -44,7 +99,6 @@ def replay_market_buys(
     quantity = Decimal(0)
     fills: list[Fill] = []
     slippage = Decimal(1) + slippage_bps / Decimal(10000)
-
     chronological = sorted(bars, key=lambda item: item.bar_start)
     for bar in chronological:
         fill_price = bar.close * slippage

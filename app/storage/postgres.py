@@ -79,7 +79,9 @@ class PostgresIngestionRepository(IngestionRepository):
                         checksum_sha256,
                         byte_size,
                         _compression_from_path(source_uri),
-                        json.dumps({"provider": configuration.get("provider"), "symbol": self.venue_symbol}),
+                        json.dumps(
+                            {"provider": configuration.get("provider"), "symbol": self.venue_symbol}
+                        ),
                     ),
                 )
                 cursor.execute(
@@ -88,7 +90,9 @@ class PostgresIngestionRepository(IngestionRepository):
                 )
                 existing_checksum, existing_uri = cursor.fetchone()
                 if existing_checksum != checksum_sha256 or existing_uri != source_uri:
-                    raise PostgresRepositoryError("raw object identity collision or checksum mismatch")
+                    raise PostgresRepositoryError(
+                        "raw object identity collision or checksum mismatch"
+                    )
                 cursor.execute(
                     """
                     INSERT INTO market_data.ingestion_runs
@@ -142,7 +146,12 @@ class PostgresIngestionRepository(IngestionRepository):
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT (instrument_id, deduplication_key) DO NOTHING
                         """,
-                        (self.instrument_id, event.deduplication_key, event.event_time, UUID(run_id)),
+                        (
+                            self.instrument_id,
+                            event.deduplication_key,
+                            event.event_time,
+                            UUID(run_id),
+                        ),
                     )
                     if cursor.rowcount != 1:
                         continue
@@ -341,6 +350,98 @@ class PostgresIngestionRepository(IngestionRepository):
         except Exception:
             self._connection.rollback()
             raise
+
+
+class PostgresBacktestRepository:
+    """Optional PostgreSQL persistence for backtest audit tables."""
+
+    def __init__(self, database_url: str) -> None:
+        try:
+            import psycopg
+        except ImportError as exc:
+            raise PostgresRepositoryError("PostgreSQL backtests require psycopg") from exc
+        self._connection = psycopg.connect(database_url, autocommit=False)
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def persist_replay(
+        self,
+        result: object,
+        configuration: dict[str, Any] | None = None,
+        split_definition: dict[str, Any] | None = None,
+    ) -> str:
+        from uuid import UUID, uuid4
+
+        run = result.provenance
+        run_id = UUID(hex=run.run_id)
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO backtest.runs
+                       (run_id,status,config_hash,code_hash,data_provenance,split_definition,quality_summary,configuration)
+                       VALUES (%s,'completed',%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (run_id) DO UPDATE SET
+                        status='completed', config_hash=EXCLUDED.config_hash, code_hash=EXCLUDED.code_hash""",
+                    (
+                        run_id,
+                        run.config_hash,
+                        run.code_hash,
+                        json.dumps(dict(run.data_provenance)),
+                        json.dumps(split_definition or {}),
+                        json.dumps(dict(result.quality_summary)),
+                        json.dumps(configuration or {}),
+                    ),
+                )
+                for point_time, equity in getattr(result, "equity_points", ()):
+                    cursor.execute(
+                        """INSERT INTO backtest.equity_points
+                           (run_id,point_time,equity,cash,quantity) VALUES (%s,%s,%s,0,0)
+                           ON CONFLICT (run_id,point_time) DO UPDATE SET equity=EXCLUDED.equity""",
+                        (run_id, point_time, equity),
+                    )
+                for fill in getattr(result, "fills", ()):
+                    fill_id = uuid4()
+                    cursor.execute(
+                        """INSERT INTO backtest.fills
+                           (run_id,fill_id,fill_time,symbol,side,quantity,fill_price,fee,status)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           ON CONFLICT (fill_id) DO NOTHING""",
+                        (
+                            run_id,
+                            fill_id,
+                            fill.bar_start,
+                            getattr(fill, "symbol", ""),
+                            fill.side,
+                            fill.quantity,
+                            fill.fill_price,
+                            fill.fee,
+                            getattr(fill, "status", "filled"),
+                        ),
+                    )
+                metrics = getattr(result, "metrics", {})
+                cursor.execute(
+                    """INSERT INTO backtest.metrics
+                       (run_id,profit_factor,max_drawdown,win_rate,expectancy,max_win_streak,max_loss_streak,exposure,turnover)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (run_id) DO UPDATE SET profit_factor=EXCLUDED.profit_factor""",
+                    (
+                        run_id,
+                        metrics.get("profit_factor", 0),
+                        metrics.get("max_drawdown", 0),
+                        metrics.get("win_rate", 0),
+                        metrics.get("expectancy", 0),
+                        int(metrics.get("max_win_streak", 0)),
+                        int(metrics.get("max_loss_streak", 0)),
+                        metrics.get("exposure", 0),
+                        metrics.get("turnover", 0),
+                    ),
+                )
+            self._connection.commit()
+        except Exception:
+            self._connection.rollback()
+            raise
+        return str(run_id)
 
 
 def _compression_from_path(path: str) -> str | None:
