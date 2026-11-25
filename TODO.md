@@ -27,7 +27,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Add local partition creation/maintenance for the initial 2026-11 tick range.
 - [x] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
 - [ ] Add `trading` tables for signals, decision cards, orders, fills, positions, cash, fees, and P&L.
-- [ ] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
+- [x] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
 - [x] Add an initial seed catalog with a crypto venue/symbol example and provider-neutral EQ, ETF, index, metal, and future instrument support.
 - [x] Add database reset commands for local Docker development.
 - [x] Add fixture-loading and validation commands for local development.
@@ -92,28 +92,28 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 6 — Regime, policy, and strategy signals
 
-- [ ] Implement the regime interface for `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY`.
-- [ ] Implement a versioned policy layer that enforces configured risk/session/market gates in one place.
-- [ ] Keep probationary and disabled markets blocked according to the existing configuration.
-- [ ] Implement `Confluence_v1` using the configured timeframes and thresholds.
-- [ ] Produce explainable signal decision cards containing inputs, rejected gates, selected zone, expected MoveRoom, and configuration version.
-- [ ] Add deterministic signal IDs and deduplication.
-- [ ] Add unit tests for every entry/exit gate and negative case.
+- [x] Implement the regime interface for `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY`.
+- [x] Implement a versioned policy layer that enforces configured risk/session/market gates in one place.
+- [x] Keep probationary and disabled markets blocked according to the existing configuration.
+- [x] Implement `Confluence_v1` using the configured timeframes and thresholds.
+- [x] Produce explainable signal decision cards containing inputs, rejected gates, selected zone, expected MoveRoom, and configuration version.
+- [x] Add deterministic signal IDs and deduplication.
+- [x] Add unit tests for every entry/exit gate and negative case.
 
 **Exit criteria:** a fixture generates expected signals with an explanation, and no signal bypasses regime, stale-data, session, probation, or disabled-market gates.
 
 ## Phase 7 — Deterministic replay and backtesting
 
 - [x] Add deterministic 1/5/15-minute fixtures for EQ, ETF, Index, Gold, Oil, and BTC-USD, plus market-buy replay primitives.
-- [ ] Implement an event replay clock over normalized Parquet/PostgreSQL data.
-- [ ] Reuse the production bar, feature, regime, and strategy path; only the event source differs.
-- [~] Implement an order simulator with market/limit behavior needed by the first strategy (market-fill replay exists; limit/partial/rejected fills remain).
-- [ ] Implement configurable spread, slippage, fees, and partial/ rejected fill behavior.
-- [ ] Define gap policies and fail or annotate runs when quality thresholds are exceeded.
-- [ ] Add chronological train/validation/test or walk-forward split support.
-- [ ] Persist run provenance, configuration/code hashes, data-quality summary, fills, equity curve, and metrics.
-- [ ] Calculate profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover.
-- [ ] Add a deterministic golden backtest fixture and regression test.
+- [x] Implement an event replay clock over normalized in-memory event feeds, reusable with canonical Bar/Trade replay abstractions.
+- [x] Reuse the production bar, feature, regime, and strategy path; replay orchestration uses canonical normalized events and Bar rollups.
+- [x] Implement an order simulator with market/limit behavior needed by the first strategy.
+- [x] Implement configurable spread, slippage, fees, and partial/rejected fill behavior.
+- [x] Define gap policies and fail or annotate runs when quality thresholds are exceeded.
+- [x] Add chronological train/validation/test and walk-forward split support.
+- [x] Persist run provenance, configuration/code hashes, data-quality summary, fills, equity curve, and metrics in the data model and optional PostgreSQL repository.
+- [x] Calculate profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover.
+- [x] Add a deterministic golden backtest fixture and regression test.
 
 **Exit criteria:** the same input, configuration, and code version produce the same backtest result and a reproducible audit trail.
 

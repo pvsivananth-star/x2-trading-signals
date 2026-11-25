@@ -169,6 +169,12 @@ Validate the fixtures:
 python -m app.cli load-fixtures
 ```
 
+## Regime, Policy, Replay, and Backtesting
+
+Phases 6 and 7 now provide provider-neutral `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY` regimes; a fail-closed, versioned policy; and the causal `Confluence_v1` signal engine. Decision cards include gate rejections, Fib zone, MoveRoom, configuration version, deterministic signal ID, and dedupe key. Probationary and disabled markets and live routing remain blocked.
+
+Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar` rollups. The replay run exposes chronological and walk-forward splits, market/limit/partial/rejected simulation, spread/slippage/fee configuration, quality gap thresholds, deterministic provenance, and backtest metrics (profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover). Migration `005_backtest_tables.sql` adds optional PostgreSQL audit storage; unit tests do not require PostgreSQL.
+
 ## Backtesting and AI Policy
 
 Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.
