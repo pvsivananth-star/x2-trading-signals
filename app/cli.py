@@ -105,7 +105,13 @@ def main(argv: list[str] | None = None) -> int:
                                              stale_threshold_seconds=feed_config.stale_threshold_seconds)
                 actor_runtime.evaluate_once()
                 actor_runtime.start()
-            server = ReadAPIServer(ReadAPI(store=store, actor=actor_runtime), host=args.host, port=args.port)
+            broker = None
+            if getattr(args, "with_feeds", False):
+                from decimal import Decimal
+
+                from app.execution import DemoBroker
+                broker = DemoBroker(policy, starting_cash=Decimal(25000))
+            server = ReadAPIServer(ReadAPI(store=store, actor=actor_runtime, broker=broker), host=args.host, port=args.port)
             print(json.dumps({"status": "started", "host": args.host, "port": args.port,
                               "mode": "read-only", "feeds": bool(feed_runtime)}))
             try:

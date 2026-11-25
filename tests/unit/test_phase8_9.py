@@ -2,6 +2,7 @@ import os
 import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
 from app.actors import ActorRuntime
 from app.api import ReadAPI, ReadAPIServer
@@ -111,6 +112,37 @@ class Phase89Tests(unittest.TestCase):
         actor = ActorRuntime(store, policy, ConfluenceV1(strategy_config, policy), interval="1m")
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
+
+    def test_api_portfolio_position_and_targets(self):
+        config = load_feed_config("config/feeds.yaml")
+        store = FeedStore(config)
+        broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
+        order = broker.submit_signal(signal_id="demo-aapl", symbol="AAPL", side="buy",
+                                     quantity=Decimal(1), timestamp=self.now,
+                                     minutes_to_close=120, regime=Regime.TREND_DAY,
+                                     limit_price=Decimal(100))
+        broker.fill(order.order_id, price=Decimal(100), quantity=Decimal(1), timestamp=self.now)
+        card = SimpleNamespace(inputs={"fib_618": "110.50"}, selected_fib_zone="CORE_382_618")
+        actor = SimpleNamespace(cards={"AAPL": card})
+        api = ReadAPI(store=store, actor=actor, broker=broker)
+
+        code, portfolio = api.get("/v1/portfolio")
+        self.assertEqual(code, 200)
+        self.assertEqual(portfolio["kitty"], "24899.9900")
+        self.assertEqual(portfolio["positions"][0]["symbol"], "AAPL")
+        self.assertEqual(portfolio["positions"][0]["quantity"], "1")
+        self.assertIn("pnl_pct", portfolio["positions"][0])
+
+        code, position = api.get("/v1/position/AAPL")
+        self.assertEqual(code, 200)
+        self.assertEqual(position["entry_price_executed"], "100")
+        self.assertEqual(position["entry_time"], "2026-11-20T12:00:00Z")
+        self.assertEqual(position["expected_exit"], "110.50")
+        self.assertEqual(len(position["fills"]), 1)
+
+        no_position = api.get("/v1/position/SPY")[1]
+        self.assertIsNone(no_position["position"])
+        self.assertIsNone(no_position["expected_exit"])
 
     def test_api_contract_pagination_authorization_and_readonly(self):
         api = ReadAPI({"orders": [{"id": 1}, {"id": 2}], "positions": []})
