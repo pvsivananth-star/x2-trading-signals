@@ -26,7 +26,7 @@ class Actor02RegimeScanner:
             return []
         candidates: list[dict[str, object]] = []
         for spec in self.symbols:
-            if not spec.get("enabled", False) or spec.get("symbol") == "BTC-USD":
+            if not spec.get("enabled", False):
                 continue
             slot_rvol = float(spec.get("slot_rvol", spec.get("slot_RVOL", self.slot_rvol_min)))
             if slot_rvol >= self.slot_rvol_min:

@@ -19,7 +19,9 @@ MARKETS = {
     "markets": {"US_EQUITIES": {"tier": "TIER_A", "enabled": True, "core_symbols": ["AAPL"],
                                   "cluster": "US_TECH_INDEX", "cluster_risk_cap": 0.005,
                                   "slot_rvol_min": 1.05, "min_net_moveroom_pct": 0.0045},
-                "CRYPTO_MAJORS": {"tier": "TIER_C_PROBATION", "enabled": True, "core_symbols": ["BTC-USD"]},
+                "CRYPTO_MAJORS": {"tier": "TIER_B", "enabled": True, "allocation_pct": 0.05,
+                                   "broker_route": "DEMO_OR_IBKR", "core_symbols": ["BTC-USD"],
+                                   "slot_rvol_min": 1.15, "min_net_moveroom_pct": 0.0065},
                 "HONGKONG_HKEX": {"tier": "TIER_D_DISABLED", "enabled": False, "core_symbols": ["0700.HK"]}},
 }
 
@@ -69,9 +71,10 @@ class Phase89Tests(unittest.TestCase):
         cutoff = broker.submit_signal(signal_id="cutoff", symbol="AAPL", side="buy", quantity=Decimal(1),
                                       timestamp=self.now, minutes_to_close=30, regime=Regime.TREND_DAY)
         self.assertEqual(cutoff.state, "rejected")
-        disabled = broker.submit_signal(signal_id="crypto", symbol="BTC-USD", side="buy", quantity=Decimal(1),
-                                        timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY)
-        self.assertEqual(disabled.state, "rejected")
+        crypto = broker.submit_signal(signal_id="crypto", symbol="BTC-USD", side="buy", quantity=Decimal(1),
+                                        timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY,
+                                        limit_price=Decimal(100))
+        self.assertIn(crypto.state, {"accepted", "working", "filled"})
         os.environ["TRADING_MODE"] = "live"
         with self.assertRaises(RuntimeError):
             DemoBroker(self.policy)
