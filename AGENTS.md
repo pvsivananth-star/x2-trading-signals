@@ -17,10 +17,20 @@ Instructions for AI coding agents (and humans) working in this repository.
 ## Implementation, Tests, Review, and Check-in
 - Stage only files relevant to the task.
 - For every code change, add or update unit tests covering the changed behavior. For documentation-only or non-executable configuration changes, explicitly record why unit tests are not applicable.
-- Run the applicable unit tests, integration tests, and linters before committing. Do not commit while known applicable checks are failing.
+- Treat GitHub Actions as the required compatibility baseline. Before committing, mirror all checks from `.github/workflows/tests.yml` for every applicable Python matrix version:
+  - `python -m pip install -e '.[dev]'`
+  - `python -m unittest discover -s tests -v`
+  - `python -m compileall -q app tests`
+  - `ruff check app tests`
+- GitHub CI must report the unit tests successful for both Python 3.12 and 3.13. Do not commit if a changed or applicable unit test has not been run successfully on the available runtime. Never suppress or exclude a failing test to obtain a green commit.
+- Run container validation with `./scripts/docker-test.sh` for database, migration, Dockerfile, or container-runtime changes; otherwise run it when Docker is available and the change may affect startup or packaging.
+- Run the smallest applicable integration test first, then the full unit suite. Escalate to the full suite if a shared contract, provider, database, CLI, configuration, or import path changes.
+- Before staging, run `git diff --check`. Before committing, inspect `git diff --stat` and the complete relevant diff for accidental changes or secrets.
+- Before committing, verify staged files contain no `.env`, credentials, broker secrets, API keys, account numbers, private keys, local logs, or market-data dumps. Fail closed if secret scanning is uncertain.
 - Perform a code review of the complete diff before committing. Fix valid findings and rerun the affected checks.
 - Commit messages use the form `<type>: <short imperative summary>`, where type is one of `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Keep commits focused: one logical change per commit.
+- Do not commit while known applicable checks are failing or while a change has not received the required unit-test and lint validation.
 - After checks pass and commits are created, push the current non-main branch automatically. If no upstream exists, use `git push --set-upstream <configured-remote> <current-branch>`; use ordinary pushes thereafter. Do not open or merge a pull request unless explicitly requested.
 
 ## Trading-Logic Safety
