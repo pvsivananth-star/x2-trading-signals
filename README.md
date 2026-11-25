@@ -173,7 +173,7 @@ python -m app.cli load-fixtures
 
 Phases 6 and 7 now provide provider-neutral `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY` regimes; a fail-closed, versioned policy; and the causal `Confluence_v1` signal engine. Decision cards include gate rejections, Fib zone, MoveRoom, configuration version, deterministic signal ID, and dedupe key. Probationary and disabled markets and live routing remain blocked.
 
-Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar` rollups. The replay run exposes chronological and walk-forward splits, market/limit/partial/rejected simulation, spread/slippage/fee configuration, quality gap thresholds, deterministic provenance, and backtest metrics (profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover). Migration `005_backtest_tables.sql` adds optional PostgreSQL audit storage; unit tests do not require PostgreSQL.
+Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar` rollups; replay currently reuses the causal feature/bar path, while the Phase-6 strategy card API remains available for callers rather than an internal replay-loop dependency. The replay run exposes chronological and walk-forward splits, market/limit/partial/rejected simulation, spread/slippage/fee configuration, quality gap thresholds, deterministic provenance, and backtest metrics (profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover). Migration `005_backtest_tables.sql` adds optional PostgreSQL audit storage; unit tests do not require PostgreSQL.
 
 ## Backtesting and AI Policy
 

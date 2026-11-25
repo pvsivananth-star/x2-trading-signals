@@ -106,7 +106,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 - [x] Add deterministic 1/5/15-minute fixtures for EQ, ETF, Index, Gold, Oil, and BTC-USD, plus market-buy replay primitives.
 - [x] Implement an event replay clock over normalized in-memory event feeds, reusable with canonical Bar/Trade replay abstractions.
-- [x] Reuse the production bar, feature, regime, and strategy path; replay orchestration uses canonical normalized events and Bar rollups.
+- [~] Reuse the production bar and feature paths in replay; full strategy/decision-card orchestration remains pending for a later integration pass.
 - [x] Implement an order simulator with market/limit behavior needed by the first strategy.
 - [x] Implement configurable spread, slippage, fees, and partial/rejected fill behavior.
 - [x] Define gap policies and fail or annotate runs when quality thresholds are exceeded.
