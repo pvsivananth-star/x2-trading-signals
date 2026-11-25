@@ -46,7 +46,7 @@ markets:
     min_net_moveroom_pct: 0.0045
     est_roundtrip_cost_pct: 0.0006
     slot_rvol_min: 1.05
-    core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA"]
+    core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA", "SPX", "^GSPC"]
     symbol_overrides:
       NVDA: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 

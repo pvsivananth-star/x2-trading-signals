@@ -124,7 +124,8 @@ class Phase89Tests(unittest.TestCase):
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m")
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
 
-        report = run_audited_backtest(store, actor, broker, days=3, ticks_per_day=2)
+        report = run_audited_backtest(store, actor, broker, days=3, ticks_per_day=2,
+                                      interval_seconds=0)
         table = report.as_table()
 
         self.assertEqual(report.days, 3)
@@ -136,6 +137,7 @@ class Phase89Tests(unittest.TestCase):
         self.assertIn("Overall Profit Factor", table)
         self.assertIn("Max Drawdown", table)
         self.assertIn("Synthetic deterministic fixture", report.audit_warning)
+        self.assertGreaterEqual(report.sell_signals, 0)
 
     def test_tick_pump_warmup_and_every_tick_actor_execution(self):
         from app.backtest.tick_pump import TickPumpRuntime

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from app.actor_runtime import Actor02RegimeScanner, Actor06TradeAnalyzer
@@ -33,7 +34,8 @@ class ActorRuntime:
         self.scanner = Actor02RegimeScanner(symbols, regime_provider=self.regime_provider)
         self.analyzer = Actor06TradeAnalyzer()
 
-    def evaluate_once(self, *, allow_synthetic: bool = False) -> list[object]:
+    def evaluate_once(self, *, allow_synthetic: bool = False,
+                      position_quantities: Mapping[str, object] | None = None) -> list[object]:
         now = datetime.now(UTC)
         cards: list[object] = []
         for spec in self.store.config.symbols:
@@ -53,9 +55,11 @@ class ActorRuntime:
                         c.volume, c.trade_count) for c in candle_bars]
             snapshot = feature_snapshot(bars, now)
             regime = self.regime_provider.regime_at(now, spec.symbol)
+            position_quantity = position_quantities.get(spec.symbol, 0) if position_quantities else 0
             card = self.strategy.evaluate(timestamp=now, symbol=spec.symbol, snapshot=snapshot,
                                           regime=regime, stale_feed_seconds=stale,
                                           stale_threshold_seconds=self.stale_threshold_seconds,
+                                          position_quantity=position_quantity,
                                           live_mode=False)
             self.cards[spec.symbol] = card
             cards.append(card)

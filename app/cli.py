@@ -51,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     audited.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
     audited.add_argument("--days", type=int, default=252)
     audited.add_argument("--ticks-per-day", type=int, default=20)
+    audited.add_argument("--interval", type=float, default=1.0,
+                         help="real seconds to sleep per replay tick; 0 disables timing")
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
     start_api.add_argument("--host", default="127.0.0.1")
@@ -141,7 +143,8 @@ def main(argv: list[str] | None = None) -> int:
                                  stale_threshold_seconds=config.stale_threshold_seconds)
             broker = DemoBroker(policy, starting_cash=Decimal(25000))
             report = run_audited_backtest(store, actor, broker, days=args.days,
-                                          ticks_per_day=args.ticks_per_day)
+                                          ticks_per_day=args.ticks_per_day,
+                                          interval_seconds=args.interval)
             print(json.dumps({**report.as_table(), "BUY signals": report.buy_signals,
                               "SELL signals": report.sell_signals,
                               "HOLD signals": report.held_signals,

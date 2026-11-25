@@ -208,7 +208,7 @@ The runtime initializes every enabled symbol with the warmup window, advances Ac
 Generate an audited 252-session summary as a terminal table:
 
 ```bash
-./.venv/bin/python -m app.cli backtest-report --days 252 --ticks-per-day 20
+./.venv/bin/python -m app.cli backtest-report --days 252 --ticks-per-day 20 --interval 1
 ```
 
 The report is deterministic from the local fixture corpus and must be labeled synthetic in external use. It is not broker-verified live or historical performance.

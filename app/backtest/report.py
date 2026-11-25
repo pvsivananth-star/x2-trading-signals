@@ -1,6 +1,7 @@
 """Deterministic audited summary for the 252-session local backtest."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -41,7 +42,8 @@ class AuditedBacktestReport:
 
 def run_audited_backtest(store: FeedStore, actor: ActorRuntime, broker: DemoBroker,
                          *, days: int = 252, ticks_per_day: int = 20,
-                         warmup_fraction: float = 0.25) -> AuditedBacktestReport:
+                         warmup_fraction: float = 0.25,
+                         interval_seconds: float = 1.0) -> AuditedBacktestReport:
     if days <= 0 or ticks_per_day <= 0:
         raise ValueError("days and ticks_per_day must be positive")
     if not 0 < warmup_fraction < 1:
@@ -52,75 +54,93 @@ def run_audited_backtest(store: FeedStore, actor: ActorRuntime, broker: DemoBrok
     equity_curve = [starting]
     trade_pnl: list[Decimal] = []
     buy_signals = sell_signals = held_signals = 0
+    buy_entries: dict[str, tuple[Decimal, Decimal]] = {}
+    warmup_windows: dict[str, list[Candle]] = {}
+
+    for spec in store.config.symbols:
+        if spec.enabled:
+            bars = _load_fixture_stream(store, spec.symbol)
+            if bars:
+                warmup_windows[spec.symbol] = [_backtest_candle(candle)
+                                               for candle in bars[:int(len(bars) * warmup_fraction)]]
 
     for day in range(days):
         session_time = base + timedelta(days=day)
         marks: dict[str, Decimal] = {}
-        buy_entries: dict[str, tuple[Decimal, Decimal]] = {}
 
-        for spec in store.config.symbols:
-            if not spec.enabled:
-                continue
-            bars = _load_fixture_stream(store, spec.symbol)
-            if not bars:
-                continue
-            warmup = int(len(bars) * warmup_fraction)
-            window = [_backtest_candle(candle) for candle in bars[:warmup]]
-            store.put(spec.symbol, "1m", window)
-
-            for tick_index in range(ticks_per_day):
+        for tick_index in range(ticks_per_day):
+            timestamp = session_time + timedelta(seconds=tick_index)
+            for spec in store.config.symbols:
+                if not spec.enabled:
+                    continue
+                bars = _load_fixture_stream(store, spec.symbol)
+                if not bars:
+                    continue
+                warmup = int(len(bars) * warmup_fraction)
+                window = warmup_windows.setdefault(spec.symbol, [_backtest_candle(candle)
+                                                                  for candle in bars[:warmup]])
                 index = warmup + ((day * ticks_per_day + tick_index) % max(1, len(bars) - warmup))
                 source = bars[index % len(bars)]
-                window = window[-499:] + [source]
-                timestamp = session_time + timedelta(seconds=tick_index)
                 candle = Candle(timestamp, timestamp + timedelta(seconds=60), source.open,
                                 source.high, source.low, source.close, source.volume,
                                 source.trade_count, "deterministic_audited_fixture", False)
-                store.put(spec.symbol, "1m", window[-499:] + [candle])
+                window = (window[-499:] + [candle])
+                warmup_windows[spec.symbol] = window
+                store.put(spec.symbol, "1m", window)
 
-        cards = actor.evaluate_once(allow_synthetic=True)
-        marks = _marks(store)
-        for card in cards:
-            action = getattr(card, "display_action", "HOLD")
-            symbol = getattr(card, "symbol", "")
-            if action == "BUY":
-                buy_signals += 1
-            elif action == "SELL":
-                sell_signals += 1
-            else:
-                held_signals += 1
+            position_quantities = {position.symbol: position.quantity
+                                   for position in broker.positions}
+            cards = actor.evaluate_once(allow_synthetic=True,
+                                        position_quantities=position_quantities)
+            marks = _marks(store)
+            for card in cards:
+                action = getattr(card, "display_action", "HOLD")
+                symbol = getattr(card, "symbol", "")
+                if action == "BUY":
+                    buy_signals += 1
+                elif action == "SELL":
+                    sell_signals += 1
+                else:
+                    held_signals += 1
 
-            mark = marks.get(symbol)
-            if action not in {"BUY", "SELL"} or mark is None:
-                continue
-            position = next((pos for pos in broker.positions if pos.symbol == symbol), None)
-            if action == "BUY" and position is not None:
-                continue
-            if action == "SELL" and position is None:
-                continue
+                mark = marks.get(symbol)
+                if action not in {"BUY", "SELL"} or mark is None:
+                    continue
+                position = next((pos for pos in broker.positions if pos.symbol == symbol), None)
+                if action == "BUY" and position is not None:
+                    continue
+                if action == "SELL" and position is None:
+                    continue
 
-            side = "buy" if action == "BUY" else "sell"
-            order = broker.submit_signal(
-                signal_id=getattr(card, "signal_id", f"audit:{day}:{symbol}"),
-                symbol=symbol, side=side, quantity=Decimal(1), timestamp=session_time,
-                minutes_to_close=120, stale_feed_seconds=1,
-                stale_threshold_seconds=actor.stale_threshold_seconds,
-                regime=Regime.TREND_DAY, limit_price=mark,
-            )
-            if order.state == "rejected":
-                continue
-            fill = broker.fill(order.order_id, price=mark, quantity=Decimal(1), timestamp=session_time)
-            if side == "buy":
-                buy_entries[symbol] = (fill.price, fill.fee)
+                side = "buy" if action == "BUY" else "sell"
+                order = broker.submit_signal(
+                    signal_id=getattr(card, "signal_id", f"audit:{day}:{tick_index}:{symbol}"),
+                    symbol=symbol, side=side, quantity=Decimal(1), timestamp=timestamp,
+                    minutes_to_close=120, stale_feed_seconds=1,
+                    stale_threshold_seconds=actor.stale_threshold_seconds,
+                    regime=Regime.TREND_DAY, limit_price=mark,
+                )
+                if order.state == "rejected":
+                    continue
+                fill = broker.fill(order.order_id, price=mark, quantity=Decimal(1), timestamp=timestamp)
+                if side == "buy":
+                    buy_entries[symbol] = (fill.price, fill.fee)
+                else:
+                    buy = buy_entries.pop(symbol, None)
+                    if buy is not None:
+                        trade_pnl.append((fill.price - buy[0]) - buy[1] - fill.fee)
 
-        flat_fills = broker.flatten(timestamp=session_time, marks=marks)
-        for fill in flat_fills:
-            buy = buy_entries.get(fill.symbol)
-            if buy is not None:
-                pnl = (fill.price - buy[0]) - buy[1] - fill.fee
-                trade_pnl.append(pnl)
+            equity_curve.append(broker.equity(marks))
+            if interval_seconds > 0:
+                time.sleep(interval_seconds)
 
-        equity_curve.append(broker.equity(marks))
+        if marks:
+            flat_fills = broker.flatten(timestamp=session_time, marks=marks)
+            sell_signals += len(flat_fills)
+            for fill in flat_fills:
+                buy = buy_entries.pop(fill.symbol, None)
+                if buy is not None:
+                    trade_pnl.append((fill.price - buy[0]) - buy[1] - fill.fee)
 
     ending = broker.equity(marks)
     wins = [pnl for pnl in trade_pnl if pnl > 0]
