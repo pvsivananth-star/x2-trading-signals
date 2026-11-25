@@ -187,7 +187,7 @@ The importer must:
 6. emit canonical normalized events and provenance;
 7. upsert idempotently using the strongest available event identity;
 8. record counts, invalid rows, duplicates, out-of-order rows, and failures;
-9. allow only the ingestion worker to atomically transition a raw object from `discovered` to `verified` to `imported`; the `verified` transition must require an existing native copy, a valid SHA-256 value, and a matching checksum, while any mismatch records a failed object/run;
+9. allow only the ingestion worker to atomically transition a raw object from `discovered` to `validated` to `imported`; the `validated` transition must require an existing native copy, a valid SHA-256 value, and a matching checksum, while any mismatch records a failed object/run;
 10. be safe to rerun against the same dump.
 
 Downloaded files must be placed in a dedicated data directory and never committed to Git. The importer should accept paths as arguments rather than importing code from a downloaded-data directory.

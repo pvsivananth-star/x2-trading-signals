@@ -24,3 +24,30 @@ Deterministic intraday trading and signal-generation architecture supporting **1
 - [Local-first implementation plan](docs/local-first-implementation-plan.md) — target architecture, local runtime, data lifecycle, strategy/backtest boundaries, and acceptance criteria.
 - [Implementation TODO](TODO.md) — phased checklist for building the local system before cloud hosting or live routing.
 - [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, ingestion runs, trades, quotes, bars, and quality events.
+
+## Local Phase 0–3 setup
+
+The first executable slice is a Binance public historical-trade importer for `BTCUSDT`. It stores native source files under `data/raw/`, normalized Parquet under `data/normalized/`, and optionally writes normalized trades and provenance to PostgreSQL. It does not connect to a broker or place orders.
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[runtime,dev]'
+python -m unittest discover -s tests -v
+```
+
+With Docker installed, start PostgreSQL locally and apply migrations:
+
+```bash
+docker compose -f infra/docker-compose.local.yml up -d postgres
+export DATABASE_URL=postgresql://x2_admin:x2_admin_local_only@127.0.0.1:5432/x2_trading
+python -m app.cli migrate
+```
+
+Import a local public dump without database writes while developing the parser:
+
+```bash
+python -m app.cli import-dump /path/to/BTCUSDT-trades.zip --no-database
+```
+
+An allow-listed HTTPS Binance historical-dump URL can be supplied instead of a local path. For a PostgreSQL-backed import, set `DATABASE_URL` to the restricted `x2_ingestion` role and omit `--no-database`. Public data terms and the source file checksum must be verified before storing or redistributing downloaded data.

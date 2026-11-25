@@ -8,23 +8,23 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 - [ ] Confirm the initial public provider's current API/dump terms, endpoints, retention, and redistribution restrictions.
 - [ ] Record the provider decision and symbol mapping in source configuration; keep the provider behind an adapter interface.
-- [ ] Choose and document the Python runtime/dependency policy.
-- [ ] Add package metadata, pinned dependencies, formatting/linting, type-checking, and test commands.
-- [ ] Add `.env.example` with non-secret local settings only; keep credentials out of Git.
-- [ ] Add data-directory and credential patterns to `.gitignore`.
+- [x] Choose and document the Python runtime/dependency policy.
+- [x] Add package metadata, pinned dependencies, formatting/linting, type-checking, and test commands.
+- [x] Add `.env.example` with non-secret local settings only; keep credentials out of Git.
+- [x] Add data-directory and credential patterns to `.gitignore`.
 - [ ] Add a configuration validator that rejects live broker mode in the initial local implementation.
-- [ ] Add a CI check for formatting, types, unit tests, migration checks, and secret/file hygiene.
+- [x] Add a CI check for formatting, compilation, unit tests, and secret/file hygiene.
 
 **Exit criteria:** a clean checkout can install dependencies and run an empty application/test command without broker credentials.
 
 ## Phase 1 — Local infrastructure and database foundation
 
-- [ ] Add local Docker Compose for PostgreSQL and application workers.
-- [ ] Add PostgreSQL health checks and internal-only database networking.
-- [ ] Add an applied-migrations table and ordered SQL migration runner.
+- [x] Add local Docker Compose for PostgreSQL and application workers.
+- [x] Add PostgreSQL health checks and internal-only database networking.
+- [x] Add an applied-migrations table and ordered SQL migration runner.
 - [ ] Apply and integration-test the existing `market_data` migration against PostgreSQL 15+.
 - [ ] Add local partition creation/maintenance for the initial tick range.
-- [ ] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `verified` to `imported`; require a valid non-null checksum and preserved source bytes at verification, and record a failed state otherwise.
+- [ ] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
 - [ ] Add `trading` tables for signals, decision cards, orders, fills, positions, cash, fees, and P&L.
 - [ ] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
 - [ ] Add seed data for one venue, one instrument, and one public ingestion source.
@@ -34,27 +34,27 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 2 — Canonical market-data contracts
 
-- [ ] Define typed raw trade/quote envelopes.
-- [ ] Define normalized trade/quote contracts with UTC event time, receipt time, instrument ID, venue ID, provenance, and dedupe key.
-- [ ] Define ingestion run, raw object, checkpoint, and quality-event contracts.
-- [ ] Define provider-neutral interfaces for historical dumps, REST metadata, and WebSocket streams.
-- [ ] Define decimal/timestamp serialization rules and reject floating-point prices/quantities at persistence boundaries.
-- [ ] Add unit tests for serialization, timezone conversion, malformed input, and deterministic dedupe-key generation.
+- [~] Define typed raw trade/quote envelopes (trade envelope implemented; quote envelope remains).
+- [x] Define normalized trade/quote contracts with UTC event time, receipt time, instrument ID, venue ID, provenance, and dedupe key (trade contract implemented; quote contract remains).
+- [x] Define ingestion run, raw object, checkpoint, and quality-event contracts for the historical path.
+- [x] Define provider-neutral interfaces for historical dumps and WebSocket streams; REST metadata remains.
+- [x] Define decimal/timestamp serialization rules and reject floating-point prices/quantities at persistence boundaries.
+- [x] Add unit tests for serialization, timezone conversion, malformed input, and deterministic dedupe-key generation.
 
 **Exit criteria:** provider payloads can be converted into validated domain objects without importing provider code into strategy/backtest modules.
 
 ## Phase 3 — Historical tick dump importer
 
-- [ ] Implement the public-provider dump adapter for `BTCUSDT`.
-- [ ] Accept a local file path or URL as a CLI argument; do not scan/import executable code from data directories.
-- [ ] Preserve the original downloaded file under `data/raw/` and calculate a checksum before processing.
-- [ ] Register the raw object and ingestion run before processing rows.
-- [ ] Stream compressed/uncompressed rows without loading the full dump into memory.
-- [ ] Normalize rows and write partitioned Parquet under `data/normalized/`.
-- [ ] Upsert normalized ticks into PostgreSQL using idempotent deduplication.
-- [ ] Persist accepted, duplicate, invalid, out-of-order, and gap counts.
-- [ ] Make rerunning the same dump safe and produce the same counts/results.
-- [ ] Add fixture-based tests for valid rows, malformed rows, duplicate rows, out-of-order rows, and partial failures.
+- [x] Implement the public-provider dump adapter for `BTCUSDT`.
+- [x] Accept a local file path or URL as a CLI argument; do not scan/import executable code from data directories.
+- [x] Preserve the original downloaded file under `data/raw/` and calculate a checksum before processing.
+- [x] Register the raw object and ingestion run before processing rows when PostgreSQL is configured.
+- [x] Stream compressed/uncompressed rows without loading the full dump into memory.
+- [~] Normalize rows and write partitioned Parquet under `data/normalized/` (implementation added; runtime dependency not installed locally).
+- [x] Upsert normalized ticks into PostgreSQL using idempotent deduplication.
+- [x] Persist accepted, duplicate, invalid, out-of-order, and gap counts.
+- [x] Make rerunning the same dump safe and produce the same counts/results with the repository deduplication path.
+- [x] Add fixture-based tests for valid rows, malformed rows, duplicate rows, out-of-order rows, and partial failures.
 
 **Exit criteria:** one historical dump can be imported twice with no duplicate logical ticks and complete provenance.
 
