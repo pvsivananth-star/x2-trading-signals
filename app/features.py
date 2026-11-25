@@ -23,6 +23,8 @@ class FeatureSnapshot:
     trend: str
     structure: str
     move_room: Decimal | None
+    last_close: Decimal | None = None
+    pullback_depth: Decimal | None = None
 
 
 def bars_through(bars: list[Bar], timestamp: datetime) -> list[Bar]:
@@ -137,10 +139,27 @@ def net_move_room(bars: list[Bar], timestamp: datetime, target: Decimal, stop: D
     return net_price_room / last
 
 
+def causal_pullback_depth(bars: list[Bar], timestamp: datetime, lookback: int = 20) -> tuple[Decimal | None, Decimal | None]:
+    """Return (last_close, retracement) where retracement = (high - close) / (high - low) over the window."""
+    eligible = bars_through(bars, timestamp)
+    if lookback <= 0:
+        raise ValueError("lookback must be positive")
+    if not eligible:
+        return None, None
+    window = eligible[-lookback:]
+    last_close = eligible[-1].close
+    rng = max(bar.high for bar in window) - min(bar.low for bar in window)
+    if rng <= 0:
+        return last_close, None
+    depth = (max(bar.high for bar in window) - last_close) / rng
+    return last_close, depth
+
+
 def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
     swing_high, swing_low = causal_swing(bars, timestamp)
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp)
     trend, structure = causal_trend_structure(bars, timestamp)
+    last_close, pullback_depth = causal_pullback_depth(bars, timestamp)
     return FeatureSnapshot(
         timestamp=timestamp,
         vwap=causal_vwap(bars, timestamp),
@@ -154,4 +173,6 @@ def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
         trend=trend,
         structure=structure,
         move_room=net_move_room(bars, timestamp, fib_618 or Decimal(0), fib_382 or Decimal(0)) if fib_382 is not None and fib_618 is not None else None,
+        last_close=last_close,
+        pullback_depth=pullback_depth,
     )

@@ -71,6 +71,8 @@ def snapshot() -> FeatureSnapshot:
         "up",
         "higher-highs-higher-lows",
         Decimal(20),
+        last_close=Decimal(100),
+        pullback_depth=Decimal("0.5"),
     )
 
 
@@ -111,6 +113,7 @@ class Phase67Tests(unittest.TestCase):
             snapshot().timestamp, Decimal(100), Decimal(2), Decimal("1.2"),
             Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102),
             "up", "higher-highs-higher-lows", Decimal("-0.10"),
+            last_close=Decimal(100), pullback_depth=Decimal("0.5"),
         )
         card = engine.evaluate(
             timestamp=negative.timestamp,
@@ -156,7 +159,8 @@ class Phase67Tests(unittest.TestCase):
         now = datetime(2026, 11, 20, tzinfo=UTC)
         up = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
                              Decimal(105), Decimal(95), Decimal(100), Decimal(101),
-                             Decimal(102), "up", "higher-highs-higher-lows", Decimal("0.008"))
+                             Decimal(102), "up", "higher-highs-higher-lows", Decimal("0.008"),
+                             last_close=Decimal(101), pullback_depth=Decimal("0.5"))
         buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
                               stale_threshold_seconds=10, minutes_to_close=120)
@@ -168,7 +172,7 @@ class Phase67Tests(unittest.TestCase):
         sell = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=down,
                                regime=Regime.TREND_DAY, stale_feed_seconds=1,
                                stale_threshold_seconds=10, minutes_to_close=120,
-                               position_quantity=Decimal(1))
+                               position_quantity=Decimal(1), previous_snapshot=down)
         self.assertEqual(sell.display_action, "SELL")
 
     def test_false_positive_filters(self):
@@ -230,10 +234,11 @@ class Phase67Tests(unittest.TestCase):
             stale_threshold_seconds=10,
             position_quantity=Decimal(1),
             minutes_to_close=120,
+            previous_snapshot=down,
         )
         self.assertEqual(card.action, "exit_long")
         self.assertEqual(card.display_action, "SELL")
-        self.assertIn("turned down", card.reason)
+        self.assertIn("confirmed trend break", card.reason)
 
     def test_replay_clock_split_walk_forward_and_gap_policy(self):
         now = datetime(2026, 11, 20, tzinfo=UTC)
