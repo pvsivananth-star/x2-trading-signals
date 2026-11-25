@@ -69,8 +69,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _import_dump(args: argparse.Namespace, settings: Settings) -> int:
+    if not args.venue_symbol and not settings.venue_symbol:
+        raise SystemExit("--venue-symbol or VENUE_SYMBOL is required for provider-specific dumps")
     venue_symbol = args.venue_symbol or settings.venue_symbol
     canonical_symbol = args.canonical_symbol or settings.canonical_symbol
+    if not canonical_symbol:
+        raise SystemExit("--canonical-symbol or CANONICAL_SYMBOL is required for provider-specific dumps")
     data_dir = args.data_dir or settings.archive_root
     source_path = materialize_source(args.source, data_dir / "downloads")
     source_id = args.source_id or str(
@@ -117,30 +121,45 @@ def _import_dump(args: argparse.Namespace, settings: Settings) -> int:
 def _load_fixtures(settings: Settings) -> int:
     import csv
 
-    fixture_dir = settings.archive_root / "fixtures" / "binance" / "BTCUSDT" / "5-day-2026-11-20-to-2026-11-24"
+    fixture_dir = settings.archive_root / "fixtures" / "multi_asset" / "5-day-2026-11-20-to-2026-11-24"
     manifest_path = fixture_dir / "manifest.json"
     if not manifest_path.is_file():
         raise SystemExit(f"fixture manifest not found: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    expected = {"1m": 7200, "5m": 1440, "15m": 480}
+
+    expected_categories = {"eq", "etf", "index", "gold", "oil", "crypto"}
+    symbols = manifest.get("symbols")
+    if not isinstance(symbols, dict):
+        raise SystemExit("fixture manifest symbols must be an object")
+    categories = {details["category"] for details in symbols.values()}
+    if categories != expected_categories:
+        raise SystemExit(
+            f"fixture categories mismatch: {sorted(categories)} != {sorted(expected_categories)}"
+        )
+
     header = ["bar_start", "bar_end", "open", "high", "low", "close", "volume", "trade_count"]
-    summary: dict[str, int] = {}
+    summary: dict[str, dict[str, int]] = {}
     bars_dir = fixture_dir / "bars"
-    for interval, expected_count in expected.items():
-        path = bars_dir / f"BTCUSDT-{interval}.csv"
-        if not path.is_file():
-            raise SystemExit(f"fixture bar file not found: {path}")
-        with path.open("r", encoding="utf-8", newline="") as source:
-            reader = csv.reader(source)
-            if next(reader, None) != header:
-                raise SystemExit(f"unexpected fixture header: {path}")
-            count = sum(1 for row in reader if row)
-        if count != expected_count:
-            raise SystemExit(f"fixture row count mismatch: {path}: {count} != {expected_count}")
-        summary[interval] = count
-    if manifest.get("bar_counts") != summary:
-        raise SystemExit("fixture manifest bar counts do not match CSV files")
-    print(json.dumps({"fixture": manifest["fixture"], "bars": summary}, indent=2))
+    for symbol, details in symbols.items():
+        safe_symbol = symbol.replace("=", "_").replace("/", "_")
+        symbol_summary: dict[str, int] = {}
+        for interval in ("1m", "5m", "15m"):
+            path = bars_dir / f"{safe_symbol}-{interval}.csv"
+            if not path.is_file():
+                raise SystemExit(f"fixture bar file not found: {path}")
+            with path.open("r", encoding="utf-8", newline="") as source:
+                reader = csv.reader(source)
+                if next(reader, None) != header:
+                    raise SystemExit(f"unexpected fixture header: {path}")
+                count = sum(1 for row in reader if row)
+            if count != details["bar_counts"][interval]:
+                raise SystemExit(
+                    f"fixture row count mismatch: {path}: {count} != {details['bar_counts'][interval]}"
+                )
+            symbol_summary[interval] = count
+        summary[symbol] = symbol_summary
+
+    print(json.dumps({"fixture": manifest["fixture"], "assets": summary}, indent=2))
     return 0
 
 

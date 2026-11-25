@@ -1,12 +1,12 @@
 # Implementation TODO
 
-This is the execution checklist for the local-first trading platform. Work top-to-bottom unless a task is explicitly marked parallel. Use `BTCUSDT` only as an optional sample fixture/provider adapter; implement and test provider-neutral behavior for all asset classes. Do not enable live trading as part of these tasks.
+This is the execution checklist for the local-first trading platform. Work top-to-bottom unless a task is explicitly marked parallel. Test provider-neutral behavior with one fixture per category: EQ, ETF, Index, Gold, Oil, and Crypto. BTC-USD is the crypto fixture; Binance/BTCUSDT are optional crypto adapter examples, not system defaults. Do not enable live trading as part of these tasks.
 
 Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocked/decision required
 
 ## Phase 0 — Safety and project bootstrap
 
-- [~] Confirm the initial public provider's current API/dump terms, endpoints, retention, and redistribution restrictions (Binance public dumps are integrated; redistribution terms remain unverified).
+- [~] Confirm public provider API/dump terms, endpoints, retention, and redistribution restrictions for providers used in each asset class. Keep adapters disabled until terms and attribution are verified.
 - [x] Record the provider decision and symbol mapping in source configuration; keep the provider behind an adapter interface.
 - [x] Choose and document the Python runtime/dependency policy.
 - [x] Add package metadata, pinned dependencies, formatting/linting, type-checking, and test commands.
@@ -28,7 +28,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [x] Enforce that only the ingestion worker can atomically transition a raw object from `discovered` to `validated` to `imported`; require a valid non-null checksum and preserved source bytes at validation, and record a failed state otherwise.
 - [ ] Add `trading` tables for signals, decision cards, orders, fills, positions, cash, fees, and P&L.
 - [ ] Add `backtest` tables for run metadata, provenance, fills, equity points, metrics, and quality summaries.
-- [x] Add seed data for Binance, BTCUSDT/BTC-USDT, and the public ingestion source.
+- [x] Add an initial seed catalog with a crypto venue/symbol example and provider-neutral EQ, ETF, index, metal, and future instrument support.
 - [x] Add database reset commands for local Docker development.
 - [x] Add fixture-loading and validation commands for local development.
 
@@ -49,7 +49,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 3 — Historical tick dump importer
 
-- [x] Implement the public-provider dump adapter for `BTCUSDT`.
+- [x] Implement an optional Binance public crypto-dump adapter for `BTCUSDT` as an implementation example.
 - [x] Accept a local file path or URL as a CLI argument; do not scan/import executable code from data directories.
 - [x] Preserve the original downloaded file under `data/raw/` and calculate a checksum before processing.
 - [x] Register the raw object and ingestion run before processing rows when PostgreSQL is configured.
@@ -64,7 +64,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 4 — Live public WebSocket collector
 
-- [ ] Implement the public trade-stream adapter for `BTCUSDT`.
+- [ ] Implement a provider-neutral public trade-stream adapter contract and optional Binance/BTCUSDT implementation.
 - [ ] Add reconnect with bounded exponential backoff and clear terminal failure states.
 - [ ] Persist checkpoints frequently enough to resume after process restart.
 - [ ] Record event time and collector receipt time separately.
@@ -80,7 +80,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [ ] Implement required-field, positive-value, timestamp, symbol-mapping, ordering, and duplicate checks.
 - [ ] Implement configurable sequence/timestamp gap detection.
 - [ ] Persist quality events linked to source runs and affected time ranges.
-- [x] Build deterministic 1-minute and 5/15-minute rollups from canonical BTCUSDT trade fixtures.
+- [x] Build deterministic 1-minute and 5/15-minute rollups from synthetic six-category bar fixtures.
 - [ ] Build the 30-minute rollup and production replay integration.
 - [ ] Define bar close/finality semantics so live and replay modes agree across all configured timeframes.
 - [ ] Implement exchange/session calendar handling without changing timestamps to local time at rest.
@@ -104,7 +104,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 ## Phase 7 — Deterministic replay and backtesting
 
-- [x] Add deterministic 1/5/15-minute BTCUSDT fixture and market-buy replay primitives.
+- [x] Add deterministic 1/5/15-minute fixtures for EQ, ETF, Index, Gold, Oil, and BTC-USD, plus market-buy replay primitives.
 - [ ] Implement an event replay clock over normalized Parquet/PostgreSQL data.
 - [ ] Reuse the production bar, feature, regime, and strategy path; only the event source differs.
 - [~] Implement an order simulator with market/limit behavior needed by the first strategy (market-fill replay exists; limit/partial/rejected fills remain).
@@ -160,7 +160,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 - [ ] Define the `BTC-USDT` canonical instrument and require a configured source-priority list, USD-per-USDT quote direction, positive rate, maximum age, and latest-at-or-before-event selection for USDT/USD valuation; record conversion provenance before USD sizing, fees, P&L, or demo fills, and fail closed rather than aliasing to `BTC-USD`.
 - [ ] Define and validate tier resolution order: symbol override, explicit disabled/excluded state, explicit probation, market profile, then broad tier defaults; fail closed on conflicts such as the duplicate crypto tier listing.
 - [ ] Confirm Python 3.12 as the implementation runtime.
-- [ ] Confirm the first instrument (`BTCUSDT`) and historical date range.
+- [ ] Confirm real-market data availability and historical date ranges for AAPL, SPY, SPX, GC=F, CL=F, and BTC-USD. Synthetic fixtures are testing-only and do not satisfy this item.
 - [x] Confirm whether local PostgreSQL should run in Docker or use an existing installation (Docker Compose PostgreSQL 16 is the local default).
 - [ ] Confirm the desired first UI milestone: API-only first or API plus a minimal dashboard after paper execution.
 

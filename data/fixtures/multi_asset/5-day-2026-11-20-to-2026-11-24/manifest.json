@@ -1,0 +1,76 @@
+{
+  "fixture": "multi-asset-five-day-test-bars",
+  "start_date": "2026-11-20",
+  "end_date": "2026-11-24",
+  "timezone": "UTC",
+  "source": "deterministic_synthetic_test_fixture",
+  "redistribution_allowed": true,
+  "symbols": {
+    "AAPL": {
+      "asset_class": "equity",
+      "venue_symbol": "AAPL",
+      "canonical_symbol": "AAPL",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "eq"
+    },
+    "SPY": {
+      "asset_class": "etf",
+      "venue_symbol": "SPY",
+      "canonical_symbol": "SPY",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "etf"
+    },
+    "SPX": {
+      "asset_class": "index",
+      "venue_symbol": "SPX",
+      "canonical_symbol": "SPX",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "index"
+    },
+    "GC=F": {
+      "asset_class": "metal",
+      "venue_symbol": "GC=F",
+      "canonical_symbol": "GC=F",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "gold"
+    },
+    "CL=F": {
+      "asset_class": "future",
+      "venue_symbol": "CL=F",
+      "canonical_symbol": "CL=F",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "oil"
+    },
+    "BTC-USD": {
+      "asset_class": "crypto",
+      "venue_symbol": "BTC-USD",
+      "canonical_symbol": "BTC-USD",
+      "bar_counts": {
+        "1m": 1950,
+        "5m": 390,
+        "15m": 130
+      },
+      "category": "crypto"
+    }
+  }
+}
