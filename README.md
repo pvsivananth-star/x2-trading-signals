@@ -181,7 +181,7 @@ Backtests use deterministic market-data, bar, and replay code. Gemini or another
 
 Live execution is intentionally unavailable: only the provider-neutral in-process demo broker is implemented. It validates policy gates, uses immutable order lifecycle transitions, records fills/positions/cash/fees/P&L and signal-order-fill audit cards, and rejects every live/unknown routing environment. The existing crypto probationary policy remains blocked; no risk parameters are changed.
 
-## Phase 8/9 Local Demo API
+## Configurable Public Feeds and Read-Only Demo Dashboard
 
 Start the read-only API and dashboard on loopback only:
 
@@ -191,6 +191,18 @@ python -m app.cli start-api --host 127.0.0.1 --port 8080
 ```
 
 If `X2_API_TOKEN` is configured, clients must send `X2_API_TOKEN`; otherwise loopback clients are allowed. All `/v1/*` contracts are read-only (`GET`) and support `limit`/`offset` pagination. Write, control, and live broker endpoints are absent. The dashboard consumes only API endpoints and must not receive database credentials or secrets.
+
+### Market feed runtime
+
+`config/feeds.yaml` tracks AAPL, SPY, SPX/^GSPC, GC=F, CL=F, and BTC-USD across provider-neutral market categories. Providers are optional Yahoo Chart REST, Stooq CSV, and Binance public klines adapters; every entry has `unknown` license/status and no redistribution claim is made. Configure `X2_LOG_DIR` and `X2_LOG_LEVEL` for rotating file and console logs. No credentials or live order route are used.
+
+```bash
+python -m app.cli start-api --with-feeds --config config/feeds.yaml
+python -m app.cli start-feed --config config/feeds.yaml
+python -m app.cli status --config config/feeds.yaml
+```
+
+Real fetches are cached and quality validated. Unavailable, disabled, or unimplemented providers fall back to the existing deterministic synthetic fixtures, labeled `synthetic` in API responses and never accepted as live observations. Actors run only in demo/read-only mode and reject synthetic, stale, disabled, and policy-blocked cards.
 
 ### Verified current runtime status
 

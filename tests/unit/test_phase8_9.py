@@ -3,10 +3,13 @@ import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from app.actors import ActorRuntime
 from app.api import ReadAPI, ReadAPIServer
 from app.execution import DemoBroker
+from app.feeds import FeedStore, load_feed_config
 from app.policy import TradingPolicy
 from app.regime import Regime
+from app.strategy import ConfluenceV1
 
 MARKETS = {
     "engine": {"mode": "demo", "base_currency": "USD", "pre_close_entry_cutoff_mins": 60,
@@ -82,6 +85,32 @@ class Phase89Tests(unittest.TestCase):
         self.assertEqual(len(flat_fills), 1)
         ids = {(card.signal_id, card.order_id) for card in broker.audit_cards}
         self.assertTrue(all(order_id for _, order_id in ids))
+
+    def test_feed_config_fallback_grouping_and_stale(self):
+        config = load_feed_config("config/feeds.yaml")
+        store = FeedStore(config)
+        symbols = store.market_symbols()
+        self.assertIn("AAPL", {item["symbol"] for item in symbols})
+        self.assertTrue(store.bars("AAPL", "1m", 1)[-1].synthetic)
+        api = ReadAPI(store=store)
+        code, markets = api.get("/v1/markets")
+        self.assertEqual(code, 200)
+        self.assertTrue({m["market"] for m in markets["items"]} >= {"EQ", "ETF", "Index", "Gold", "Oil", "Crypto"})
+        code, bars = api.get("/v1/bars", {"symbol": ["AAPL"], "interval": ["1m"], "limit": ["2"]})
+        self.assertEqual(code, 200)
+        self.assertTrue(bars["synthetic"])
+        self.assertEqual(len(bars["items"]), 2)
+
+    def test_actor_card_and_stale_synthetic_blocking(self):
+        config = load_feed_config("config/feeds.yaml")
+        store = FeedStore(config)
+        policy = TradingPolicy(MARKETS, "phase89")
+        strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
+                                        "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
+                                        "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+        actor = ActorRuntime(store, policy, ConfluenceV1(strategy_config, policy), interval="1m")
+        cards = actor.evaluate_once()
+        self.assertEqual(cards, [])
 
     def test_api_contract_pagination_authorization_and_readonly(self):
         api = ReadAPI({"orders": [{"id": 1}, {"id": 2}], "positions": []})

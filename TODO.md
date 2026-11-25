@@ -141,7 +141,16 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 **Exit criteria:** the dashboard can display a paper run from persisted data without reading the database directly or handling secrets.
 
-## Phase 10 — Cloud preparation (after local acceptance)
+## Phase 10 — Configurable feeds and market dashboard
+
+- [x] Add `config/feeds.yaml` for EQ, ETF, Index, Gold, Oil, and Crypto symbols with provider, license/status, refresh, timeframe, and enabled fields.
+- [x] Implement provider-neutral candle, Yahoo Chart REST, Stooq CSV, Binance public klines, cache, stale, quality, and deterministic synthetic-fallback support.
+- [x] Implement in-process regime/scanner/decision actors using existing policy, Confluence_v1, and causal features; synthetic/stale feeds are rejected and live orders remain disabled.
+- [x] Add rotating file/console logging and `start-api --with-feeds`, `start-feed`, and `status` CLI integration.
+- [x] Extend the read-only API and vanilla dashboard with market grouping, symbol/timeframe bars, candlesticks, 20/50/200 DMAs, Fibonacci zones, and OHLC/volume metadata.
+- [ ] Verify public provider terms and redistribution/attribution status before changing the configured `unknown` provider status.
+
+## Phase 11 — Cloud preparation (after local acceptance)
 
 - [ ] Containerize the validated workers/API without cloud-specific domain logic.
 - [ ] Replace local filesystem paths with an object-storage interface while retaining a local implementation.
