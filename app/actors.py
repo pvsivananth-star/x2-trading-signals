@@ -7,7 +7,7 @@ import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from app.actor_runtime import Actor02RegimeScanner, Actor06TradeAnalyzer
+from app.actor_runtime import Actor02RegimeScanner, Actor04ExecutionEngine, Actor06TradeAnalyzer
 from app.backtest.bars import Bar
 from app.features import feature_snapshot
 from app.feeds import FeedStore
@@ -19,7 +19,8 @@ from app.strategy import ConfluenceV1
 class ActorRuntime:
     def __init__(self, store: FeedStore, policy: TradingPolicy, strategy: ConfluenceV1,
                  interval: str = "5m", stale_threshold_seconds: int = 300,
-                 regime_provider: object | None = None) -> None:
+                 regime_provider: object | None = None,
+                 broker_adapter: object | None = None) -> None:
         self.store = store
         self.policy = policy
         self.strategy = strategy
@@ -33,6 +34,7 @@ class ActorRuntime:
         symbols = [{"symbol": s.symbol, "enabled": s.enabled} for s in self.store.config.symbols]
         self.scanner = Actor02RegimeScanner(symbols, regime_provider=self.regime_provider)
         self.analyzer = Actor06TradeAnalyzer()
+        self.execution = Actor04ExecutionEngine(broker_adapter) if broker_adapter is not None else None
 
     def evaluate_once(self, *, allow_synthetic: bool = False,
                       position_quantities: Mapping[str, object] | None = None) -> list[object]:
@@ -70,6 +72,11 @@ class ActorRuntime:
                 params = " ".join(f"{key}={value}" for key, value in card.parameters.items())
                 self._log.warning("action=%s symbol=%s card=%s parameters=%s reason=%s",
                                   card.display_action, spec.symbol, card.signal_id, params, card.reason)
+                if self.execution is not None:
+                    code, result = self.execution.execute(card, quantity=1,
+                                                          idempotency_key=card.dedupe_key)
+                    self._log.info("mock_execution symbol=%s http=%d status=%s", spec.symbol, code,
+                                   result.get("status", result.get("order", {}).get("state", "unknown")))
             else:
                 self._log.info("action=HOLD symbol=%s card=%s reason=%s", spec.symbol,
                                card.signal_id, card.reason)

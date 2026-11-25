@@ -100,8 +100,8 @@ class DemoBroker:
         fee_rate: Decimal = Decimal("0.0001"),
     ) -> None:
         mode = os.getenv("TRADING_MODE", "demo").strip().lower()
-        if mode not in {"demo", "offline"}:
-            raise RuntimeError("live routing is prohibited; TRADING_MODE must be demo or offline")
+        if mode not in {"backtest", "demo", "offline"}:
+            raise RuntimeError("live routing is prohibited; TRADING_MODE must be backtest, demo, or offline")
         if os.getenv("X2_LIVE_BROKER_URL") or os.getenv("LIVE_BROKER_URL"):
             raise RuntimeError("live broker environment is prohibited for demo execution")
         if policy.config["engine"].get("mode") != "demo":

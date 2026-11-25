@@ -280,6 +280,12 @@ class FeedRuntime:
         self._thread: threading.Thread | None = None
 
     def refresh_once(self) -> dict[str, str]:
+        from app.runtime_modes import runtime_mode
+
+        mode = runtime_mode()
+        if mode in {"backtest", "demo", "offline"}:
+            return {spec.symbol: "fallback_synthetic_isolated" for spec in self.config.symbols if spec.enabled}
+
         statuses: dict[str, str] = {}
         for spec in self.config.symbols:
             if not spec.enabled:

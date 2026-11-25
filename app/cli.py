@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -91,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "load-fixtures":
             return _load_fixtures(settings)
         if args.command == "tick-pump":
+            os.environ["TRADING_MODE"] = "backtest"
             from decimal import Decimal
 
             from app.actors import ActorRuntime
@@ -124,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "backtest-report":
+            os.environ["TRADING_MODE"] = "backtest"
             from decimal import Decimal
 
             from app.actors import ActorRuntime
@@ -200,16 +203,25 @@ def main(argv: list[str] | None = None) -> int:
                 from app.strategy import ConfluenceV1
                 strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", policy)
                 from app.actors import ActorRuntime
+                from app.mock_broker_client import MockBrokerDashboardAdapter
+                demo_adapter = MockBrokerDashboardAdapter(
+                    "http://mock-broker:9090" if os.getenv("X2_CONTAINER_MODE") == "1"
+                    else "http://127.0.0.1:9090"
+                )
                 actor_runtime = ActorRuntime(store, policy, strategy,
-                                             stale_threshold_seconds=feed_config.stale_threshold_seconds)
+                                             stale_threshold_seconds=feed_config.stale_threshold_seconds,
+                                             broker_adapter=demo_adapter)
                 actor_runtime.evaluate_once()
                 actor_runtime.start()
             broker = None
             if getattr(args, "with_feeds", False):
                 from decimal import Decimal
 
-                from app.execution import DemoBroker
-                broker = DemoBroker(policy, starting_cash=Decimal(25000))
+                from app.mock_broker_client import MockBrokerDashboardAdapter
+                broker = MockBrokerDashboardAdapter(
+                    "http://mock-broker:9090" if os.getenv("X2_CONTAINER_MODE") == "1"
+                    else "http://127.0.0.1:9090"
+                )
             server = ReadAPIServer(ReadAPI(store=store, actor=actor_runtime, broker=broker), host=args.host, port=args.port)
             print(json.dumps({"status": "started", "host": args.host, "port": args.port,
                               "mode": "read-only", "feeds": bool(feed_runtime)}))

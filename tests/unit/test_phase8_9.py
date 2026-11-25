@@ -90,6 +90,22 @@ class Phase89Tests(unittest.TestCase):
         ids = {(card.signal_id, card.order_id) for card in broker.audit_cards}
         self.assertTrue(all(order_id for _, order_id in ids))
 
+    def test_runtime_mode_isolation_and_mock_dashboard_positions(self):
+        import app.runtime_modes as modes
+        from app.mock_broker_client import MockBrokerDashboardAdapter
+
+        os.environ["TRADING_MODE"] = "backtest"
+        os.environ.pop("X2_LIVE_BROKER_URL", None)
+        os.environ.pop("LIVE_BROKER_URL", None)
+        self.assertTrue(modes.backtest_isolated())
+        self.assertFalse(modes.live_feed_allowed())
+
+        os.environ["TRADING_MODE"] = "demo"
+        self.assertFalse(modes.live_feed_allowed())
+        dashboard_broker = MockBrokerDashboardAdapter()
+        self.assertTrue(hasattr(dashboard_broker, "positions"))
+        os.environ.pop("TRADING_MODE", None)
+
     def test_feed_config_fallback_grouping_and_stale(self):
         config = load_feed_config("config/feeds.yaml")
         store = FeedStore(config)
