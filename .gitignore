@@ -226,6 +226,7 @@ __marimo__/
 data/raw/
 data/normalized/
 data/downloads/
+data/fixtures/**/raw/*.zip
 data/*.sqlite*
 *.parquet
 .env

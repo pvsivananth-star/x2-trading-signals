@@ -1,0 +1,25 @@
+{
+  "fixture": "BTCUSDT-five-day-trade-bars",
+  "venue": "binance",
+  "asset_class": "crypto",
+  "canonical_symbol": "BTC-USDT",
+  "venue_symbol": "BTCUSDT",
+  "start_date": "2026-11-20",
+  "end_date": "2026-11-24",
+  "timezone": "UTC",
+  "source_kind": "historical_dump",
+  "endpoint_template": "https://data.binance.vision/data/spot/daily/trades/BTCUSDT/BTCUSDT-trades-{date}.zip",
+  "terms_status": "unverified",
+  "redistribution_allowed": null,
+  "parsed_trade_rows": 26239494,
+  "bar_counts": {
+    "1m": 7200,
+    "5m": 1440,
+    "15m": 480
+  },
+  "sha256": "raw/SHA256SUMS",
+  "raw_location": "raw/",
+  "raw_retained_locally": true,
+  "raw_committed": false,
+  "derived_committed": true
+}
