@@ -34,6 +34,8 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocke
 
 **Exit criteria:** `docker compose up` creates a usable local database, migrations are repeatable, and seed metadata is queryable.
 
+- [x] Add mock-broker Actor 02/04/06 runtime and migration 007 for demo quotes, trades, orders, fills, positions, and narrative audit cards.
+
 ## Phase 2 — Canonical market-data contracts
 
 - [x] Define typed raw trade/quote envelopes with validation.

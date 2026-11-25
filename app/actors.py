@@ -6,6 +6,7 @@ import logging
 import threading
 from datetime import UTC, datetime
 
+from app.actor_runtime import Actor02RegimeScanner, Actor06TradeAnalyzer
 from app.backtest.bars import Bar
 from app.features import feature_snapshot
 from app.feeds import FeedStore
@@ -28,6 +29,9 @@ class ActorRuntime:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._log = logging.getLogger("x2.actors")
+        symbols = [{"symbol": s.symbol, "enabled": s.enabled} for s in self.store.config.symbols]
+        self.scanner = Actor02RegimeScanner(symbols, regime_provider=self.regime_provider)
+        self.analyzer = Actor06TradeAnalyzer()
 
     def evaluate_once(self) -> list[object]:
         now = datetime.now(UTC)

@@ -211,5 +211,5 @@ Real fetches are cached and quality validated. Unavailable, disabled, or unimple
 - **Docker/PostgreSQL:** runnable; `./scripts/docker-up.sh` builds the app, applies migrations 000–006, starts PostgreSQL, and runs the container tests.
 - **Synthetic fixtures:** runnable with `python -m app.cli load-fixtures`; AAPL, SPY, SPX, GC=F, CL=F, and BTC-USD provide 1/5/15-minute test bars.
 - **Read API/dashboard:** runnable now on `127.0.0.1:8080`. `GET /v1/health` and `GET /dashboard` are verified. API data arrays are currently empty unless supplied in-process; PostgreSQL-backed read persistence is not yet wired into the HTTP server.
-- **Demo execution:** runnable only as an in-process library/demo broker. It does not expose live order or broker control endpoints.
+- **Demo execution:** the in-process `DemoBroker` remains available, plus a separate loopback-only mock broker HTTP server. Start it with `python -m app.cli start-mock-broker --host 127.0.0.1 --port 9090 --delay-ms 250 --success-rate 0.95`. It exposes demo-only order/fill/position/trade/audit endpoints and never routes live orders.
 - **Ticker feed:** not live. The Binance parser exists, and the collector framework supports replay/checkpoints/deduplication/stale blocking, but no live WebSocket transport or real ticker ingestion process is implemented.
