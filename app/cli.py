@@ -49,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("start-feed", help="start one-shot feed and actor refresh; use start-api --with-feeds for runtime")
 
+    mock_broker = subparsers.add_parser("start-mock-broker", help="start the loopback-only demo/mock broker server")
+    mock_broker.add_argument("--host", default=None)
+    mock_broker.add_argument("--port", type=int, default=None)
+    mock_broker.add_argument("--delay", "--delay-ms", dest="delay_ms", type=int, default=None)
+    mock_broker.add_argument("--success", "--success-rate", dest="success_rate", type=float, default=None)
+
     status = subparsers.add_parser("status", help="show configured feed status without network access")
     status.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
     return parser
@@ -71,6 +77,25 @@ def main(argv: list[str] | None = None) -> int:
             return _import_dump(args, settings)
         if args.command == "load-fixtures":
             return _load_fixtures(settings)
+        if args.command == "start-mock-broker":
+            from app.mock_broker import MockBroker, MockBrokerServer
+            env_broker = MockBroker.from_env()
+            broker = MockBroker(
+                host=args.host or env_broker.host,
+                port=args.port if args.port is not None else env_broker.port,
+                delay_ms=args.delay_ms if args.delay_ms is not None else env_broker.delay_ms,
+                success_rate=args.success_rate if args.success_rate is not None else env_broker.success_rate,
+            )
+            server = MockBrokerServer(broker)
+            print(json.dumps({"status": "started", "mode": "demo", "host": broker.host,
+                              "port": broker.port, "delay_ms": broker.delay_ms,
+                              "success_rate": broker.success_rate, "live_write_enabled": False}))
+            try:
+                server.serve_forever()
+            finally:
+                server.shutdown()
+            return 0
+
         if args.command in {"start-api", "start-feed", "status"}:
             from app.feeds import FeedRuntime, FeedStore, load_feed_config
             from app.logging_config import configure_logging

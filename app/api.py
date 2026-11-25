@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 from collections.abc import Iterable, Mapping
@@ -117,6 +118,30 @@ class ReadAPI:
                                         if first_buy else None),
                          "entry_price_executed": str(first_buy["price"] if first_buy else position.average_cost),
                          "fills": utc_json(fills), "expected_exit": target}
+        if path.startswith("/v1/broker"):
+            # Read-only broker summaries are attached by callers through broker/audit repositories.
+            repository = getattr(self.actor, "broker_audit", None) if self.actor else None
+            if repository is not None:
+                mapping = {
+                    "/v1/broker/orders": repository.orders,
+                    "/v1/broker/fills": repository.fills,
+                    "/v1/broker/positions": repository.positions,
+                    "/v1/broker/trades": repository.trades,
+                    "/v1/broker/audit": repository.audit,
+                }
+                getter = mapping.get(path)
+                if getter:
+                    key = path.rsplit("/", 1)[-1]
+                    return 200, {"items": utc_json(getter()), "total": len(getter())}
+            if path == "/v1/broker/status":
+                broker = getattr(self.actor, "mock_broker", None)
+                return 200, {"mode": "demo", "live_write_enabled": False,
+                             "connected": broker is not None,
+                             "host": getattr(broker, "host", None), "port": getattr(broker, "port", None)}
+            if path == "/v1/broker" or path == "/v1/broker/":
+                return 200, {"status": "/v1/broker/status", "orders": "/v1/broker/orders",
+                             "fills": "/v1/broker/fills", "positions": "/v1/broker/positions",
+                             "trades": "/v1/broker/trades", "audit": "/v1/broker/audit"}
         contract = {
             "/v1/ingestion": "ingestion", "/v1/quality": "quality",
             "/v1/orders": "orders", "/v1/fills": "fills",
@@ -160,7 +185,15 @@ class ReadAPI:
         return None
 
     def authorized(self, client_host: str, supplied_token: str | None) -> bool:
-        if client_host not in {"127.0.0.1", "::1", "localhost"}:
+        container_mode = os.getenv("X2_CONTAINER_MODE") == "1"
+        if container_mode:
+            try:
+                address = ipaddress.ip_address(client_host)
+            except ValueError:
+                return False
+            if not address.is_private and not address.is_loopback:
+                return False
+        elif client_host not in {"127.0.0.1", "::1", "localhost"}:
             return False
         if self.token is None:
             return True
@@ -223,8 +256,10 @@ markets().then(()=>load('AAPL',['1m','5m','15m','30m','1d']));window.addEventLis
 
 class ReadAPIServer:
     def __init__(self, api: ReadAPI, host: str = "127.0.0.1", port: int = 8080) -> None:
-        if host not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("API host must be loopback-only")
+        if host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+            raise ValueError("API host must be loopback-only or container wildcard")
+        if host == "0.0.0.0" and os.getenv("X2_CONTAINER_MODE") != "1":
+            raise ValueError("Container wildcard host requires X2_CONTAINER_MODE=1")
         self.server = ThreadingHTTPServer((host, port), make_handler(api))
 
     def serve_forever(self) -> None:

@@ -155,6 +155,13 @@ class Phase89Tests(unittest.TestCase):
         token_api = ReadAPI({}, token="secret")
         self.assertFalse(token_api.authorized("127.0.0.1", None))
         self.assertTrue(token_api.authorized("127.0.0.1", "secret"))
+        import os
+        os.environ["X2_CONTAINER_MODE"] = "1"
+        try:
+            self.assertTrue(api.authorized("172.18.0.2", None))
+            self.assertFalse(api.authorized("8.8.8.8", None))
+        finally:
+            os.environ.pop("X2_CONTAINER_MODE", None)
         code, body = api.get("/v1/health")
         self.assertFalse(body["live_write_enabled"])
         with self.assertRaises(ValueError):

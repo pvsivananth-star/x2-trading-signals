@@ -22,13 +22,11 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://x2_admin:x2_admin_local_only@postgres:5432/x2_trading
+      DATABASE_URL: postgres://x2_admin:x2_admin_local_only@postgres:5432/x2_trading
       MIGRATIONS_DIR: /workspace/migrations
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ..:/workspace
     working_dir: /workspace
     command: ["python", "-m", "app.cli", "migrate"]
     restart: "no"
@@ -39,7 +37,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://x2_admin:x2_admin_local_only@postgres:5432/x2_trading
+      DATABASE_URL: postgres://x2_ingestion:x2_ingestion_local_only@postgres:5432/x2_trading
       ARCHIVE_ROOT: /var/lib/x2/data
       MIGRATIONS_DIR: /workspace/migrations
     depends_on:
@@ -47,9 +45,56 @@ services:
         condition: service_completed_successfully
     volumes:
       - ../data:/var/lib/x2/data
-      - ..:/workspace
     working_dir: /workspace
     command: ["python", "-m", "app.cli", "--help"]
+
+
+  api:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://x2_ingestion:x2_ingestion_local_only@postgres:5432/x2_trading
+      ARCHIVE_ROOT: /var/lib/x2/data
+      MIGRATIONS_DIR: /workspace/migrations
+      X2_CONTAINER_MODE: "1"
+      X2_LOG_DIR: /workspace/logs
+      TRADING_MODE: demo
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ../data:/var/lib/x2/data
+      - ../logs:/workspace/logs
+    working_dir: /workspace
+    command: ["python", "-m", "app.cli", "start-api", "--host", "0.0.0.0", "--port", "8080", "--with-feeds", "--config", "/workspace/config/feeds.yaml"]
+
+  mock-broker:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://x2_ingestion:x2_ingestion_local_only@postgres:5432/x2_trading
+      ARCHIVE_ROOT: /var/lib/x2/data
+      X2_CONTAINER_MODE: "1"
+      X2_LOG_DIR: /workspace/logs
+      MOCK_BROKER_HOST: 0.0.0.0
+      MOCK_BROKER_PORT: "9090"
+      TRADING_MODE: demo
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ../data:/var/lib/x2/data
+      - ../logs:/workspace/logs
+    working_dir: /workspace
+    command: ["python", "-m", "app.cli", "start-mock-broker"]
 
 volumes:
   postgres_data:
