@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
-import ipaddress
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
