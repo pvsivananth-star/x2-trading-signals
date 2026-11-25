@@ -33,7 +33,27 @@ This repository is currently a research/CLI foundation. It does not expose a web
 
 ## Start the Local Application
 
-There is currently no HTTP app process or web UI. Start the local database and migration service, then use the CLI commands from the application container or host.
+Start PostgreSQL, apply migrations 000-007, and launch the API, dashboard, mock broker, and logging stack:
+
+```bash
+./scripts/start-local.sh
+```
+
+The local-only host endpoints are:
+
+- API and dashboard: `http://127.0.0.1:8080/v1/dashboard`
+- API health: `http://127.0.0.1:8080/v1/health`
+- Mock broker: `http://127.0.0.1:9090`
+- Mock broker health: `http://127.0.0.1:9090/health`
+- Logs: `./logs/x2.log`
+
+Stop the stack without deleting the PostgreSQL volume:
+
+```bash
+./scripts/stop-local.sh
+```
+
+The older Docker-only database and test helpers remain available below.
 
 ### Docker Desktop setup
 

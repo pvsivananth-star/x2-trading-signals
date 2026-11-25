@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import ipaddress
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
@@ -184,7 +185,15 @@ class ReadAPI:
         return None
 
     def authorized(self, client_host: str, supplied_token: str | None) -> bool:
-        if client_host not in {"127.0.0.1", "::1", "localhost"}:
+        container_mode = os.getenv("X2_CONTAINER_MODE") == "1"
+        if container_mode:
+            try:
+                address = ipaddress.ip_address(client_host)
+            except ValueError:
+                return False
+            if not address.is_private and not address.is_loopback:
+                return False
+        elif client_host not in {"127.0.0.1", "::1", "localhost"}:
             return False
         if self.token is None:
             return True
@@ -247,8 +256,10 @@ markets().then(()=>load('AAPL',['1m','5m','15m','30m','1d']));window.addEventLis
 
 class ReadAPIServer:
     def __init__(self, api: ReadAPI, host: str = "127.0.0.1", port: int = 8080) -> None:
-        if host not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("API host must be loopback-only")
+        if host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+            raise ValueError("API host must be loopback-only or container wildcard")
+        if host == "0.0.0.0" and os.getenv("X2_CONTAINER_MODE") != "1":
+            raise ValueError("Container wildcard host requires X2_CONTAINER_MODE=1")
         self.server = ThreadingHTTPServer((host, port), make_handler(api))
 
     def serve_forever(self) -> None:

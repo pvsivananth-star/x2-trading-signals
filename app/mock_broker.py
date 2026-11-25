@@ -32,8 +32,10 @@ class MockBroker:
                  delay_ms: int = 250, success_rate: float = 0.95,
                  audit_repository: BrokerAuditRepository | None = None,
                  quote_seed: int = 1701) -> None:
-        if host not in {"127.0.0.1", "localhost", "::1"}:
-            raise ValueError("Mock broker host must be loopback-only")
+        if host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+            raise ValueError("Mock broker host must be loopback-only or container wildcard")
+        if host == "0.0.0.0" and os.getenv("X2_CONTAINER_MODE") != "1":
+            raise ValueError("Container wildcard host requires X2_CONTAINER_MODE=1")
         self.host, self.port = host, port
         self.delay_ms = delay_ms if delay_ms is not None else 250
         self.success_rate = min(1.0, max(0.0, success_rate))
