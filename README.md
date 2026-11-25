@@ -36,12 +36,23 @@ python -m pip install -e '.[runtime,dev]'
 python -m unittest discover -s tests -v
 ```
 
-With Docker installed, start PostgreSQL locally and apply migrations:
+With Docker Desktop running, start PostgreSQL and apply all migrations:
 
 ```bash
-docker compose -f infra/docker-compose.local.yml up -d postgres
-export DATABASE_URL=postgresql://x2_admin:x2_admin_local_only@127.0.0.1:5432/x2_trading
-python -m app.cli migrate
+./scripts/docker-up.sh
+```
+
+Run migrations and unit tests in containers:
+
+```bash
+./scripts/docker-test.sh
+```
+
+Open an application shell or reset the local database:
+
+```bash
+./scripts/docker-shell.sh
+./scripts/docker-reset.sh
 ```
 
 Import a local public dump without database writes while developing the parser:
