@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from app.actor_runtime import Actor02RegimeScanner, Actor04ExecutionEngine, Actor06TradeAnalyzer
 from app.backtest.bars import Bar
-from app.features import feature_snapshot
+from app.features import FeatureSnapshot, feature_snapshot
 from app.feeds import FeedStore
 from app.policy import TradingPolicy
 from app.regime import Regime, StaticRegimeProvider
@@ -28,6 +28,7 @@ class ActorRuntime:
         self.stale_threshold_seconds = stale_threshold_seconds
         self.regime_provider = regime_provider or StaticRegimeProvider(Regime.CHOP_DAY)
         self.cards: dict[str, object] = {}
+        self._previous_snapshots: dict[str, FeatureSnapshot] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._log = logging.getLogger("x2.actors")
@@ -37,8 +38,10 @@ class ActorRuntime:
         self.execution = Actor04ExecutionEngine(broker_adapter) if broker_adapter is not None else None
 
     def evaluate_once(self, *, allow_synthetic: bool = False,
-                      position_quantities: Mapping[str, object] | None = None) -> list[object]:
-        now = datetime.now(UTC)
+                      position_quantities: Mapping[str, object] | None = None,
+                      as_of: datetime | None = None) -> list[object]:
+        # Replay passes the bar time as as_of so features stay causal; live uses wall-clock time.
+        now = as_of or datetime.now(UTC)
         cards: list[object] = []
         for spec in self.store.config.symbols:
             if not spec.enabled:
@@ -62,7 +65,9 @@ class ActorRuntime:
                                           regime=regime, stale_feed_seconds=stale,
                                           stale_threshold_seconds=self.stale_threshold_seconds,
                                           position_quantity=position_quantity,
-                                          live_mode=False)
+                                          live_mode=False,
+                                          previous_snapshot=self._previous_snapshots.get(spec.symbol))
+            self._previous_snapshots[spec.symbol] = snapshot
             self.cards[spec.symbol] = card
             cards.append(card)
             if card.rejected_gates:

@@ -102,12 +102,13 @@ class TickPumpRuntime:
                 pump_buffers[symbol].append(tick)
                 self.store.put(symbol, "1m", pump_buffers[symbol])
 
-            cards = self.actor.evaluate_once()
+            cards = self.actor.evaluate_once(as_of=source.bar_end)
             self._record_decisions(cards)
             tick_card_count += len(cards)
             marks = self._current_marks()
             candidates = self.actor.scanner.discover(regime=self.regime.value)
-            reaction = {str(card.symbol): card.display_action in {"BUY", "SELL"} for card in cards}
+            # Stage-2 reaction = a reaction zone was located (not the strategy's own BUY/SELL echo).
+            reaction = {str(card.symbol): card.selected_fib_zone is not None for card in cards}
             stage_cards = self.actor.scanner.evaluate(candidates, reaction)
             trade_samples = [{"side": fill.side, "realized_pnl": str((marks.get(fill.symbol, fill.price) - fill.price) * fill.quantity)}
                              for fill in self.broker.fills]
