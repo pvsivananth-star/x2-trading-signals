@@ -6,15 +6,12 @@ normalization never introduces binary floating-point rounding into persisted dat
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
-
-
-UTC = timezone.utc
 
 
 def ensure_utc(value: datetime) -> datetime:
@@ -25,7 +22,7 @@ def ensure_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def epoch_millis_to_utc(value: int | float | str) -> datetime:
+def epoch_millis_to_utc(value: float | str) -> datetime:
     """Convert epoch milliseconds to an aware UTC timestamp."""
 
     try:
@@ -38,11 +35,11 @@ def epoch_millis_to_utc(value: int | float | str) -> datetime:
     return datetime.fromtimestamp(numeric / divisor, tz=UTC)
 
 
-def decimal_value(value: Decimal | str | int | float, field_name: str) -> Decimal:
+def decimal_value(value: Decimal | str | float, field_name: str) -> Decimal:
     """Parse a positive decimal value without accepting floats, NaN, or infinity."""
 
     if isinstance(value, float):
-        raise ValueError(f"{field_name} must not be supplied as a float")
+        raise ValueError(f"{field_name} must not be supplied as a float")  # noqa: TRY004 - public contract preserves ValueError
     try:
         parsed = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
@@ -52,9 +49,9 @@ def decimal_value(value: Decimal | str | int | float, field_name: str) -> Decima
     return parsed
 
 
-def decimal_non_negative(value: Decimal | str | int | float, field_name: str) -> Decimal:
+def decimal_non_negative(value: Decimal | str | float, field_name: str) -> Decimal:
     if isinstance(value, float):
-        raise ValueError(f"{field_name} must not be supplied as a float")
+        raise ValueError(f"{field_name} must not be supplied as a float")  # noqa: TRY004 - public contract preserves ValueError
     try:
         parsed = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
@@ -108,7 +105,7 @@ class RawTradeEvent:
             identity = f"payload:{self.venue_id}:{self.venue_symbol}:{digest}"
         return identity
 
-    def normalize(self, canonical_symbol: str, source_object_id: str, source_run_id: str | None = None) -> "NormalizedTrade":
+    def normalize(self, canonical_symbol: str, source_object_id: str, source_run_id: str | None = None) -> NormalizedTrade:
         return NormalizedTrade(
             venue_id=self.venue_id,
             venue_symbol=self.venue_symbol,
@@ -222,7 +219,7 @@ class RawQuoteEvent:
             identity = f"quote-payload:{self.venue_id}:{self.venue_symbol}:{digest}"
         return identity
 
-    def normalize(self, canonical_symbol: str, source_object_id: str, source_run_id: str | None = None) -> "NormalizedQuote":
+    def normalize(self, canonical_symbol: str, source_object_id: str, source_run_id: str | None = None) -> NormalizedQuote:
         return NormalizedQuote(
             venue_id=self.venue_id,
             venue_symbol=self.venue_symbol,

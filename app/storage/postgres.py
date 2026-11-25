@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from uuid import UUID, uuid4
 
 from app.domain.events import NormalizedTrade
@@ -44,7 +44,7 @@ class PostgresIngestionRepository(IngestionRepository):
     def close(self) -> None:
         self._connection.close()
 
-    def __enter__(self) -> "PostgresIngestionRepository":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:

@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
-from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from datetime import UTC, datetime
+from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from app.ingestion.archive import RawObjectStore
@@ -47,10 +47,10 @@ class HistoricalImportTests(unittest.TestCase):
             importer = self._make_importer(directory, repository, writer)
             source_id = str(uuid5(NAMESPACE_URL, "test-source"))
             first = importer.import_file(
-                dump, source_id=source_id, received_time=datetime(2024, 1, 1, tzinfo=timezone.utc)
+                dump, source_id=source_id, received_time=datetime(2024, 1, 1, tzinfo=UTC)
             )
             second = importer.import_file(
-                dump, source_id=source_id, received_time=datetime(2024, 1, 1, tzinfo=timezone.utc)
+                dump, source_id=source_id, received_time=datetime(2024, 1, 1, tzinfo=UTC)
             )
 
         self.assertEqual(first.accepted_count, 1)
@@ -74,7 +74,7 @@ class HistoricalImportTests(unittest.TestCase):
             result = self._make_importer(directory, repository, MemoryWriter()).import_file(
                 dump,
                 source_id=str(uuid5(NAMESPACE_URL, "quality-source")),
-                received_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                received_time=datetime(2024, 1, 1, tzinfo=UTC),
             )
 
         self.assertEqual(result.raw_record_count, 4)
@@ -98,7 +98,7 @@ class HistoricalImportTests(unittest.TestCase):
             result = self._make_importer(directory, repository, writer).import_file(
                 dump,
                 source_id=str(uuid5(NAMESPACE_URL, "batch-source")),
-                received_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                received_time=datetime(2024, 1, 1, tzinfo=UTC),
             )
 
         self.assertEqual(result.accepted_count, 10_000)

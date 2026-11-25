@@ -1,14 +1,14 @@
-from datetime import datetime, timezone
-from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from datetime import UTC, datetime
+from pathlib import Path
 
 from app.providers.binance_public import BinancePublicTradeAdapter, iter_binance_dump_rows
 
 
 class BinanceProviderTests(unittest.TestCase):
-    received_time = datetime(2024, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    received_time = datetime(2024, 1, 1, 0, 0, 1, tzinfo=UTC)
 
     def setUp(self) -> None:
         self.adapter = BinancePublicTradeAdapter("BTCUSDT")

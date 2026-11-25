@@ -1,16 +1,10 @@
 import os
-import csv
-import json
-import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.config import Settings
 from app.domain.events import RawQuoteEvent
-
-
-UTC = timezone.utc
 
 
 class Phase0to3Tests(unittest.TestCase):
@@ -32,10 +26,10 @@ class Phase0to3Tests(unittest.TestCase):
             venue_symbol="BTCUSDT",
             event_time=datetime(2026, 11, 20, tzinfo=UTC),
             received_time=datetime(2026, 11, 20, tzinfo=UTC),
-            bid_price=Decimal("100"),
-            bid_quantity=Decimal("2"),
-            ask_price=Decimal("101"),
-            ask_quantity=Decimal("3"),
+            bid_price=Decimal(100),
+            bid_quantity=Decimal(2),
+            ask_price=Decimal(101),
+            ask_quantity=Decimal(3),
         )
         self.assertEqual(quote.deduplication_key.startswith("quote-payload:"), True)
 
@@ -46,8 +40,8 @@ class Phase0to3Tests(unittest.TestCase):
                 venue_symbol="BTCUSDT",
                 event_time=datetime(2026, 11, 20, tzinfo=UTC),
                 received_time=datetime(2026, 11, 20, tzinfo=UTC),
-                bid_price=Decimal("102"),
-                ask_price=Decimal("101"),
+                bid_price=Decimal(102),
+                ask_price=Decimal(101),
             )
 
 

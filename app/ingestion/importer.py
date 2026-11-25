@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from pathlib import Path
 import sqlite3
 import tempfile
-from typing import Any, Iterator, Protocol
+from collections.abc import Iterator
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Protocol
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from app.domain.events import NormalizedTrade, RawTradeEvent
 from app.ingestion.archive import NormalizedWriter, PreservedSource, RawObjectStore
-
-
-UTC = timezone.utc
 
 
 @dataclass(frozen=True, slots=True)

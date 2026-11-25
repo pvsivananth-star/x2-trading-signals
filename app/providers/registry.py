@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 VALID_ASSET_CLASSES = {
     "equity", "etf", "metal", "future", "forex", "crypto", "option", "bond", "index", "other"
 }

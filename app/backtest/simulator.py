@@ -30,8 +30,8 @@ def replay_market_buys(
     *,
     starting_cash: Decimal,
     quantity_per_fill: Decimal,
-    fee_rate: Decimal = Decimal("0"),
-    slippage_bps: Decimal = Decimal("0"),
+    fee_rate: Decimal = Decimal(0),
+    slippage_bps: Decimal = Decimal(0),
 ) -> ReplayResult:
     """Buy one fixed quantity at each bar close, then mark the final position."""
 
@@ -41,9 +41,9 @@ def replay_market_buys(
         raise ValueError("fee_rate and slippage_bps cannot be negative")
 
     cash = starting_cash
-    quantity = Decimal("0")
+    quantity = Decimal(0)
     fills: list[Fill] = []
-    slippage = Decimal("1") + slippage_bps / Decimal("10000")
+    slippage = Decimal(1) + slippage_bps / Decimal(10000)
 
     chronological = sorted(bars, key=lambda item: item.bar_start)
     for bar in chronological:
@@ -56,6 +56,6 @@ def replay_market_buys(
         quantity += quantity_per_fill
         fills.append(Fill(bar.bar_start, "buy", quantity_per_fill, fill_price, fee))
 
-    final_price = chronological[-1].close if chronological else Decimal("0")
+    final_price = chronological[-1].close if chronological else Decimal(0)
     equity = cash + quantity * final_price
     return ReplayResult(tuple(fills), cash, quantity, equity)

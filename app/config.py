@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -17,7 +17,7 @@ class Settings:
     canonical_symbol: str = "BTC-USDT"
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         mode = os.getenv("TRADING_MODE", "demo").strip().lower()
         if mode not in {"demo", "offline"}:
             raise ValueError("initial local implementation rejects live broker mode")

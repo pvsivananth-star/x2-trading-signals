@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-
-
-UTC = timezone.utc
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +51,7 @@ def rollup(trades: list[Trade], interval_seconds: int) -> list[Bar]:
             high=max(prices),
             low=min(prices),
             close=prices[-1],
-            volume=sum((trade.quantity for trade in bucket_trades), Decimal("0")),
+            volume=sum((trade.quantity for trade in bucket_trades), Decimal(0)),
             trade_count=len(bucket_trades),
         ))
     return bars

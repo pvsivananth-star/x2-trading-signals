@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import posixpath
 from hashlib import sha256
 from pathlib import Path
-import posixpath
 from urllib.parse import unquote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 

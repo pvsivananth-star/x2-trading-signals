@@ -8,17 +8,15 @@ preventing network access from leaking into strategy code.
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
 import gzip
 import io
-from pathlib import Path
-from typing import Any, Iterator, TextIO
 import zipfile
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TextIO
 
-from app.domain.events import RawTradeEvent, epoch_millis_to_utc, decimal_value
-
-
-UTC = timezone.utc
+from app.domain.events import RawTradeEvent, decimal_value, epoch_millis_to_utc
 
 
 class BinancePublicTradeAdapter:
@@ -133,14 +131,13 @@ def iter_binance_dump_rows(
                         f"ZIP contains no uniquely identifiable {expected_symbol} trade CSV"
                     )
             for info in members:
-                with archive.open(info, "r") as binary_stream:
-                    with io.TextIOWrapper(
-                        binary_stream, encoding="utf-8-sig", newline=""
-                    ) as text_stream:
-                        yield from _iter_csv_stream(text_stream)
+                with archive.open(info, "r") as binary_stream, io.TextIOWrapper(
+                    binary_stream, encoding="utf-8-sig", newline=""
+                ) as text_stream:
+                    yield from _iter_csv_stream(text_stream)
         return
 
-    if ".gz" in suffixes:
+    if is_gzip:
         with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as text_stream:
             yield from _iter_csv_stream(text_stream)
         return

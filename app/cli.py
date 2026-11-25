@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 import json
-from pathlib import Path
 import sys
+from dataclasses import asdict
+from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from app.config import Settings
@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
             return _load_fixtures(settings)
     except SystemExit:
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary translates all operational failures
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 2

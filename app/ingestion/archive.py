@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from hashlib import sha256
 import os
-from pathlib import Path
 import shutil
 import tempfile
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from dataclasses import dataclass
+from hashlib import sha256
+from pathlib import Path
+from typing import Protocol
 
 from app.domain.events import NormalizedTrade
 
