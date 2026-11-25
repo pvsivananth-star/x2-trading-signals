@@ -1,82 +1,165 @@
-# Confluence_v1 — Multi-Market Intraday System (IBKR + SCB)
+# X2 Trading Signals — Local-First Multi-Market Research Platform
 
 ## Overview
-Deterministic intraday trading and signal-generation architecture supporting **17+ global exchanges/markets** via **Interactive Brokers (IBKR)** and **Standard Chartered Bank (SCB)**, starting from a **$25,000 USD** daily-kitty-scaled base account.
 
-## Key Operating Rules
-- **Two-Stage Discovery & Evaluation:** 30-minute slot-normalized `RVOL` discovery across pre-seeded `core_symbols` + volume movers -> continuous 5-minute streaming signal evaluation.
-- **Regime Discipline:**
-  - `NEWS_DAY`: Zero new entries.
-  - `CHOP_DAY`: Max `0.08%` risk per trade of daily start kitty with strict VWAP/Fib filtering.
-  - `TREND_DAY`: Full conviction sizing (`0.25%` A-tier core Fib, `0.17%` standard/tolerance; `0.15%` probationary `NVDA`).
-- **Symbol & Market Tiering:**
-  - `SLV` removed.
-  - `NVDA` on probation (`PF > 1.25` required).
-  - Core capital allocation: `35%` US Equities/ETFs, `20%` Europe, `20%` Commodities, `15%` Asia-Pacific, `10%` India.
-  - Probation buckets: Crypto, Germany (`DAX`), Sweden (`OMXS30`).
-  - Disabled until `PF > 1.10`: Hong Kong (`HKEX`).
-- **Risk & Execution Guardrails:**
-  - Daily-kitty-scaled per-trade risk, soft/hard session stops, correlation cluster caps, `>= 60`-minute pre-close entry cutoff, and mandatory pre-close flattening (24/7 crypto uses rolling session window rules).
+X2 is a provider-neutral, local-first platform for market-data ingestion, replay, backtesting, signal generation, and later demo/paper execution. It is not tied to a specific broker or market.
 
-## Data Ingestion
+The data model supports:
 
-- [Data ingestion architecture](docs/data-ingestion-architecture.md) — local-first historical and live tick ingestion design.
-- [Local-first implementation plan](docs/local-first-implementation-plan.md) — target architecture, local runtime, data lifecycle, strategy/backtest boundaries, and acceptance criteria.
-- [Implementation TODO](TODO.md) — phased checklist for building the local system before cloud hosting or live routing.
-- [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, aliases, ingestion runs, trades, quotes, bars, feed events, and quality events.
-- **Multi-asset foundation:** EQ/ETF, Metal, FX, Crypto, futures, options, bonds, and indices use the same provenance and canonical event model. Provider aliases and news/RSS events are persisted separately from trade ticks.
+- Equities and ETFs
+- Foreign exchange
+- Metals and commodities
+- Crypto
+- Futures, options, bonds, and indices
+- Provider aliases and RSS/news feed events
 
-## Local Phase 0–3 setup
+This repository is currently a research/CLI foundation. It does not expose a web server or place live orders. Live broker mode is rejected by configuration.
 
-The first executable slice is a Binance public historical-trade importer for `BTCUSDT`. It stores native source files under `data/raw/`, normalized Parquet under `data/normalized/`, and optionally writes normalized trades and provenance to PostgreSQL. It does not connect to a broker or place orders.
+## Repository Guide
 
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e '.[runtime,dev]'
-python -m unittest discover -s tests -v
-```
+- [Implementation TODO](TODO.md) — current implementation and remaining phases
+- [Local-first plan](docs/local-first-implementation-plan.md) — architecture and boundaries
+- [Data-ingestion architecture](docs/data-ingestion-architecture.md) — providers, provenance, replay, and quality
+- [PostgreSQL schema](schemas/market_data.sql) — canonical multi-market schema
+- [Confluence strategy configuration](config/strategies/confluence_pullback.yaml)
+- [Configured market universe](config/markets_17.yaml)
 
-With Docker Desktop running, start PostgreSQL and apply all migrations:
+## Prerequisites
+
+- macOS or Linux
+- Python 3.12
+- Docker Desktop with the daemon running
+- PostgreSQL 16 is provided through Docker Compose
+
+## Start the Local Application
+
+There is currently no HTTP app process or web UI. Start the local database and migration service, then use the CLI commands from the application container or host.
+
+### Docker Desktop setup
+
+1. Start Docker Desktop.
+2. From the repository root, run:
 
 ```bash
 ./scripts/docker-up.sh
 ```
 
-Run migrations and unit tests in containers:
+This builds the application image, starts PostgreSQL, applies migrations, and runs the unit tests once. PostgreSQL is exposed only on `127.0.0.1:5432`.
+
+Open an application shell:
+
+```bash
+./scripts/docker-shell.sh
+```
+
+Inside the container:
+
+```bash
+python -m app.cli --help
+python -m app.cli migrate
+python -m app.cli load-fixtures
+```
+
+Reset the local database and reapply a clean migration state:
+
+```bash
+./scripts/docker-reset.sh
+```
+
+Stop the Docker services:
+
+```bash
+docker compose -f infra/docker-compose.local.yml down
+```
+
+To remove the database volume too:
+
+```bash
+docker compose -f infra/docker-compose.local.yml down -v
+```
+
+## Host Development
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[runtime,dev]'
+python -m app.cli --help
+python -m unittest discover -s tests -v
+```
+
+The host can use PostgreSQL by copying `.env.example` to `.env` and setting `DATABASE_URL` to the restricted local ingestion role:
+
+```bash
+cp .env.example .env
+python -m app.cli migrate
+python -m app.cli load-fixtures
+```
+
+## Test the Application
+
+Run all unit tests on the host:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Run migrations and tests in containers:
 
 ```bash
 ./scripts/docker-test.sh
 ```
 
-Open an application shell or reset the local database:
+Run a one-off container command:
 
 ```bash
-./scripts/docker-shell.sh
-./scripts/docker-reset.sh
+docker compose -f infra/docker-compose.local.yml run --rm app python -m unittest discover -s tests -v
 ```
 
-Import a local public dump without database writes while developing the parser:
+## Data Ingestion
+
+The CLI accepts a local market-data dump or an explicitly allow-listed HTTPS source:
 
 ```bash
-python -m app.cli import-dump /path/to/BTCUSDT-trades.zip --no-database
+python -m app.cli import-dump /path/to/provider-dump.zip --no-database
+```
+
+For PostgreSQL-backed ingestion, configure `DATABASE_URL` and omit `--no-database`:
+
+```bash
+python -m app.cli import-dump /path/to/provider-dump.zip
+```
+
+Raw source bytes, checksums, ingestion runs, canonical instruments, normalized trades, quality events, and normalized bars use separate provider-neutral contracts. Provider-specific code belongs behind the adapter interface rather than in strategy or replay code.
+
+## Provider and Fixture Status
+
+- **Binance** is an implemented sample crypto trade-dump adapter only. It is not required for equity, FX, metal, or other market support.
+- **BTCUSDT** is a local replay fixture and is not the platform's canonical default instrument.
+- **Yahoo Finance, Google Finance, and Stooq** are registered source definitions; their bulk adapters and term verification remain pending.
+- **RSS/news** uses generic feed-event storage. Feed parsing and deduplication remain pending.
+- **Open exchange dumps** can be added through provider-neutral historical-dump adapters; no provider or license is assumed automatically.
+
+Redistributed source data must have checked licensing and attribution. Raw fixtures must not contain secrets or broker credentials.
+
+## Replay Fixture
+
+A five-day BTCUSDT fixture demonstrates the deterministic replay pipeline:
+
+- Range: 2026-11-20 through 2026-11-24 UTC
+- Bars: 1-minute, 5-minute, and 15-minute
+- Raw source ZIPs: retained locally, ignored by Git
+- Derived bar CSVs: committed with checksum and manifest metadata
+- Source terms: unverified; redistribution is disabled until reviewed
+
+Validate the fixture:
+
+```bash
 python -m app.cli load-fixtures
 ```
 
-An allow-listed HTTPS Binance historical-dump URL can be supplied instead of a local path. For a PostgreSQL-backed import, set `DATABASE_URL` to the restricted `x2_ingestion` role and omit `--no-database`. Public data terms and the source file checksum must be verified before storing or redistributing downloaded data.
+## Backtesting and AI Policy
 
-### Provider status
+Backtests use deterministic market-data, bar, and replay code. Gemini or another AI service is advisory only: it may analyze or explain results, but it cannot set prices, alter fills or risk parameters, bypass gates, or place orders.
 
-- **Binance:** implemented historical trade-dump adapter and WebSocket payload parser for `BTCUSDT`; Redistributing public dumps still requires verified terms.
-- **Yahoo Finance:** source endpoint registered for future OHLC adapters. No live or historical ticker ingestion is enabled automatically.
-- **Google Finance:** source endpoint registered for future reference/news adapters. Its terms and attribution requirements remain unverified.
-- **Stooq:** source endpoint registered for future historical dump adapters. Access behavior and redistribution terms remain unverified.
-- **RSS/news:** generic `feed_events` storage is available; feed parsing and deduplication are not yet implemented.
-
-### Five-day replay fixture
-
-A Binance `BTCUSDT` fixture covering 2026-11-20 through 2026-11-24 provides 1-minute, 5-minute, and 15-minute bars derived from 26,239,494 trade rows. Raw ZIPs remain local and ignored by Git; checksums and derived CSVs are committed. The source terms remain unverified until redistribution approval is documented.
-
-### Backtesting and AI policy
-
-Backtests run locally through deterministic bar/replay code. Gemini or another LLM may only summarize results or propose hypotheses. It must not set prices, bypass risk/session gates, alter fills, or place broker orders.
+Live execution is intentionally unavailable until demo/paper accounting, separate authorization, and a broker adapter are implemented and reviewed.

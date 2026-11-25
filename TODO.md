@@ -1,6 +1,6 @@
 # Implementation TODO
 
-This is the execution checklist for the local-first trading platform. Work top-to-bottom unless a task is explicitly marked parallel. Keep the initial slice to one public venue and `BTCUSDT`; do not enable live trading as part of these tasks.
+This is the execution checklist for the local-first trading platform. Work top-to-bottom unless a task is explicitly marked parallel. Use `BTCUSDT` only as an optional sample fixture/provider adapter; implement and test provider-neutral behavior for all asset classes. Do not enable live trading as part of these tasks.
 
 Legend: `[ ]` not started · `[~]` in progress · `[x]` complete · `[!]` blocked/decision required
 
