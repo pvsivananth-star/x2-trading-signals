@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: x2_trading
+      POSTGRES_USER: x2_admin
+      POSTGRES_PASSWORD: x2_admin_local_only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U x2_admin -d x2_trading"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://x2_admin:x2_admin_local_only@postgres:5432/x2_trading
+      MIGRATIONS_DIR: /workspace/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ..:/workspace
+    working_dir: /workspace
+    command: ["python", "-m", "app.cli", "migrate"]
+    restart: "no"
+
+  app:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://x2_admin:x2_admin_local_only@postgres:5432/x2_trading
+      ARCHIVE_ROOT: /var/lib/x2/data
+      MIGRATIONS_DIR: /workspace/migrations
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ../data:/var/lib/x2/data
+      - ..:/workspace
+    working_dir: /workspace
+    command: ["python", "-m", "app.cli", "--help"]
+
+volumes:
+  postgres_data:

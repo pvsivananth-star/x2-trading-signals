@@ -2,25 +2,25 @@
 
 This project uses plain, ordered PostgreSQL SQL migrations while the application layer is being built. The migrations intentionally avoid a framework dependency so they can run from a local PostgreSQL instance, CI, AWS RDS, or Azure Database for PostgreSQL.
 
-## Initial migration
+## Initial migrations
 
-`001_initial_market_data.sql` creates the `market_data` schema and the initial ingestion tables:
+- `000_migration_meta.sql` creates migration bookkeeping.
+- `001_initial_market_data.sql` creates the `market_data` schema and the initial ingestion tables:
+  - venue and instrument catalogs
+  - source and raw-object provenance
+  - ingestion runs and resumable checkpoints
+  - partitioned trades and quotes
+  - derived bars
+  - data-quality events
+- `002_harden_raw_object_integrity.sql` requires raw checksums, guards raw-object lifecycle transitions, adds a global trade-identity registry, and restricts transitions to the `x2_ingestion` role.
 
-- venue and instrument catalogs
-- source and raw-object provenance
-- ingestion runs and resumable checkpoints
-- partitioned trades and quotes
-- derived bars
-- data-quality events
-
-The migration is idempotent for the first installation through `IF NOT EXISTS` guards. Future migrations should be forward-only and should not edit an already-applied migration.
+The application runner records every applied filename in `app_meta.schema_migrations`. Future migrations should be forward-only and should not edit an already-applied migration.
 
 ## Applying locally
 
 ```bash
-psql "$DATABASE_URL" \
-  --set=ON_ERROR_STOP=1 \
-  --file migrations/001_initial_market_data.sql
+export DATABASE_URL=postgresql://x2:x2_local_only@127.0.0.1:5432/x2_trading
+python -m app.cli migrate
 ```
 
 For a new migration, use the next numeric prefix:

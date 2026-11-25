@@ -112,7 +112,7 @@ For each collection run, record:
 - Start/end time
 - Requested event range
 - Source object or stream
-- Download checksum where applicable
+- SHA-256 checksum for every historical raw object; fail the object/run if it is unavailable or mismatched
 - Raw record count
 - Collector errors
 - Last sequence or cursor
@@ -159,9 +159,11 @@ Use two storage layers:
 Store raw or normalized events as partitioned Parquet:
 
 ```text
-data/raw/venue=binance/symbol=BTCUSDT/date=2026-01-01/*.parquet
+data/raw/provider=binance/venue=binance/symbol=BTCUSDT/date=2026-01-01/sha256=<checksum>/source-object.zip
 data/normalized/venue=binance/symbol=BTCUSDT/date=2026-01-01/*.parquet
 ```
+
+`data/raw/` preserves the provider's native bytes and extension, together with its SHA-256 checksum. The content-addressed checksum component and no-overwrite rule prevent a corrected provider dump from replacing an earlier source object. `data/normalized/` contains derived canonical events in Parquet; it is never used as a replacement for the raw source object.
 
 Parquet is the long-term archive and is portable to S3 or Azure Blob Storage.
 
@@ -208,8 +210,8 @@ The bar and feature builder must consume normalized events rather than vendor-sp
 ```text
 trades/quotes
     -> event replay
-    -> 1-second or 1-minute bars
-    -> 5-minute strategy bars
+    -> mandatory 1-minute base bars for the initial slice
+    -> deterministic 5-minute, 15-minute, and 30-minute strategy bars
     -> indicators and features
     -> regime classifier
     -> signal engine
@@ -262,7 +264,7 @@ The UI must not control ingestion credentials or broker credentials. The API and
 5. Normalized Parquet archive.
 6. PostgreSQL metadata and hot-tick tables.
 7. Duplicate, ordering, and gap checks.
-8. 1-minute and 5-minute bar builder.
+8. 1-minute base bar builder with deterministic 5-minute, 15-minute, and 30-minute rollups.
 9. Replay interface shared by backtests and live processing.
 
 Do not add multiple brokers, all global markets, or live trading until this path can reproduce a historical run and survive collector restart without duplicate data.

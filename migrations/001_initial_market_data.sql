@@ -1,7 +1,7 @@
 -- x2-trading-signals market-data schema
 -- Target: PostgreSQL 15+
 -- IDs are supplied by the application so this schema does not require extensions.
--- Raw source files should also be preserved as immutable Parquet objects.
+-- Native raw source objects are immutable; normalized events are archived as Parquet.
 
 BEGIN;
 
@@ -11,7 +11,7 @@ CREATE SCHEMA IF NOT EXISTS market_data;
 CREATE TABLE IF NOT EXISTS market_data.venues (
     venue_id            text PRIMARY KEY,
     display_name        text NOT NULL,
-    asset_class         text NOT NULL CHECK (asset_class IN ('equity', 'etf', 'future', 'forex', 'crypto', 'option', 'other')),
+    asset_class         text NOT NULL CHECK (asset_class IN ('equity', 'etf', 'metal', 'future', 'forex', 'crypto', 'option', 'bond', 'index', 'other')),
     country_code        text,
     timezone_name       text NOT NULL,
     data_license_ref    text,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS market_data.instruments (
     venue_id            text NOT NULL REFERENCES market_data.venues (venue_id),
     venue_symbol        text NOT NULL,
     canonical_symbol    text NOT NULL,
-    asset_class         text NOT NULL CHECK (asset_class IN ('equity', 'etf', 'future', 'forex', 'crypto', 'option', 'other')),
+    asset_class         text NOT NULL CHECK (asset_class IN ('equity', 'etf', 'metal', 'future', 'forex', 'crypto', 'option', 'bond', 'index', 'other')),
     base_currency       text,
     quote_currency      text,
     price_scale         smallint NOT NULL CHECK (price_scale >= 0),
