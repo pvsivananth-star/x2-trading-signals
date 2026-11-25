@@ -17,3 +17,8 @@ Deterministic intraday trading and signal-generation architecture supporting **1
   - Disabled until `PF > 1.10`: Hong Kong (`HKEX`).
 - **Risk & Execution Guardrails:**
   - Daily-kitty-scaled per-trade risk, soft/hard session stops, correlation cluster caps, `>= 60`-minute pre-close entry cutoff, and mandatory pre-close flattening (24/7 crypto uses rolling session window rules).
+
+## Data Ingestion
+
+- [Data ingestion architecture](docs/data-ingestion-architecture.md) — local-first historical and live tick ingestion design.
+- [Market-data schema](schemas/market_data.sql) — PostgreSQL schema for venues, instruments, ingestion runs, trades, quotes, bars, and quality events.
