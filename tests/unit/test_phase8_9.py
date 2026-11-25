@@ -113,6 +113,31 @@ class Phase89Tests(unittest.TestCase):
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
 
+    def test_tick_pump_warmup_and_every_tick_actor_execution(self):
+        from app.backtest.tick_pump import TickPumpRuntime
+
+        config = load_feed_config("config/feeds.yaml")
+        store = FeedStore(config)
+        strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
+                                         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+        actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m",
+                             stale_threshold_seconds=config.stale_threshold_seconds)
+        broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
+        pump = TickPumpRuntime(store, actor, broker, warmup_fraction=0.25,
+                               interval_seconds=0)
+
+        result = pump.run(max_ticks=20)
+
+        self.assertEqual(result.warmup_ticks, 487)
+        self.assertEqual(result.ticks_processed, 20)
+        self.assertGreaterEqual(len(result.decisions), 20)
+        self.assertTrue(all(getattr(card, "symbol", "") for card in result.decisions))
+        self.assertGreaterEqual(len(broker.orders), 0)
+        self.assertGreaterEqual(len(broker.fills), 0)
+        self.assertGreaterEqual(len(broker.positions), 0)
+        self.assertEqual(result.ticks_processed, 20)
+
     def test_api_portfolio_position_and_targets(self):
         config = load_feed_config("config/feeds.yaml")
         store = FeedStore(config)
