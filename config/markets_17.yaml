@@ -1,0 +1,287 @@
+engine:
+  mode: "demo"
+  base_currency: "USD"
+  daily_kitty_seed: 25000.0
+  discovery_interval_mins: 30
+  evaluation_interval_mins: 5
+  pre_close_entry_cutoff_mins: 60
+  mandatory_pre_close_flat_mins: 15
+  regime_rules:
+    NEWS_DAY:
+      allow_new_entries: false
+    CHOP_DAY:
+      allow_new_entries: true
+      max_risk_pct: 0.0008
+    TREND_DAY:
+      allow_new_entries: true
+      a_tier_risk_pct: 0.0025
+      b_tier_risk_pct: 0.0017
+
+capital_allocation_pct:
+  us_equities_etfs: 0.35
+  europe: 0.20
+  commodities: 0.20
+  asia_pacific: 0.15
+  india: 0.10
+
+market_tiering:
+  tier_a: ["FRANCE_EURONEXT", "JAPAN_TSE", "ASIA_PACIFIC_SLEEVE", "US_EQUITIES", "US_COMMODITIES_OIL"]
+  tier_b: ["UK_LSE", "CANADA_TSX", "INDIA_NSE", "US_COMMODITIES_GOLD", "CRYPTO_MAJORS"]
+  tier_c_probation:
+    markets: ["CRYPTO_MAJORS", "GERMANY_XETRA", "SWEDEN_OMX"]
+    target_pf: 1.25
+  tier_d_disabled:
+    markets: ["HONGKONG_HKEX"]
+    min_pf_to_enable: 1.10
+
+markets:
+  US_EQUITIES:
+    name: "US Equities & Index ETFs (NYSE/NASDAQ)"
+    tier: "TIER_A"
+    allocation_pct: 0.35
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "US_TECH_INDEX"
+    cluster_risk_cap: 0.0050
+    min_net_moveroom_pct: 0.0045
+    est_roundtrip_cost_pct: 0.0006
+    slot_rvol_min: 1.05
+    core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA"]
+    symbol_overrides:
+      NVDA: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
+
+  US_COMMODITIES:
+    name: "Gold & Crude Oil (COMEX/NYMEX/SCB Metals)"
+    tier: "TIER_A_TIER_B"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR_OR_SCB"
+    cluster: "COMMODITIES"
+    cluster_risk_cap: 0.0035
+    min_net_moveroom_pct: 0.0045
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.05
+    core_symbols: ["GLD", "GC=F", "USO", "CL=F"]
+    excluded_symbols: ["SLV"]
+
+  CRYPTO_MAJORS:
+    name: "24/7 Liquid Crypto Spot/ETFs"
+    tier: "TIER_C_PROBATION"
+    allocation_pct: 0.00
+    enabled: true
+    broker_route: "IBKR_OR_DEMO"
+    cluster: "CRYPTO"
+    cluster_risk_cap: 0.0035
+    min_net_moveroom_pct: 0.0065
+    est_roundtrip_cost_pct: 0.0014
+    slot_rvol_min: 1.15
+    core_symbols: ["BTC-USD", "ETH-USD", "SOL-USD", "IBIT", "ETHA"]
+
+  INDIA_NSE:
+    name: "National Stock Exchange of India (NSE)"
+    tier: "TIER_B"
+    allocation_pct: 0.10
+    enabled: true
+    broker_route: "SCB"
+    cluster: "INDIA_EQUITIES"
+    cluster_risk_cap: 0.0040
+    min_net_moveroom_pct: 0.0055
+    est_roundtrip_cost_pct: 0.0012
+    slot_rvol_min: 1.15
+    core_symbols: ["NIFTYBEES.NS", "BANKBEES.NS", "RELIANCE.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "TCS.NS", "BHARTIARTL.NS", "SBIN.NS", "LT.NS"]
+
+  CANADA_TSX:
+    name: "Toronto Stock Exchange (TSX)"
+    tier: "TIER_B"
+    allocation_pct: 0.00
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "NA_EQUITIES"
+    cluster_risk_cap: 0.0040
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.15
+    core_symbols: ["XIU.TO", "RY.TO", "TD.TO", "SHOP.TO", "CNQ.TO", "ENB.TO"]
+
+  UK_LSE:
+    name: "London Stock Exchange (LSE)"
+    tier: "TIER_B"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0065
+    est_roundtrip_cost_pct: 0.0020
+    slot_rvol_min: 1.15
+    core_symbols: ["ISF.L", "SHEL.L", "AZN.L", "HSBA.L", "ULVR.L", "BP.L", "RIO.L"]
+
+  GERMANY_XETRA:
+    name: "Deutsche Boerse XETRA (DAX)"
+    tier: "TIER_C_PROBATION"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.15
+    core_symbols: ["EXS1.DE", "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "MBG.DE", "IFX.DE"]
+
+  FRANCE_EURONEXT:
+    name: "Euronext Paris (CAC 40)"
+    tier: "TIER_A"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0055
+    est_roundtrip_cost_pct: 0.0012
+    slot_rvol_min: 1.15
+    core_symbols: ["CAC.PA", "MC.PA", "OR.PA", "TTE.PA", "SAN.PA", "AIR.PA", "BNP.PA"]
+
+  NETHERLANDS_AEX:
+    name: "Euronext Amsterdam (AEX)"
+    tier: "TIER_A_B"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.15
+    core_symbols: ["IAEX.AS", "ASML.AS", "SHELL.AS", "INGA.AS", "ADYEN.AS", "UNA.AS"]
+
+  SWITZERLAND_SIX:
+    name: "SIX Swiss Exchange (SMI)"
+    tier: "TIER_A_B"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0009
+    slot_rvol_min: 1.15
+    core_symbols: ["CSSMI.SW", "NESN.SW", "ROG.SW", "NOVN.SW", "UBSG.SW", "ABBN.SW"]
+
+  ITALY_BIT:
+    name: "Borsa Italiana (FTSE MIB)"
+    tier: "TIER_A_B"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0055
+    est_roundtrip_cost_pct: 0.0011
+    slot_rvol_min: 1.15
+    core_symbols: ["ETFMIB.MI", "UCG.MI", "ISP.MI", "ENEL.MI", "ENI.MI", "RACE.MI"]
+
+  SPAIN_BME:
+    name: "Bolsa de Madrid (IBEX 35)"
+    tier: "TIER_A_B"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0055
+    est_roundtrip_cost_pct: 0.0011
+    slot_rvol_min: 1.15
+    core_symbols: ["BBVA.MC", "SAN.MC", "ITX.MC", "IBE.MC", "TEF.MC"]
+
+  SWEDEN_OMX:
+    name: "Nasdaq Stockholm (OMXS30)"
+    tier: "TIER_C_PROBATION"
+    sleeve_parent: "europe"
+    allocation_pct: 0.20
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "EUROPE_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.15
+    core_symbols: ["XACT-OMXS30.ST", "VOLV-B.ST", "ATCO-A.ST", "ERIC-B.ST", "SEB-A.ST"]
+
+  JAPAN_TSE:
+    name: "Tokyo Stock Exchange (Nikkei 225)"
+    tier: "TIER_A"
+    sleeve_parent: "asia_pacific"
+    allocation_pct: 0.15
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "APAC_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0008
+    slot_rvol_min: 1.15
+    core_symbols: ["1306.T", "7203.T", "6758.T", "9984.T", "8306.T", "8035.T", "6861.T"]
+
+  HONGKONG_HKEX:
+    name: "Hong Kong Exchanges (HSI)"
+    tier: "TIER_D_DISABLED"
+    sleeve_parent: "asia_pacific"
+    allocation_pct: 0.15
+    enabled: false
+    min_pf_to_enable: 1.10
+    broker_route: "IBKR"
+    cluster: "APAC_EQUITIES"
+    cluster_risk_cap: 0.0045
+    min_net_moveroom_pct: 0.0060
+    est_roundtrip_cost_pct: 0.0018
+    slot_rvol_min: 1.15
+    core_symbols: ["2800.HK", "0700.HK", "9988.HK", "0005.HK", "1299.HK", "3690.HK"]
+
+  SINGAPORE_SGX:
+    name: "Singapore Exchange (STI)"
+    tier: "TIER_A_B"
+    sleeve_parent: "asia_pacific"
+    allocation_pct: 0.15
+    enabled: true
+    broker_route: "IBKR_OR_SCB"
+    cluster: "APAC_EQUITIES"
+    cluster_risk_cap: 0.0040
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0009
+    slot_rvol_min: 1.15
+    core_symbols: ["ES3.SI", "D05.SI", "O39.SI", "U11.SI", "Z74.SI", "C38U.SI"]
+
+  AUSTRALIA_ASX:
+    name: "Australian Securities Exchange (ASX 200)"
+    tier: "TIER_A_B"
+    sleeve_parent: "asia_pacific"
+    allocation_pct: 0.15
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "APAC_EQUITIES"
+    cluster_risk_cap: 0.0040
+    min_net_moveroom_pct: 0.0050
+    est_roundtrip_cost_pct: 0.0009
+    slot_rvol_min: 1.15
+    core_symbols: ["STW.AX", "BHP.AX", "CBA.AX", "CSL.AX", "NAB.AX", "WBC.AX"]
+
+  KOREA_KRX:
+    name: "Korea Exchange (KOSPI)"
+    tier: "TIER_A_B"
+    sleeve_parent: "asia_pacific"
+    allocation_pct: 0.15
+    enabled: true
+    broker_route: "IBKR"
+    cluster: "APAC_EQUITIES"
+    cluster_risk_cap: 0.0040
+    min_net_moveroom_pct: 0.0055
+    est_roundtrip_cost_pct: 0.0014
+    slot_rvol_min: 1.15
+    core_symbols: ["069500.KS", "005930.KS", "000660.KS", "005380.KS", "035420.KS"]
