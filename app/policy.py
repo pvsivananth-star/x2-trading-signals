@@ -140,8 +140,6 @@ class TradingPolicy:
                     else float(override_risk)
                 )
 
-        if market_name == "CRYPTO_MAJORS":
-            rejected.append("probation_or_disabled_market")
         if market_name not in self.config["markets"]:
             rejected.append("unknown_market")
         return PolicyDecision(

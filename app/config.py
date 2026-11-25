@@ -19,8 +19,10 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         mode = os.getenv("TRADING_MODE", "demo").strip().lower()
-        if mode not in {"demo", "offline"}:
-            raise ValueError("initial local implementation rejects live broker mode")
+        if mode not in {"backtest", "demo", "offline", "prod"}:
+            raise ValueError("initial live broker mode is rejected; use backtest, demo, offline, or prod")
+        if mode == "prod" and os.getenv("X2_LIVE_BROKER_PHASE") != "2":
+            raise ValueError("prod live broker connection is phase 2 and is not enabled")
         provider = os.getenv("DATA_PROVIDER", "generic").strip().lower()
         if not provider:
             raise ValueError("DATA_PROVIDER is required")

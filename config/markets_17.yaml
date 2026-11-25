@@ -28,7 +28,7 @@ market_tiering:
   tier_a: ["FRANCE_EURONEXT", "JAPAN_TSE", "ASIA_PACIFIC_SLEEVE", "US_EQUITIES", "US_COMMODITIES_OIL"]
   tier_b: ["UK_LSE", "CANADA_TSX", "INDIA_NSE", "US_COMMODITIES_GOLD", "CRYPTO_MAJORS"]
   tier_c_probation:
-    markets: ["CRYPTO_MAJORS", "GERMANY_XETRA", "SWEDEN_OMX"]
+    markets: ["GERMANY_XETRA", "SWEDEN_OMX"]
     target_pf: 1.25
   tier_d_disabled:
     markets: ["HONGKONG_HKEX"]
@@ -46,7 +46,7 @@ markets:
     min_net_moveroom_pct: 0.0045
     est_roundtrip_cost_pct: 0.0006
     slot_rvol_min: 1.05
-    core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA"]
+    core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA", "SPX", "^GSPC"]
     symbol_overrides:
       NVDA: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 
@@ -66,10 +66,10 @@ markets:
 
   CRYPTO_MAJORS:
     name: "24/7 Liquid Crypto Spot/ETFs"
-    tier: "TIER_C_PROBATION"
-    allocation_pct: 0.00
+    tier: "TIER_B"
+    allocation_pct: 0.05
     enabled: true
-    broker_route: "IBKR_OR_DEMO"
+    broker_route: "DEMO_OR_IBKR"
     cluster: "CRYPTO"
     cluster_risk_cap: 0.0035
     min_net_moveroom_pct: 0.0065

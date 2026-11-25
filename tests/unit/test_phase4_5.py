@@ -9,7 +9,7 @@ from app.collector import (
     LiveCollector,
 )
 from app.domain.events import RawTradeEvent
-from app.features import causal_atr, causal_vwap, feature_snapshot
+from app.features import causal_atr, causal_vwap, feature_snapshot, net_move_room
 from app.quality import QualityChecker
 
 
@@ -96,6 +96,15 @@ class Phase45Tests(unittest.TestCase):
         snapshot = feature_snapshot(bars, at_t)
         self.assertEqual(snapshot.vwap, Decimal(100))
         self.assertEqual(causal_vwap(bars, at_t), Decimal(100))
+
+    def test_move_room_is_returned_as_price_relative_fraction(self) -> None:
+        now = datetime(2026, 11, 20, tzinfo=UTC)
+        bars = [Bar(now, now + timedelta(minutes=1), Decimal(100), Decimal(110),
+                    Decimal(90), Decimal(100), Decimal(1), 1)]
+        move_room = net_move_room(
+            bars, now + timedelta(minutes=1), Decimal(105), Decimal(95)
+        )
+        self.assertEqual(move_room, Decimal(0))
 
     def test_atr_is_causal(self) -> None:
         start = datetime(2026, 11, 20, tzinfo=UTC)

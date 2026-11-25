@@ -41,7 +41,9 @@ MARKETS = {
             "min_net_moveroom_pct": 0.0045,
         },
         "HONGKONG_HKEX": {"tier": "TIER_D_DISABLED", "enabled": False, "core_symbols": ["0700.HK"]},
-        "CRYPTO_MAJORS": {"tier": "TIER_C_PROBATION", "enabled": True, "core_symbols": ["BTC-USD"]},
+        "CRYPTO_MAJORS": {"tier": "TIER_B", "enabled": True, "allocation_pct": 0.05,
+                           "broker_route": "DEMO_OR_IBKR", "core_symbols": ["BTC-USD"],
+                           "slot_rvol_min": 1.15, "min_net_moveroom_pct": 0.0065},
     },
 }
 STRATEGY = {
@@ -102,6 +104,27 @@ class Phase67Tests(unittest.TestCase):
         self.assertIn("RVOL", card1.reason)
         self.assertIn("move_room", card1.parameters)
 
+    def test_negative_move_room_rejects_buy(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        negative = FeatureSnapshot(
+            snapshot().timestamp, Decimal(100), Decimal(2), Decimal("1.2"),
+            Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102),
+            "up", "higher-highs-higher-lows", Decimal("-0.10"),
+        )
+        card = engine.evaluate(
+            timestamp=negative.timestamp,
+            symbol="AAPL",
+            snapshot=negative,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+        )
+        self.assertEqual(card.action, "hold")
+        self.assertEqual(card.display_action, "HOLD")
+        self.assertIn("insufficient_move_room", card.rejected_gates)
+
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")
         engine = ConfluenceV1(STRATEGY, policy)
@@ -111,7 +134,6 @@ class Phase67Tests(unittest.TestCase):
             ("AAPL", Regime.TREND_DAY, 20, True, 120),
             ("AAPL", Regime.TREND_DAY, 1, False, 120),
             ("AAPL", Regime.TREND_DAY, 1, True, 30),
-            ("BTC-USD", Regime.TREND_DAY, 1, True, 120),
             ("UNKNOWN", Regime.TREND_DAY, 1, True, 120),
         ]
         for symbol, regime, stale, session, minutes in cases:
@@ -126,6 +148,60 @@ class Phase67Tests(unittest.TestCase):
                 minutes_to_close=minutes,
             )
             self.assertNotEqual(card.action, "enter_long")
+            self.assertTrue(card.rejected_gates)
+
+    def test_btc_tier_b_buy_and_sell_matrix(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        now = datetime(2026, 11, 20, tzinfo=UTC)
+        up = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
+                             Decimal(105), Decimal(95), Decimal(100), Decimal(101),
+                             Decimal(102), "up", "higher-highs-higher-lows", Decimal("0.008"))
+        buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
+                              regime=Regime.TREND_DAY, stale_feed_seconds=1,
+                              stale_threshold_seconds=10, minutes_to_close=120)
+        self.assertEqual(buy.display_action, "BUY")
+
+        down = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
+                               Decimal(105), Decimal(95), Decimal(98), Decimal(100),
+                               Decimal(102), "down", "lower-highs-lower-lows", Decimal("-0.008"))
+        sell = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=down,
+                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
+                               stale_threshold_seconds=10, minutes_to_close=120,
+                               position_quantity=Decimal(1))
+        self.assertEqual(sell.display_action, "SELL")
+
+    def test_false_positive_filters(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        now = datetime(2026, 11, 20, tzinfo=UTC)
+        cases = [
+            FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.04"), Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102), "up", "mixed", Decimal("0.008")),
+            FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.20"), Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102), "sideways", "range", Decimal("0.008")),
+            FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.20"), Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102), "up", "higher-highs-higher-lows", Decimal("-0.008")),
+        ]
+        for snapshot_item in cases:
+            card = engine.evaluate(timestamp=now, symbol="AAPL", snapshot=snapshot_item,
+                                   regime=Regime.TREND_DAY, stale_feed_seconds=1,
+                                   stale_threshold_seconds=10, minutes_to_close=120)
+            self.assertEqual(card.display_action, "HOLD")
+
+    def test_disabled_and_feed_controls(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        now = datetime(2026, 11, 20, tzinfo=UTC)
+        controls = [
+            ("0700.HK", 1, True, 120),
+            ("AAPL", 20, True, 120),
+            ("AAPL", 1, False, 120),
+            ("AAPL", 1, True, 30),
+        ]
+        for symbol, stale, session_open, minutes in controls:
+            card = engine.evaluate(timestamp=now, symbol=symbol, snapshot=snapshot(),
+                                   regime=Regime.TREND_DAY, stale_feed_seconds=stale,
+                                   stale_threshold_seconds=10, session_open=session_open,
+                                   minutes_to_close=minutes)
+            self.assertEqual(card.display_action, "HOLD")
             self.assertTrue(card.rejected_gates)
 
     def test_exit_gate_and_unknown_status(self):

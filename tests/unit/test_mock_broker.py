@@ -79,7 +79,7 @@ class ActorTests(unittest.TestCase):
         ])
         candidates = scanner.discover(market_open=True, regime="TREND_DAY")
         cards = scanner.evaluate(candidates, {"AAPL": True})
-        self.assertEqual([c["symbol"] for c in candidates], ["AAPL"])
+        self.assertEqual([c["symbol"] for c in candidates], ["AAPL", "BTC-USD"])
         self.assertEqual(cards[0]["display_action"], "BUY")
 
         class Adapter:

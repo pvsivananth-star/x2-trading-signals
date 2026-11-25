@@ -129,9 +129,12 @@ def net_move_room(bars: list[Bar], timestamp: datetime, target: Decimal, stop: D
     if not eligible:
         return None
     last = eligible[-1].close
+    if last <= 0:
+        return None
     upside = abs(target - last)
     downside = abs(last - stop)
-    return upside - downside
+    net_price_room = upside - downside
+    return net_price_room / last
 
 
 def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:

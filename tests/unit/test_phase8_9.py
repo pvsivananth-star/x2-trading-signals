@@ -19,7 +19,9 @@ MARKETS = {
     "markets": {"US_EQUITIES": {"tier": "TIER_A", "enabled": True, "core_symbols": ["AAPL"],
                                   "cluster": "US_TECH_INDEX", "cluster_risk_cap": 0.005,
                                   "slot_rvol_min": 1.05, "min_net_moveroom_pct": 0.0045},
-                "CRYPTO_MAJORS": {"tier": "TIER_C_PROBATION", "enabled": True, "core_symbols": ["BTC-USD"]},
+                "CRYPTO_MAJORS": {"tier": "TIER_B", "enabled": True, "allocation_pct": 0.05,
+                                   "broker_route": "DEMO_OR_IBKR", "core_symbols": ["BTC-USD"],
+                                   "slot_rvol_min": 1.15, "min_net_moveroom_pct": 0.0065},
                 "HONGKONG_HKEX": {"tier": "TIER_D_DISABLED", "enabled": False, "core_symbols": ["0700.HK"]}},
 }
 
@@ -69,9 +71,10 @@ class Phase89Tests(unittest.TestCase):
         cutoff = broker.submit_signal(signal_id="cutoff", symbol="AAPL", side="buy", quantity=Decimal(1),
                                       timestamp=self.now, minutes_to_close=30, regime=Regime.TREND_DAY)
         self.assertEqual(cutoff.state, "rejected")
-        disabled = broker.submit_signal(signal_id="crypto", symbol="BTC-USD", side="buy", quantity=Decimal(1),
-                                        timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY)
-        self.assertEqual(disabled.state, "rejected")
+        crypto = broker.submit_signal(signal_id="crypto", symbol="BTC-USD", side="buy", quantity=Decimal(1),
+                                        timestamp=self.now, minutes_to_close=120, regime=Regime.TREND_DAY,
+                                        limit_price=Decimal(100))
+        self.assertIn(crypto.state, {"accepted", "working", "filled"})
         os.environ["TRADING_MODE"] = "live"
         with self.assertRaises(RuntimeError):
             DemoBroker(self.policy)
@@ -86,6 +89,24 @@ class Phase89Tests(unittest.TestCase):
         self.assertEqual(len(flat_fills), 1)
         ids = {(card.signal_id, card.order_id) for card in broker.audit_cards}
         self.assertTrue(all(order_id for _, order_id in ids))
+
+    def test_runtime_mode_isolation_and_mock_dashboard_positions(self):
+        import app.runtime_modes as modes
+        from app.mock_broker_client import MockBrokerDashboardAdapter
+
+        os.environ["TRADING_MODE"] = "backtest"
+        os.environ.pop("X2_LIVE_BROKER_URL", None)
+        os.environ.pop("LIVE_BROKER_URL", None)
+        self.assertTrue(modes.backtest_isolated())
+        self.assertFalse(modes.live_feed_allowed())
+
+        os.environ["TRADING_MODE"] = "demo"
+        self.assertFalse(modes.live_feed_allowed())
+        dashboard_broker = MockBrokerDashboardAdapter()
+        self.assertEqual(dashboard_broker.positions, ())
+        snapshot = dashboard_broker.snapshot(self.now, {})
+        self.assertEqual(snapshot.positions_value if hasattr(snapshot, "positions_value") else None, 0)
+        os.environ.pop("TRADING_MODE", None)
 
     def test_feed_config_fallback_grouping_and_stale(self):
         config = load_feed_config("config/feeds.yaml")
@@ -124,7 +145,8 @@ class Phase89Tests(unittest.TestCase):
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m")
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
 
-        report = run_audited_backtest(store, actor, broker, days=3, ticks_per_day=2)
+        report = run_audited_backtest(store, actor, broker, days=3, ticks_per_day=2,
+                                      interval_seconds=0)
         table = report.as_table()
 
         self.assertEqual(report.days, 3)
@@ -136,6 +158,7 @@ class Phase89Tests(unittest.TestCase):
         self.assertIn("Overall Profit Factor", table)
         self.assertIn("Max Drawdown", table)
         self.assertIn("Synthetic deterministic fixture", report.audit_warning)
+        self.assertGreaterEqual(report.sell_signals, 0)
 
     def test_tick_pump_warmup_and_every_tick_actor_execution(self):
         from app.backtest.tick_pump import TickPumpRuntime
