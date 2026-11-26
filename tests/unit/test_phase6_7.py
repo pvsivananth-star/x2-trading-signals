@@ -52,6 +52,7 @@ STRATEGY = {
         "enabled": True,
         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
         "timeframes": {"discovery_mins": 30, "swing_mins": 15, "signal_mins": 5},
+        "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005},
     }
 }
 
@@ -110,7 +111,7 @@ class Phase67Tests(unittest.TestCase):
         policy = TradingPolicy(MARKETS, "policy-test")
         engine = ConfluenceV1(STRATEGY, policy)
         negative = FeatureSnapshot(
-            snapshot().timestamp, Decimal(100), Decimal(2), Decimal("1.2"),
+            snapshot().timestamp, Decimal(100), Decimal(0), Decimal("1.2"),
             Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102),
             "up", "higher-highs-higher-lows", Decimal("-0.10"),
             last_close=Decimal(100), pullback_depth=Decimal("0.5"),

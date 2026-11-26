@@ -19,3 +19,11 @@ strategy:
     exit_on_confirmed_trendline_break: true
     pre_close_entry_cutoff_mins: 60
     mandatory_flat_before_close_mins: 15
+  # Net MoveRoom (review v2). Projected target/stop are ATR-based from the signal timeframe ATR_14.
+  # Cost values are PLACEHOLDERS pending per-market spread/fee confirmation.
+  move_room:
+    target_atr_mult: 2.0
+    stop_atr_mult: 1.0
+    min_reward_to_risk: 1.5
+    roundtrip_cost_pct: 0.0010
+    slippage_buffer_pct: 0.0005

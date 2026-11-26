@@ -51,6 +51,21 @@ def _requirement_met(requirement: str | None, snapshot: FeatureSnapshot) -> bool
     return snapshot.last_close >= snapshot.vwap
 
 
+def projected_levels(snapshot: FeatureSnapshot, target_mult: Decimal, stop_mult: Decimal,
+                     roundtrip_cost: Decimal, slippage_buffer: Decimal) -> tuple[Decimal, Decimal, Decimal] | None:
+    """Return (target, stop, net_move_room_pct) for a long entry at last_close.
+
+    Net MoveRoom = |target - entry| / entry - roundtrip cost - slippage buffer (see review v2).
+    """
+    if snapshot.atr is None or snapshot.last_close is None or snapshot.last_close <= 0:
+        return None
+    entry = snapshot.last_close
+    target = entry + target_mult * snapshot.atr
+    stop = entry - stop_mult * snapshot.atr
+    gross = abs(target - entry) / entry
+    return target, stop, gross - roundtrip_cost - slippage_buffer
+
+
 def _trend_broken(snapshot: FeatureSnapshot) -> bool:
     return snapshot.trend == "down" or snapshot.structure == "lower-highs-lower-lows"
 
@@ -90,6 +105,18 @@ class ConfluenceV1:
         ):
             raise ValueError("configured timeframes must include 5/15/30")
         self.policy = policy
+        mr = self.strategy.get("move_room")
+        if not isinstance(mr, Mapping):
+            raise ValueError("missing move_room config")
+        self.target_mult = Decimal(str(mr["target_atr_mult"]))
+        self.stop_mult = Decimal(str(mr["stop_atr_mult"]))
+        self.min_rr = Decimal(str(mr["min_reward_to_risk"]))
+        self.roundtrip_cost = Decimal(str(mr["roundtrip_cost_pct"]))
+        self.slippage_buffer = Decimal(str(mr["slippage_buffer_pct"]))
+        if self.stop_mult <= 0 or self.target_mult <= 0:
+            raise ValueError("ATR multiples must be positive")
+        if self.target_mult / self.stop_mult < self.min_rr:
+            raise ValueError("configured target/stop ratio is below minimum reward-to-risk")
 
     @classmethod
     def from_yaml(cls, path: str | Path, policy: TradingPolicy) -> ConfluenceV1:
@@ -112,6 +139,8 @@ class ConfluenceV1:
         position_quantity: Decimal = Decimal(0),
         live_mode: bool = False,
         previous_snapshot: FeatureSnapshot | None = None,
+        position_stop: Decimal | None = None,
+        position_target: Decimal | None = None,
     ) -> DecisionCard:
         policy = self.policy.evaluate(
             timestamp=timestamp,
@@ -140,34 +169,41 @@ class ConfluenceV1:
         action = "hold"
         flatten_mins = int(engine["mandatory_pre_close_flat_mins"])
         pre_close_flat = minutes_to_close is not None and minutes_to_close <= flatten_mins
+        levels = projected_levels(snapshot, self.target_mult, self.stop_mult,
+                                  self.roundtrip_cost, self.slippage_buffer)
+        required_room = None
+        slot_rvol = None
+        if market is not None and "min_net_moveroom_pct" in market and "slot_rvol_min" in market:
+            required_room = Decimal(str(market["min_net_moveroom_pct"]))
+            slot_rvol = Decimal(str(market["slot_rvol_min"]))
 
         if position_quantity != 0:
-            # Mandatory pre-close flat is an exit, not only an entry gate.
+            last = snapshot.last_close
             if pre_close_flat:
                 action = "exit_long"
                 zone = "MANDATORY_PRE_CLOSE_FLAT"
-            elif _trend_broken(snapshot) and previous_snapshot is not None and _trend_broken(previous_snapshot):
-                # Exit only on a confirmed break: current and previous snapshot both show the break (M=2).
+            elif position_stop is not None and last is not None and last <= position_stop:
                 action = "exit_long"
-                zone = (
-                    "TRENDLINE_BREAK"
-                    if snapshot.structure == "lower-highs-lower-lows"
-                    else "CONFIRMED_BREAK"
-                )
-        elif (
-            snapshot.trend == "up"
-            and snapshot.rvol is not None
-            and policy.allowed
-            and market is not None
-            and snapshot.rvol >= Decimal(str(market["slot_rvol_min"]))
-        ):
-            if snapshot.move_room is not None:
-                required_room = Decimal(str(market["min_net_moveroom_pct"]))
-                sufficient_room = snapshot.move_room >= required_room
+                zone = "HARD_STOP"
+            elif position_target is not None and last is not None and last >= position_target:
+                action = "exit_long"
+                zone = "TARGET_HIT"
+            elif _trend_broken(snapshot) and previous_snapshot is not None and _trend_broken(previous_snapshot):
+                action = "exit_long"
+                zone = "TRENDLINE_BREAK" if snapshot.structure == "lower-highs-lower-lows" else "CONFIRMED_BREAK"
+        elif snapshot.trend == "up" and policy.allowed and market is not None:
+            if required_room is None or slot_rvol is None:
+                gates.append("market_thresholds_missing")
+            elif snapshot.rvol is None:
+                gates.append("rvol_unavailable")
+            elif snapshot.rvol < slot_rvol:
+                gates.append("rvol_below_threshold")
+            if levels is None:
+                gates.append("move_room_unavailable")
+            elif required_room is not None:
+                sufficient_room = levels[2] >= required_room
                 if not sufficient_room:
                     gates.append("insufficient_move_room")
-            else:
-                gates.append("insufficient_move_room")
             zone = classify_reaction_zone(snapshot.pullback_depth)
             if zone is None:
                 gates.append("outside_reaction_zone")
@@ -176,7 +212,8 @@ class ConfluenceV1:
                 if not _requirement_met(requirement, snapshot):
                     gates.append(f"{requirement}_not_met")
                     zone = None
-            if zone is not None and sufficient_room:
+            if zone is not None and sufficient_room and "rvol_below_threshold" not in gates \
+                    and "rvol_unavailable" not in gates:
                 action = "enter_long"
 
         inputs = {
