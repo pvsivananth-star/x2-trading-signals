@@ -129,7 +129,7 @@ class Phase89Tests(unittest.TestCase):
         policy = TradingPolicy(MARKETS, "phase89")
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                        "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                        "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, policy, ConfluenceV1(strategy_config, policy), interval="1m")
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
@@ -141,7 +141,7 @@ class Phase89Tests(unittest.TestCase):
         store = FeedStore(config)
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                          "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m")
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
 
@@ -167,7 +167,7 @@ class Phase89Tests(unittest.TestCase):
         store = FeedStore(config)
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                          "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m",
                              stale_threshold_seconds=config.stale_threshold_seconds)
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
