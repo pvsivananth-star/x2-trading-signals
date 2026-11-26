@@ -25,6 +25,8 @@ class FeatureSnapshot:
     move_room: Decimal | None
     last_close: Decimal | None = None
     pullback_depth: Decimal | None = None
+    structure_target: Decimal | None = None
+    structure_source: str | None = None
 
 
 def bars_through(bars: list[Bar], timestamp: datetime) -> list[Bar]:
@@ -155,8 +157,39 @@ def causal_pullback_depth(bars: list[Bar], timestamp: datetime, lookback: int = 
     return last_close, depth
 
 
+def causal_structure_target(bars: list[Bar], timestamp: datetime) -> tuple[Decimal | None, str | None]:
+    """Nearest structural resistance strictly above the last close (long targets).
+
+    Candidates: confirmed swing high, prior session high, current session high so far.
+    Sessions are grouped by UTC date of bar_start (approximation; exchange-local sessions
+    for non-US markets are not yet modeled).
+    """
+    eligible = bars_through(bars, timestamp)
+    if not eligible:
+        return None, None
+    last = eligible[-1]
+    close = last.close
+    candidates: list[tuple[str, Decimal]] = []
+    swing_high, _swing_low = causal_swing(bars, timestamp)
+    if swing_high is not None:
+        candidates.append(("SWING_HIGH", swing_high))
+    today = last.bar_start.date()
+    prior = [b for b in eligible if b.bar_start.date() < today]
+    if prior:
+        prev_day = max(b.bar_start.date() for b in prior)
+        candidates.append(("PRIOR_SESSION_HIGH", max(b.high for b in prior if b.bar_start.date() == prev_day)))
+    current = [b for b in eligible if b.bar_start.date() == today]
+    candidates.append(("SESSION_HIGH", max(b.high for b in current)))
+    above = [(src, lvl) for src, lvl in candidates if lvl > close]
+    if not above:
+        return None, None
+    src, lvl = min(above, key=lambda item: item[1])
+    return lvl, src
+
+
 def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
     swing_high, swing_low = causal_swing(bars, timestamp)
+    structure_target, structure_source = causal_structure_target(bars, timestamp)
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp)
     trend, structure = causal_trend_structure(bars, timestamp)
     last_close, pullback_depth = causal_pullback_depth(bars, timestamp)
@@ -175,4 +208,6 @@ def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
         move_room=net_move_room(bars, timestamp, fib_618 or Decimal(0), fib_382 or Decimal(0)) if fib_382 is not None and fib_618 is not None else None,
         last_close=last_close,
         pullback_depth=pullback_depth,
+        structure_target=structure_target,
+        structure_source=structure_source,
     )

@@ -19,10 +19,16 @@ strategy:
     exit_on_confirmed_trendline_break: true
     pre_close_entry_cutoff_mins: 60
     mandatory_flat_before_close_mins: 15
-  # Net MoveRoom (review v2). Projected target/stop are ATR-based from the signal timeframe ATR_14.
+  # Net MoveRoom (review v3). Target is structural-primary:
+  #  - structural level above entry (swing high / prior session high / session high) is the target,
+  #    capped at max_target_atr_mult * ATR_14 (signal timeframe);
+  #  - ATR extension (target_atr_mult) is used ONLY when no structural level exists above entry
+  #    (clear open space).
   # Cost values are PLACEHOLDERS pending per-market spread/fee confirmation.
   move_room:
-    target_atr_mult: 2.0
+    structural_primary: true
+    target_atr_mult: 3.5
+    max_target_atr_mult: 4.0
     stop_atr_mult: 1.0
     min_reward_to_risk: 1.5
     roundtrip_cost_pct: 0.0010

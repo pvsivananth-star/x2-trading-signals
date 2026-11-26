@@ -51,19 +51,42 @@ def _requirement_met(requirement: str | None, snapshot: FeatureSnapshot) -> bool
     return snapshot.last_close >= snapshot.vwap
 
 
-def projected_levels(snapshot: FeatureSnapshot, target_mult: Decimal, stop_mult: Decimal,
-                     roundtrip_cost: Decimal, slippage_buffer: Decimal) -> tuple[Decimal, Decimal, Decimal] | None:
-    """Return (target, stop, net_move_room_pct) for a long entry at last_close.
+@dataclass(frozen=True, slots=True)
+class ProjectedLevels:
+    target: Decimal
+    stop: Decimal
+    net_move_room: Decimal
+    reward_to_risk: Decimal
+    target_source: str
 
-    Net MoveRoom = |target - entry| / entry - roundtrip cost - slippage buffer (see review v2).
+
+def projected_levels(snapshot: FeatureSnapshot, open_space_mult: Decimal, max_mult: Decimal,
+                     stop_mult: Decimal, roundtrip_cost: Decimal,
+                     slippage_buffer: Decimal) -> ProjectedLevels | None:
+    """Structural-primary target for a long entry at last_close (review v3).
+
+    - Structural level present: target = min(structure, entry + max_mult*ATR). Structure within
+      open_space_mult*ATR is used directly; the ATR extension is never used to override it.
+    - No structural level above entry (clear open space): target = entry + open_space_mult*ATR.
+    Net MoveRoom = |target - entry| / entry - roundtrip cost - slippage buffer.
+    Reward-to-risk = (target - entry) / (stop_mult*ATR).
     """
-    if snapshot.atr is None or snapshot.last_close is None or snapshot.last_close <= 0:
+    if snapshot.atr is None or snapshot.last_close is None or snapshot.last_close <= 0 or snapshot.atr <= 0:
         return None
     entry = snapshot.last_close
-    target = entry + target_mult * snapshot.atr
-    stop = entry - stop_mult * snapshot.atr
-    gross = abs(target - entry) / entry
-    return target, stop, gross - roundtrip_cost - slippage_buffer
+    atr = snapshot.atr
+    if snapshot.structure_target is None:
+        target = entry + open_space_mult * atr
+        source = "ATR_OPEN_SPACE"
+    else:
+        target = min(snapshot.structure_target, entry + max_mult * atr)
+        source = snapshot.structure_source or "STRUCTURE"
+        if target != snapshot.structure_target:
+            source = "ATR_EXTENDED_TO_" + str(max_mult) + "x"
+    stop = entry - stop_mult * atr
+    gross = (target - entry) / entry
+    rr = (target - entry) / (stop_mult * atr)
+    return ProjectedLevels(target, stop, gross - roundtrip_cost - slippage_buffer, rr, source)
 
 
 def _trend_broken(snapshot: FeatureSnapshot) -> bool:
@@ -90,7 +113,7 @@ class DecisionCard:
 class ConfluenceV1:
     def __init__(self, strategy_config: Mapping[str, Any], policy: TradingPolicy) -> None:
         if not isinstance(strategy_config, Mapping) or "strategy" not in strategy_config:
-            raise ValueError("missing required strategy config")
+            raise TypeError("missing required strategy config")
         self.strategy = strategy_config["strategy"]
         if self.strategy.get("id") != "confluence_pullback_v1":
             raise ValueError("unknown strategy id")
@@ -107,14 +130,17 @@ class ConfluenceV1:
         self.policy = policy
         mr = self.strategy.get("move_room")
         if not isinstance(mr, Mapping):
-            raise ValueError("missing move_room config")
+            raise TypeError("missing move_room config")
         self.target_mult = Decimal(str(mr["target_atr_mult"]))
+        self.max_target_mult = Decimal(str(mr.get("max_target_atr_mult", "4.0")))
         self.stop_mult = Decimal(str(mr["stop_atr_mult"]))
         self.min_rr = Decimal(str(mr["min_reward_to_risk"]))
         self.roundtrip_cost = Decimal(str(mr["roundtrip_cost_pct"]))
         self.slippage_buffer = Decimal(str(mr["slippage_buffer_pct"]))
         if self.stop_mult <= 0 or self.target_mult <= 0:
             raise ValueError("ATR multiples must be positive")
+        if self.max_target_mult < self.target_mult:
+            raise ValueError("max_target_atr_mult must be >= target_atr_mult")
         if self.target_mult / self.stop_mult < self.min_rr:
             raise ValueError("configured target/stop ratio is below minimum reward-to-risk")
 
@@ -169,7 +195,7 @@ class ConfluenceV1:
         action = "hold"
         flatten_mins = int(engine["mandatory_pre_close_flat_mins"])
         pre_close_flat = minutes_to_close is not None and minutes_to_close <= flatten_mins
-        levels = projected_levels(snapshot, self.target_mult, self.stop_mult,
+        levels = projected_levels(snapshot, self.target_mult, self.max_target_mult, self.stop_mult,
                                   self.roundtrip_cost, self.slippage_buffer)
         required_room = None
         slot_rvol = None
@@ -201,9 +227,12 @@ class ConfluenceV1:
             if levels is None:
                 gates.append("move_room_unavailable")
             elif required_room is not None:
-                sufficient_room = levels[2] >= required_room
+                sufficient_room = levels.net_move_room >= required_room
                 if not sufficient_room:
                     gates.append("insufficient_move_room")
+                if levels.reward_to_risk < self.min_rr:
+                    sufficient_room = False
+                    gates.append("insufficient_reward_to_risk")
             zone = classify_reaction_zone(snapshot.pullback_depth)
             if zone is None:
                 gates.append("outside_reaction_zone")
