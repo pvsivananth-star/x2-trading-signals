@@ -127,7 +127,7 @@ class Phase67Tests(unittest.TestCase):
         )
         self.assertEqual(card.action, "hold")
         self.assertEqual(card.display_action, "HOLD")
-        self.assertIn("insufficient_move_room", card.rejected_gates)
+        self.assertIn("move_room_unavailable", card.rejected_gates)  # zero ATR fails closed
 
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")
