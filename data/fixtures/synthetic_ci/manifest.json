@@ -1,0 +1,35 @@
+{
+  "fixture": "synthetic-ci-equity-crypto",
+  "source": "deterministic_synthetic_test_fixture",
+  "generator": "seeded_random_walk",
+  "seed": 20261127,
+  "license_reference": "INTERNAL-SYNTHETIC-CI-CC0",
+  "contains_real_market_data": false,
+  "performance_claims_allowed": false,
+  "instruments": {
+    "1": "SIM-EQ (SIM_EQ_EX)",
+    "2": "SIM-COIN (SIM_CRYPTO_EX)"
+  },
+  "files": {
+    "bars.csv": {
+      "sha256": "7a73d52b97faba95932140046c213f86f8c726cc8bb25d7d0f5e9fe1ed5e2ef2",
+      "bytes": 2316292
+    },
+    "quotes.csv": {
+      "sha256": "8046617f20cf537b43067dccfbc3f99761cdcd284df36950768410101b0bfa1f",
+      "bytes": 3096791
+    },
+    "instruments.csv": {
+      "sha256": "506440a8dbdc7eafa5d0a915c984935747297b125f32f6a2811ec58fd5826d5c",
+      "bytes": 533
+    },
+    "ingestion_runs.csv": {
+      "sha256": "9dea9775aceedb486293994256672fb11685f5f629152156cb8ffec8d1049edf",
+      "bytes": 888
+    },
+    "ingestion_sources.csv": {
+      "sha256": "092c92d71381893068ab2000cc9404f02f82e235f0aeeb1e410a09720ea7347f",
+      "bytes": 605
+    }
+  }
+}

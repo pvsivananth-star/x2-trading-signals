@@ -1,0 +1,3 @@
+instrument_id,venue_id,venue_symbol,canonical_symbol,asset_class,base_currency,quote_currency,price_scale,quantity_scale,tick_size,lot_size,contract_multiplier,valid_from,valid_to,enabled,metadata,created_at
+1,SIM_EQ_EX,SIMEQ,SIM-EQ,equity,SIMEQ,USD,2,0,0.01,1,1,2026-01-01 00:00:00+00,,true,"{""synthetic"": true, ""ci_fixture"": true}",2026-11-01 00:00:00+00
+2,SIM_CRYPTO_EX,SIMCOIN-USD,SIM-COIN,crypto,SIMCOIN,USD,2,4,0.01,0.0001,1,2026-01-01 00:00:00+00,,true,"{""synthetic"": true, ""ci_fixture"": true}",2026-11-01 00:00:00+00

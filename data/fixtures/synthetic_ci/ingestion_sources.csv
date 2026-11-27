@@ -1,0 +1,3 @@
+source_id,source_name,source_kind,provider_name,venue_id,endpoint,license_reference,enabled,configuration,created_at
+141d062c-4ff9-50c1-802b-15f73981dd6d,synthetic_ci_equity_generator,historical_dump,synthetic,SIM_EQ_EX,synthetic://ci/sim_eq,INTERNAL-SYNTHETIC-CI-CC0,true,"{""generator"": ""seeded_random_walk"", ""seed"": 20261127}",2026-11-01 00:00:00+00
+5065fe68-0bea-5312-ad67-943137a46572,synthetic_ci_crypto_generator,historical_dump,synthetic,SIM_CRYPTO_EX,synthetic://ci/sim_coin,INTERNAL-SYNTHETIC-CI-CC0,true,"{""generator"": ""seeded_random_walk"", ""seed"": 20261127}",2026-11-01 00:00:00+00
