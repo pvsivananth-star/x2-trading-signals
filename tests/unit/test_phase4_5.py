@@ -97,6 +97,16 @@ class Phase45Tests(unittest.TestCase):
         self.assertEqual(snapshot.vwap, Decimal(100))
         self.assertEqual(causal_vwap(bars, at_t), Decimal(100))
 
+    def test_vwap_resets_at_utc_day_boundary(self) -> None:
+        start = datetime(2026, 11, 20, 23, 58, tzinfo=UTC)
+        bars = [
+            Bar(start, start + timedelta(minutes=1), Decimal(100), Decimal(100), Decimal(100),
+                Decimal(100), Decimal(10), 1),
+            Bar(start + timedelta(minutes=2), start + timedelta(minutes=3), Decimal(200), Decimal(200),
+                Decimal(200), Decimal(200), Decimal(1), 1),
+        ]
+        self.assertEqual(causal_vwap(bars, start + timedelta(minutes=3)), Decimal(200))
+
     def test_move_room_is_returned_as_price_relative_fraction(self) -> None:
         now = datetime(2026, 11, 20, tzinfo=UTC)
         bars = [Bar(now, now + timedelta(minutes=1), Decimal(100), Decimal(110),

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.backtest.bars import Bar
@@ -38,9 +38,12 @@ def bars_through(bars: list[Bar], timestamp: datetime) -> list[Bar]:
 
 
 def causal_vwap(bars: list[Bar], timestamp: datetime) -> Decimal | None:
+    """Return the volume-weighted close since the latest UTC day boundary."""
     eligible = bars_through(bars, timestamp)
     if not eligible:
         return None
+    session_date = eligible[-1].bar_start.astimezone(UTC).date()
+    eligible = [bar for bar in eligible if bar.bar_start.astimezone(UTC).date() == session_date]
     volume = sum((bar.volume for bar in eligible), Decimal(0))
     if volume <= 0:
         return None

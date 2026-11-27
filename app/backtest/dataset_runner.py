@@ -37,6 +37,15 @@ from app.strategy import ConfluenceV1
 # exercised with production-like numbers. The mapping is explicit and reported.
 DEFAULT_PROFILE = {"SIM-EQ": "US_EQUITIES", "SIM-COIN": "CRYPTO_MAJORS"}
 COST_SECTION = {"US_EQUITIES": "US_EQUITIES", "CRYPTO_MAJORS": "CRYPTO_BTC_SPOT"}
+COST_FIELDS = {
+    "US_EQUITIES": (
+        "commission_per_share", "commission_min_per_order", "commission_max_pct_of_trade",
+        "sec_fee_sell_rate", "finra_taf_sell_per_share", "finra_cat_per_share",
+        "clearing_nscc_dtc_per_share", "spread_pct_full", "slippage_pct_per_side",
+        "exchange_fee_per_share",
+    ),
+    "CRYPTO_MAJORS": ("commission", "spread_pct_full"),
+}
 EQUITY_SESSION_CLOSE = time(21, 0)  # 16:00 ET, UTC during winter time in the fixture
 
 
@@ -79,19 +88,18 @@ def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
 
 def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool) -> tuple[dict[str, Any], list[str]]:
     section = COST_SECTION[profile]
+    estimates_enabled = allow_estimates or costs.get("allow_estimates") is True
+    field_costs = {**costs, "allow_estimates": estimates_enabled}
     excluded: list[str] = []
     values: dict[str, Any] = {}
-    for name in ("commission_per_share", "commission_min_per_order", "commission_max_pct_of_trade",
-                 "sec_fee_sell_rate", "finra_taf_sell_per_share", "finra_cat_per_share",
-                 "clearing_nscc_dtc_per_share", "spread_pct_full", "slippage_pct_per_side",
-                 "exchange_fee_per_share"):
+    for name in COST_FIELDS[profile]:
         try:
-            values[name] = _field(costs, section, name)
+            values[name] = _field(field_costs, section, name)
         except CostBlockedError:
             values[name] = Decimal(0)
             excluded.append(name)
     values["_excluded"] = excluded
-    values["_slippage_on"] = allow_estimates and "slippage_pct_per_side" not in excluded
+    values["_slippage_on"] = estimates_enabled and "slippage_pct_per_side" not in excluded
     return values, excluded
 
 

@@ -179,7 +179,7 @@ All categories contain deterministic, synthetic 1-minute, 5-minute, and 15-minut
 
 The provider-neutral live collector foundation supports replay, bounded exponential reconnect backoff, terminal failure, in-memory restart checkpoints, event/sequence/venue-ID dedupe, health and lag reporting, stale-feed blocking, and graceful stop/restart. The existing Binance parser supplies trade payload adaptation only; no live WebSocket socket or network transport is implemented.
 
-Quality findings cover required fields, positive values, UTC timestamps, symbol mapping, ordering, dedupe, sequence gaps, and timestamp gaps. Causal VWAP, ATR, RVOL, swing, Fibonacci zones, trend/structure, and net MoveRoom calculations are cutoff at time `t` and exclude bars ending after `t`.
+Quality findings cover required fields, positive values, UTC timestamps, symbol mapping, ordering, dedupe, sequence gaps, and timestamp gaps. Causal VWAP is anchored to the current UTC day; VWAP, ATR, RVOL, swing, Fibonacci zones, trend/structure, and net MoveRoom calculations are cutoff at time `t` and exclude bars ending after `t`.
 
 The existing Binance BTCUSDT files remain an optional crypto sample implementation. They are not a system default or required for EQ, ETF, index, gold, oil, or provider-neutral tests.
 

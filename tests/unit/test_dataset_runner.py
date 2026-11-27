@@ -66,6 +66,18 @@ class CostRuleTests(unittest.TestCase):
         self.assertIn("slippage_pct_per_side", excluded)
         self.assertIn("exchange_fee_per_share", excluded)
 
+    def test_explicit_estimate_flag_enables_estimated_slippage(self):
+        from app.backtest.dataset_runner import _cost_model
+        values, excluded = _cost_model(self.costs, "US_EQUITIES", True)
+        self.assertNotIn("slippage_pct_per_side", excluded)
+        self.assertTrue(values["_slippage_on"])
+
+    def test_crypto_cost_fields_match_crypto_spot_schema(self):
+        from app.backtest.dataset_runner import _cost_model
+        for allow_estimates in (False, True):
+            _values, excluded = _cost_model(self.costs, "CRYPTO_MAJORS", allow_estimates)
+            self.assertEqual(excluded, ["commission", "spread_pct_full"])
+
 
 class IntrabarExitTests(unittest.TestCase):
     def _pos(self, side):
