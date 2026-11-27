@@ -1,0 +1,195 @@
+# ============================================================================
+# TRANSACTION COST CONFIGURATION — per market and instrument
+# ============================================================================
+#
+# READ BEFORE EDITING
+# -------------------
+# 1. Every cost value has a `status` field:
+#      verified   = taken from a published broker/exchange/regulator schedule (see `source`)
+#      estimate   = a reasonable assumption, NOT sourced. Used only when
+#                   allow_estimates is true, and always labelled in reports.
+#      not_found  = no value available. Any market/instrument with a required
+#                   not_found field is BLOCKED from trading (fail-closed).
+# 2. Do not change a `verified` value without updating `source` and `as_of`.
+# 3. The strategy's minimum net MoveRoom (0.45%–0.65%, config/markets_17.yaml)
+#    is measured AFTER these costs. Lowering a cost value here does not lower
+#    the profit threshold; it only changes what gross move is required.
+# 4. Fees are per side unless the name says roundtrip. Sell-only fees are marked.
+# 5. All percentages are fractions of trade notional (0.001 = 0.10%).
+#    Basis points: 1 bp = 0.0001.
+# 6. Broker = Interactive Brokers (IBKR) Pro schedules, fetched at `as_of`.
+#    Tier numbers apply at the lowest volume tier (worst-case) unless noted.
+#    Exchange/clearing/regulatory pass-throughs are listed separately.
+# 7. Changing these values changes live gating. Get a second review before
+#    merging any edit to a value below the profit threshold in docs/cost-review.md.
+#
+# Profit margin rule (see app/costs.py):
+#   required_gross_move = min_net_moveroom + roundtrip_cost + slippage_buffer
+# ============================================================================
+
+as_of: "2026-11-27"
+allow_estimates: false          # keep false for live-facing config; true only for offline study
+broker: "Interactive Brokers Pro"
+
+# ----------------------------------------------------------------------------
+# US EQUITIES (listed stocks) — IBKR Pro Tiered, US stocks
+# source: investors.interactivebrokers.com/en/pricing/commissions-stocks.php
+# ----------------------------------------------------------------------------
+US_EQUITIES:
+  commission_per_share:
+    value: 0.0035
+    status: verified
+    source: "IBKR Pro Tiered, ≤300,000 shares/month"
+    note: "Falls to 0.0020 (300k–3M), 0.0015, 0.0010, 0.0005 at higher volume. Do not use a lower tier unless the account actually reaches it."
+  commission_min_per_order:
+    value: 0.35
+    status: verified
+    source: "IBKR Pro Tiered minimum per order"
+  commission_max_pct_of_trade:
+    value: 0.01
+    status: verified
+    source: "IBKR Pro Tiered cap: 1% of trade value"
+  sec_fee_sell_rate:
+    value: 0.0000206
+    status: verified
+    source: "IBKR stated SEC transaction fee: USD 0.0000206 × aggregate sales value"
+    note: "SELL only. Check SEC's current Section 31 rate each fiscal year; IBKR may update it."
+  finra_taf_sell_per_share:
+    value: 0.000195
+    status: verified
+    source: "IBKR stated FINRA trading activity fee: USD 0.000195 × quantity sold"
+    note: "SELL only."
+  finra_cat_per_share:
+    value: 0.000003
+    status: verified
+    source: "IBKR stated FINRA CAT fee: USD 0.000003 × quantity (both sides)"
+  clearing_nscc_dtc_per_share:
+    value: 0.0002
+    status: verified
+    source: "IBKR stated NSCC/DTC fees: USD 0.00020 per share"
+  exchange_fee_per_share:
+    value: null
+    status: not_found
+    note: "Venue-dependent (liquidity-taking fee, rebates for adding liquidity). Required before live use. Source the IBKR exchange fee table for each venue used."
+  spread_pct_full:
+    value: 0.000027
+    status: verified
+    source: "SSGA SPY Capital Markets Perspective Q2 2024: SPY avg bid/ask 0.27 bps (June 2024); Q1 2024: 0.21 bps"
+    note: "This is SPY only (ETF). Individual stocks are wider and NOT yet sourced. The value here is the full bid-ask spread; a round trip pays it once."
+  spread_pct_full_single_stocks:
+    value: null
+    status: not_found
+    note: "Required to trade single stocks. Measure from quote data before use."
+  slippage_pct_per_side:
+    value: 0.0001
+    status: estimate
+    note: "ESTIMATE: 1 bp per side. Replace with measured fill-vs-mid slippage from the demo broker or real fills."
+
+# ----------------------------------------------------------------------------
+# US ETFs (SPY used as the liquid reference)
+# ----------------------------------------------------------------------------
+US_ETF:
+  inherits: US_EQUITIES          # same IBKR commission and regulatory fees
+  spread_pct_full:
+    value: 0.000027
+    status: verified
+    source: "SSGA SPY bid/ask: 0.27 bps (June 2024); 0.21 bps (March 2024)"
+    note: "Liquid ETF only. Less-liquid ETFs (ETF.com: average US equity ETP spread 0.24%) must be measured individually."
+
+# ----------------------------------------------------------------------------
+# US INDEX exposure (SPX itself is not directly tradable here; use futures or SPY)
+# ----------------------------------------------------------------------------
+US_INDEX_FUTURES:
+  commission_per_contract:
+    value: 0.85
+    status: verified
+    source: "IBKR Cost-Plus Fixed, US futures: USD 0.85/contract (includes IBKR commission and pass-through exchange/regulatory fees)"
+    note: "Cost-Plus Fixed. Tiered rates are different and are not used here."
+  exchange_fee_recovery_per_contract:
+    value: 1.386
+    status: verified
+    source: "IBKR CME fee recovery schedule: E-mini Equity Futures (ES/NQ/RTY family) USD 1.386"
+    note: "Verify product code. Micro E-mini (MES) is NOT in this list and is not_found."
+  micro_e_mini_fee_recovery_per_contract:
+    value: null
+    status: not_found
+    note: "Required before trading MES/MNQ/M2K."
+
+# ----------------------------------------------------------------------------
+# METALS (gold) — COMEX/CBOT futures
+# ----------------------------------------------------------------------------
+METALS_FUTURES:
+  commission_per_contract:
+    value: 0.85
+    status: verified
+    source: "IBKR Cost-Plus Fixed, US futures: USD 0.85/contract"
+  exchange_fee_recovery_per_contract:
+    value: null
+    status: not_found
+    note: "GC (COMEX) exchange recovery fee not in the schedules retrieved. Required before live use."
+  micro_gold_commission_per_contract:
+    value: null
+    status: not_found
+    note: "MGC commission not retrieved."
+
+# ----------------------------------------------------------------------------
+# ENERGY (crude oil) — NYMEX futures
+# ----------------------------------------------------------------------------
+ENERGY_FUTURES:
+  commission_per_contract:
+    value: 0.85
+    status: verified
+    source: "IBKR Cost-Plus Fixed, US futures: USD 0.85/contract"
+  exchange_fee_recovery_per_contract:
+    value: null
+    status: not_found
+    note: "CL (NYMEX) fee not in the retrieved CME schedule. Required before live use."
+  micro_crude_commission_per_contract:
+    value: null
+    status: not_found
+    note: "MCL not retrieved."
+
+# ----------------------------------------------------------------------------
+# CRYPTO
+# ----------------------------------------------------------------------------
+CRYPTO_BTC_FUTURES_MICRO:
+  commission_per_contract:
+    value: 0.85
+    status: verified
+    source: "IBKR Tiered, CME Micro Bitcoin (MBT) & Coinbase futures: USD 0.85/contract at ≤1,000 contracts/month"
+  exchange_fee_recovery_per_contract:
+    value: null
+    status: not_found
+    note: "MBT exchange fee recovery not located. Only the large BRR contract (7.50 USD) was found."
+
+CRYPTO_BTC_FUTURES_LARGE:
+  commission_per_contract:
+    value: 5.00
+    status: verified
+    source: "IBKR Tiered, CME Bitcoin (BRR) futures: USD 5.00/contract at ≤1,000 contracts/month"
+  exchange_fee_recovery_per_contract:
+    value: 7.50
+    status: verified
+    source: "IBKR CME fee recovery: Bitcoin Futures BRR, BTCEURRR — USD 7.50"
+
+CRYPTO_BTC_SPOT:
+  commission:
+    value: null
+    status: not_found
+    note: "IBKR crypto spot (Paxos) schedule not retrieved. BTC-USD strategy trades are BLOCKED until this is filled."
+  spread_pct_full:
+    value: null
+    status: not_found
+
+# ----------------------------------------------------------------------------
+# NOT COVERED (blocked until sourced)
+# ----------------------------------------------------------------------------
+HONGKONG_HKEX:
+  status: not_found
+  note: "HKEX commission and fees not retrieved. Market is already disabled in markets_17.yaml."
+INDIA_NSE:
+  status: not_found
+  note: "Not retrieved."
+FINANCING_FED_RATE:
+  status: not_found
+  note: "Fed funds / IBKR margin rate not retrieved. Not needed for intraday-only, flat-by-close strategy, but required for any overnight or margin position."
