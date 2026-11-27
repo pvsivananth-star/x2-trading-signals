@@ -35,17 +35,30 @@ from app.strategy import ConfluenceV1
 
 # Synthetic instruments inherit the threshold profile of a real market, so the gates are
 # exercised with production-like numbers. The mapping is explicit and reported.
-DEFAULT_PROFILE = {"SIM-EQ": "US_EQUITIES", "SIM-COIN": "CRYPTO_MAJORS"}
-COST_SECTION = {"US_EQUITIES": "US_EQUITIES", "CRYPTO_MAJORS": "CRYPTO_BTC_SPOT"}
+DEFAULT_PROFILE = {
+    "SIM-EQ": "US_EQUITIES",
+    "SIM-COIN": "CRYPTO_MAJORS",
+    "SPY": "US_EQUITIES",
+    "GLD": "US_COMMODITIES",
+    "BTC-USD": "CRYPTO_MAJORS",
+}
+COST_SECTION = {
+    "US_EQUITIES": "US_EQUITIES",
+    "US_COMMODITIES": "US_ETF",
+    "CRYPTO_MAJORS": "CRYPTO_BTC_SPOT",
+}
+_US_EQUITY_COST_FIELDS = (
+    "commission_per_share", "commission_min_per_order", "commission_max_pct_of_trade",
+    "sec_fee_sell_rate", "finra_taf_sell_per_share", "finra_cat_per_share",
+    "clearing_nscc_dtc_per_share", "spread_pct_full", "slippage_pct_per_side",
+    "exchange_fee_per_share",
+)
 COST_FIELDS = {
-    "US_EQUITIES": (
-        "commission_per_share", "commission_min_per_order", "commission_max_pct_of_trade",
-        "sec_fee_sell_rate", "finra_taf_sell_per_share", "finra_cat_per_share",
-        "clearing_nscc_dtc_per_share", "spread_pct_full", "slippage_pct_per_side",
-        "exchange_fee_per_share",
-    ),
+    "US_EQUITIES": _US_EQUITY_COST_FIELDS,
+    "US_COMMODITIES": _US_EQUITY_COST_FIELDS,
     "CRYPTO_MAJORS": ("commission", "spread_pct_full"),
 }
+
 EQUITY_SESSION_CLOSE = time(21, 0)  # 16:00 ET, UTC during winter time in the fixture
 
 
@@ -80,7 +93,7 @@ class Position:
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
     """Minutes from the bar end to the regular close. None for 24x7 markets (no session flat)."""
-    if profile != "US_EQUITIES":
+    if profile not in {"US_EQUITIES", "US_COMMODITIES"}:
         return None
     close = datetime.combine(bar_end.date(), EQUITY_SESSION_CLOSE, tzinfo=bar_end.tzinfo)
     return int((close - bar_end).total_seconds() // 60)
@@ -146,7 +159,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
-    net_available = "commission_per_share" not in excluded and profile == "US_EQUITIES"
+    net_available = "commission_per_share" not in excluded and profile in {"US_EQUITIES", "US_COMMODITIES"}
     snaps: list[FeatureSnapshot] = [feature_snapshot(bars[: i + 1], bars[i].bar_end) for i in range(len(bars))]
     trades: list[Trade] = []
     pos: Position | None = None
@@ -164,7 +177,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             side, stop_dist, target = pending
             entry_px = bar.open
             qty = (risk_amount := start_equity * risk_pct) / stop_dist
-            if profile == "US_EQUITIES":
+            if profile in {"US_EQUITIES", "US_COMMODITIES"}:
                 qty = Decimal(math.floor(qty))
             if qty > 0:
                 ecost = entry_costs(cost_values, qty, entry_px) if net_available else None

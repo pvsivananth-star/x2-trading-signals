@@ -24,6 +24,7 @@ strategy:
   #    capped at max_target_atr_mult * ATR_14 (signal timeframe);
   #  - ATR extension (target_atr_mult) is used ONLY when no structural level exists above entry
   #    (clear open space).
+  # MoveRoom budgets 0.15% total here: 0.10% round-trip costs + 0.05% slippage.
   # Cost values are PLACEHOLDERS pending per-market spread/fee confirmation.
   move_room:
     structural_primary: true

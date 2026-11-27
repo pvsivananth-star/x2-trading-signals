@@ -11,9 +11,10 @@
 #      not_found  = no value available. Any market/instrument with a required
 #                   not_found field is BLOCKED from trading (fail-closed).
 # 2. Do not change a `verified` value without updating `source` and `as_of`.
-# 3. The strategy's minimum net MoveRoom (0.45%–0.65%, config/markets_17.yaml)
-#    is measured AFTER these costs. Lowering a cost value here does not lower
-#    the profit threshold; it only changes what gross move is required.
+# 3. The strategy's per-market minimum net MoveRoom (config/markets_17.yaml)
+#    is measured AFTER these costs. Current thresholds range from 0.25% to 0.80%.
+#    Lowering a cost value here does not lower the profit threshold; it only
+#    changes what gross move is required.
 # 4. Fees are per side unless the name says roundtrip. Sell-only fees are marked.
 # 5. All percentages are fractions of trade notional (0.001 = 0.10%).
 #    Basis points: 1 bp = 0.0001.

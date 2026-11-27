@@ -9,7 +9,13 @@ from app.collector import (
     LiveCollector,
 )
 from app.domain.events import RawTradeEvent
-from app.features import causal_atr, causal_vwap, feature_snapshot, net_move_room
+from app.features import (
+    causal_atr,
+    causal_trend_structure,
+    causal_vwap,
+    feature_snapshot,
+    net_move_room,
+)
 from app.quality import QualityChecker
 
 
@@ -106,6 +112,21 @@ class Phase45Tests(unittest.TestCase):
                 Decimal(200), Decimal(200), Decimal(1), 1),
         ]
         self.assertEqual(causal_vwap(bars, start + timedelta(minutes=3)), Decimal(200))
+
+    def test_default_trend_window_preserves_macro_direction_through_pullback(self) -> None:
+        start = datetime(2026, 11, 20, tzinfo=UTC)
+        closes = [Decimal(100 + i) for i in range(19)] + [
+            Decimal(117), Decimal(116), Decimal(115), Decimal(114), Decimal(113),
+        ]
+        bars = [
+            Bar(start + timedelta(minutes=5 * i), start + timedelta(minutes=5 * (i + 1)),
+                close, close + Decimal(1), close - Decimal(1), close, Decimal(1), 1)
+            for i, close in enumerate(closes)
+        ]
+        timestamp = bars[-1].bar_end
+
+        self.assertEqual(causal_trend_structure(bars, timestamp, period=5)[0], "down")
+        self.assertEqual(causal_trend_structure(bars, timestamp)[0], "up")
 
     def test_move_room_is_returned_as_price_relative_fraction(self) -> None:
         now = datetime(2026, 11, 20, tzinfo=UTC)

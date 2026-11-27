@@ -43,9 +43,9 @@ markets:
     broker_route: "IBKR"
     cluster: "US_TECH_INDEX"
     cluster_risk_cap: 0.0050
-    min_net_moveroom_pct: 0.0045
+    min_net_moveroom_pct: 0.0025
     est_roundtrip_cost_pct: 0.0006
-    slot_rvol_min: 1.05
+    slot_rvol_min: 0.85
     core_symbols: ["SPY", "QQQ", "IWM", "AAPL", "AMZN", "META", "NFLX", "GOOGL", "MSFT", "NVDA", "AMD", "TSLA", "SPX", "^GSPC"]
     symbol_overrides:
       NVDA: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
@@ -58,9 +58,9 @@ markets:
     broker_route: "IBKR_OR_SCB"
     cluster: "COMMODITIES"
     cluster_risk_cap: 0.0035
-    min_net_moveroom_pct: 0.0045
+    min_net_moveroom_pct: 0.0030
     est_roundtrip_cost_pct: 0.0008
-    slot_rvol_min: 1.05
+    slot_rvol_min: 0.85
     core_symbols: ["GLD", "GC=F", "USO", "CL=F"]
     excluded_symbols: ["SLV"]
 
@@ -72,9 +72,9 @@ markets:
     broker_route: "DEMO_OR_IBKR"
     cluster: "CRYPTO"
     cluster_risk_cap: 0.0035
-    min_net_moveroom_pct: 0.0065
+    min_net_moveroom_pct: 0.0080
     est_roundtrip_cost_pct: 0.0014
-    slot_rvol_min: 1.15
+    slot_rvol_min: 0.95
     core_symbols: ["BTC-USD", "ETH-USD", "SOL-USD", "IBIT", "ETHA"]
 
   INDIA_NSE:

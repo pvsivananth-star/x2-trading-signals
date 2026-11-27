@@ -5,9 +5,12 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.backtest.bars import Bar
 from app.backtest.dataset_runner import (
+    COST_SECTION,
+    DEFAULT_PROFILE,
     Position,
     Trade,
     _commission,
@@ -16,6 +19,7 @@ from app.backtest.dataset_runner import (
     exit_costs,
     minutes_to_close,
     run_dataset,
+    run_symbol,
     summarize,
 )
 from app.costs import load_costs
@@ -33,8 +37,18 @@ class SessionTimingTests(unittest.TestCase):
         self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "US_EQUITIES"), 15)
         self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 21, 0, tzinfo=UTC), "US_EQUITIES"), 0)
 
+    def test_commodity_minutes_to_close(self):
+        self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "US_COMMODITIES"), 15)
+
     def test_crypto_has_no_session_clock(self):
         self.assertIsNone(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "CRYPTO_MAJORS"))
+
+    def test_default_profile_includes_requested_instruments(self):
+        self.assertEqual(
+            {symbol: DEFAULT_PROFILE[symbol] for symbol in ("SPY", "GLD", "BTC-USD")},
+            {"SPY": "US_EQUITIES", "GLD": "US_COMMODITIES", "BTC-USD": "CRYPTO_MAJORS"},
+        )
+        self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
 
 
 class CostRuleTests(unittest.TestCase):
@@ -77,6 +91,63 @@ class CostRuleTests(unittest.TestCase):
         for allow_estimates in (False, True):
             _values, excluded = _cost_model(self.costs, "CRYPTO_MAJORS", allow_estimates)
             self.assertEqual(excluded, ["commission", "spread_pct_full"])
+
+    def test_commodity_costs_inherit_etf_fees_and_are_available(self):
+        from app.backtest.dataset_runner import _cost_model
+        values, excluded = _cost_model(self.costs, "US_COMMODITIES", False)
+        self.assertEqual(values["commission_per_share"], Decimal("0.0035"))
+        self.assertEqual(values["sec_fee_sell_rate"], Decimal("0.0000206"))
+        self.assertNotIn("commission_per_share", excluded)
+        result = run_symbol("GLD", [], "US_COMMODITIES", None, None, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertTrue(result["net_available"])
+
+    def test_commodity_quantities_are_floored_to_whole_shares(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal(1)
+
+            def __init__(self):
+                self.calls = 0
+
+            def evaluate(self, **_kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal(101), Decimal(99), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        result = run_symbol("GLD", bars, "US_COMMODITIES", EntryOnceEngine(), None, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"][0].qty, Decimal(31))
+
+    def test_calibrated_market_thresholds(self):
+        import yaml
+
+        config = yaml.safe_load(Path("config/markets_17.yaml").read_text(encoding="utf-8"))["markets"]
+        expected = {
+            "US_EQUITIES": (0.0025, 0.85),
+            "US_COMMODITIES": (0.0030, 0.85),
+            "CRYPTO_MAJORS": (0.0080, 0.95),
+        }
+        for market, (move_room, rvol) in expected.items():
+            self.assertEqual(config[market]["min_net_moveroom_pct"], move_room)
+            self.assertEqual(config[market]["slot_rvol_min"], rvol)
+
+    def test_strategy_moveroom_cost_and_slippage_total(self):
+        import yaml
+
+        strategy = yaml.safe_load(
+            Path("config/strategies/confluence_pullback.yaml").read_text(encoding="utf-8")
+        )["strategy"]["move_room"]
+        self.assertEqual(
+            strategy["roundtrip_cost_pct"] + strategy["slippage_buffer_pct"],
+            0.0015,
+        )
 
 
 class IntrabarExitTests(unittest.TestCase):

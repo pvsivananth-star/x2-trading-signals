@@ -115,7 +115,7 @@ def fibonacci_zones(bars: list[Bar], timestamp: datetime, lookback: int = 20) ->
     return low + rng * Decimal("0.382"), low + rng * Decimal("0.5"), low + rng * Decimal("0.618")
 
 
-def causal_trend_structure(bars: list[Bar], timestamp: datetime, period: int = 5) -> tuple[str, str]:
+def causal_trend_structure(bars: list[Bar], timestamp: datetime, period: int = 24) -> tuple[str, str]:
     eligible = bars_through(bars, timestamp)
     if period <= 0:
         raise ValueError("period must be positive")

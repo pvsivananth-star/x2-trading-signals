@@ -17,6 +17,17 @@ class CostConfigTests(unittest.TestCase):
         with self.assertRaises(CostBlockedError):
             _field(self.costs, "CRYPTO_BTC_SPOT", "commission")
 
+    def test_etf_inherits_equity_costs(self):
+        from app.costs import _field
+        self.assertEqual(_field(self.costs, "US_ETF", "commission_per_share"), Decimal("0.0035"))
+        self.assertEqual(_field(self.costs, "US_ETF", "sec_fee_sell_rate"), Decimal("0.0000206"))
+
+    def test_inheritance_cycle_is_blocked(self):
+        from app.costs import _field
+        costs = {"A": {"inherits": "B"}, "B": {"inherits": "A"}}
+        with self.assertRaisesRegex(CostBlockedError, "inheritance cycle"):
+            _field(costs, "A", "commission_per_share")
+
     def test_estimate_is_blocked_unless_allowed(self):
         self.costs["allow_estimates"] = False
         with self.assertRaises(CostBlockedError):

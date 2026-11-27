@@ -22,16 +22,28 @@ def load_costs(path: str | Path = "config/costs.yaml") -> dict[str, Any]:
 
 
 def _field(costs: dict[str, Any], market: str, name: str) -> Decimal:
-    section = costs.get(market)
-    if not isinstance(section, dict) or name not in section:
-        raise CostBlockedError(f"{market}.{name}: missing")
-    entry = section[name]
-    status = entry.get("status")
-    if status == "verified":
-        return Decimal(str(entry["value"]))
-    if status == "estimate" and costs.get("allow_estimates") is True:
-        return Decimal(str(entry["value"]))
-    raise CostBlockedError(f"{market}.{name}: status={status}; blocked")
+    requested = f"{market}.{name}"
+    visited: set[str] = set()
+    while market not in visited:
+        visited.add(market)
+        section = costs.get(market)
+        if not isinstance(section, dict):
+            raise CostBlockedError(f"{requested}: missing")
+        if name in section:
+            entry = section[name]
+            if not isinstance(entry, dict):
+                raise CostBlockedError(f"{requested}: invalid cost entry")
+            status = entry.get("status")
+            if status == "verified":
+                return Decimal(str(entry["value"]))
+            if status == "estimate" and costs.get("allow_estimates") is True:
+                return Decimal(str(entry["value"]))
+            raise CostBlockedError(f"{requested}: status={status}; blocked")
+        parent = section.get("inherits")
+        if not isinstance(parent, str) or not parent:
+            raise CostBlockedError(f"{requested}: missing")
+        market = parent
+    raise CostBlockedError(f"{requested}: inheritance cycle")
 
 
 @dataclass(frozen=True, slots=True)
