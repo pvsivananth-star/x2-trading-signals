@@ -335,7 +335,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     min(risk_pct, Decimal(str(policy_decision.max_risk_pct)))
                     if policy_decision.max_risk_pct is not None else risk_pct
                 )
-                pending = (side, snaps[i].atr * engine.stop_mult, target, effective_risk_pct)
+                stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
+                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]

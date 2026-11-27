@@ -48,6 +48,7 @@ class FeatureSnapshot:
     structure_source_short: str | None = None
     structure_target_continuation: Decimal | None = None
     structure_source_continuation: str | None = None
+    impulse_rvol: Decimal | None = None
 
 
 @dataclass(slots=True)
@@ -158,6 +159,35 @@ def causal_atr(
         true_ranges.append(tr)
     selected = true_ranges[-period:] if len(true_ranges) >= period else true_ranges
     return sum(selected, Decimal(0)) / Decimal(len(selected))
+
+
+def causal_impulse_rvol(
+    bars: list[Bar],
+    timestamp: datetime,
+    lookback_bars: int = 10,
+    avg_window: int = 19,
+    _eligible_bars: list[Bar] | None = None,
+) -> Decimal | None:
+    """Peak RVOL among the preceding `lookback_bars` bars, excluding the current bar.
+
+    Each candidate bar's volume is divided by the average of the `avg_window` bars before it.
+    Used by the volume pump / dry-up entry rule. Causal: only bars ending at or before t.
+    """
+    eligible = _eligible_bars if _eligible_bars is not None else bars_through(bars, timestamp)
+    n = len(eligible)
+    if n < 2:
+        return None
+    best: Decimal | None = None
+    for j in range(max(0, n - 1 - lookback_bars), n - 1):
+        history = eligible[max(0, j - avg_window):j]
+        if not history:
+            continue
+        average = sum((b.volume for b in history), Decimal(0)) / Decimal(len(history))
+        if average <= 0:
+            continue
+        ratio = eligible[j].volume / average
+        best = ratio if best is None or ratio > best else best
+    return best
 
 
 def causal_rvol(
@@ -492,4 +522,5 @@ def feature_snapshot(
         structure_source_short=structure_source_short,
         structure_target_continuation=continuation_target,
         structure_source_continuation=continuation_source,
+        impulse_rvol=causal_impulse_rvol(bars, timestamp, _eligible_bars=context.eligible),
     )
