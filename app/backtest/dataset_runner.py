@@ -24,10 +24,19 @@ from datetime import datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.backtest.bars import Bar
 from app.costs import CostBlockedError, _field, load_costs
-from app.features import FeatureSnapshot, bars_through, causal_atr, feature_snapshot
+from app.features import (
+    DEFAULT_SESSION_CLOSE,
+    DEFAULT_SESSION_OPEN,
+    DEFAULT_SESSION_TZ,
+    FeatureSnapshot,
+    _session_bars,
+    causal_atr,
+    feature_snapshot,
+)
 from app.policy import TradingPolicy
 from app.real_data import group_bars, load_bar_records
 from app.regime import Regime
@@ -59,21 +68,41 @@ COST_FIELDS = {
     "CRYPTO_MAJORS": ("commission", "spread_pct_full"),
 }
 
-EQUITY_SESSION_CLOSE = time(21, 0)  # 16:00 ET, UTC during winter time in the fixture
+MARKET_SESSIONS: dict[str, tuple[str, time | None, time | None]] = {
+    "US_EQUITIES": (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE),
+    "US_COMMODITIES": (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE),
+    "CRYPTO_MAJORS": ("UTC", None, None),
+}
 
 
-def causal_regime(bars: list[Bar], timestamp: datetime, period: int = 24) -> Regime:
-    """Classify a rolling window by close displacement relative to causal ATR."""
-    eligible = bars_through(bars, timestamp)
-    if period <= 0:
-        raise ValueError("period must be positive")
-    if len(eligible) < period:
+def causal_regime(
+    bars: list[Bar],
+    timestamp: datetime,
+    *,
+    session_timezone: str = DEFAULT_SESSION_TZ,
+    session_open: time | None = DEFAULT_SESSION_OPEN,
+    session_close: time | None = DEFAULT_SESSION_CLOSE,
+) -> Regime:
+    """Classify the current session after six bars using displacement or range."""
+    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
+    if len(eligible) < 6:
         return Regime.CHOP_DAY
-    atr = causal_atr(bars, timestamp)
+    atr = causal_atr(
+        bars,
+        timestamp,
+        session_timezone=session_timezone,
+        session_open=session_open,
+        session_close=session_close,
+    )
     if atr is None:
         return Regime.CHOP_DAY
-    displacement = abs(eligible[-1].close - eligible[-period].close)
-    return Regime.CHOP_DAY if displacement < Decimal("1.5") * atr else Regime.TREND_DAY
+    session_displacement = abs(eligible[-1].close - eligible[0].open)
+    session_range = max(bar.high for bar in eligible) - min(bar.low for bar in eligible)
+    is_trend = (
+        session_displacement >= Decimal("1.25") * atr
+        or session_range >= Decimal("2.25") * atr
+    )
+    return Regime.TREND_DAY if is_trend else Regime.CHOP_DAY
 
 
 @dataclass
@@ -107,10 +136,14 @@ class Position:
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
     """Minutes from the bar end to the regular close. None for 24x7 markets (no session flat)."""
-    if profile not in {"US_EQUITIES", "US_COMMODITIES"}:
+    if profile not in MARKET_SESSIONS:
         return None
-    close = datetime.combine(bar_end.date(), EQUITY_SESSION_CLOSE, tzinfo=bar_end.tzinfo)
-    return int((close - bar_end).total_seconds() // 60)
+    timezone, _session_open, session_close = MARKET_SESSIONS[profile]
+    if session_close is None:
+        return None
+    local_end = bar_end.astimezone(ZoneInfo(timezone))
+    close = datetime.combine(local_end.date(), session_close, tzinfo=ZoneInfo(timezone))
+    return int((close - local_end).total_seconds() // 60)
 
 
 def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool) -> tuple[dict[str, Any], list[str]]:
@@ -174,12 +207,20 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                allow_estimates: bool) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
     net_available = "commission_per_share" not in excluded and profile in {"US_EQUITIES", "US_COMMODITIES"}
-    snaps: list[FeatureSnapshot] = [feature_snapshot(bars[: i + 1], bars[i].bar_end) for i in range(len(bars))]
+    session_timezone, session_open, session_close = MARKET_SESSIONS[profile]
+    session = {
+        "session_timezone": session_timezone,
+        "session_open": session_open,
+        "session_close": session_close,
+    }
+    snaps: list[FeatureSnapshot] = [
+        feature_snapshot(bars[: i + 1], bars[i].bar_end, **session) for i in range(len(bars))
+    ]
     trades: list[Trade] = []
     pos: Position | None = None
     pending: tuple[int, Decimal, Decimal, Decimal] | None = None
 
-    for i in range(20, len(bars)):
+    for i in range(len(bars)):
         bar = bars[i]
         if pos is not None:
             hit = _intrabar_exit(pos, bar)
@@ -199,23 +240,25 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
             pending = None
         if pos is not None:
-            regime = causal_regime(bars[: i + 1], bar.bar_end)
+            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
-                position_quantity=pos.qty * pos.side, previous_snapshot=snaps[i - 1],
+                position_quantity=pos.qty * pos.side,
+                previous_snapshot=snaps[i - 1] if i > 0 else None,
                 position_stop=pos.stop, position_target=pos.target,
             )
             if sig.action.startswith("exit_"):
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
         elif pos is None and pending is None:
-            regime = causal_regime(bars[: i + 1], bar.bar_end)
+            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
-                minutes_to_close=minutes_to_close(bar.bar_end, profile), previous_snapshot=snaps[i - 1],
+                minutes_to_close=minutes_to_close(bar.bar_end, profile),
+                previous_snapshot=snaps[i - 1] if i > 0 else None,
             )
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1

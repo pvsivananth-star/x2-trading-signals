@@ -90,6 +90,7 @@ class Phase67Tests(unittest.TestCase):
             stale_feed_seconds=1,
             stale_threshold_seconds=10,
             minutes_to_close=120,
+            previous_snapshot=replace(snapshot(), last_close=Decimal(99)),
         )
         card2 = engine.evaluate(
             timestamp=datetime(2026, 11, 20, tzinfo=UTC),
@@ -99,6 +100,7 @@ class Phase67Tests(unittest.TestCase):
             stale_feed_seconds=1,
             stale_threshold_seconds=10,
             minutes_to_close=120,
+            previous_snapshot=replace(snapshot(), last_close=Decimal(99)),
         )
         self.assertEqual(card1.action, "enter_long")
         self.assertEqual(card1.signal_id, card2.signal_id)
@@ -182,7 +184,8 @@ class Phase67Tests(unittest.TestCase):
                              last_close=Decimal(101), pullback_depth=Decimal("0.5"))
         buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
-                              stale_threshold_seconds=10, minutes_to_close=120)
+                              stale_threshold_seconds=10, minutes_to_close=120,
+                              previous_snapshot=replace(up, last_close=Decimal("100.9")))
         self.assertEqual(buy.display_action, "BUY")
 
         down = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
@@ -193,6 +196,38 @@ class Phase67Tests(unittest.TestCase):
                                stale_threshold_seconds=10, minutes_to_close=120,
                                position_quantity=Decimal(1), previous_snapshot=down)
         self.assertEqual(sell.display_action, "SELL")
+
+    def test_trend_day_long_allows_quarter_atr_vwap_dip_but_requires_bullish_close(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        aligned_dip = replace(
+            snapshot(), last_close=Decimal("99.6"), vwap=Decimal(100),
+            pullback_depth=Decimal("0.30"),
+        )
+        previous = replace(aligned_dip, last_close=Decimal("99.5"))
+        card = engine.evaluate(
+            timestamp=aligned_dip.timestamp,
+            symbol="AAPL",
+            snapshot=aligned_dip,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+            previous_snapshot=previous,
+        )
+        self.assertEqual(card.action, "enter_long")
+
+        no_confirmation = engine.evaluate(
+            timestamp=aligned_dip.timestamp,
+            symbol="AAPL",
+            snapshot=aligned_dip,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+        )
+        self.assertNotEqual(no_confirmation.action, "enter_long")
+        self.assertIn("bullish_close_confirmation_not_met", no_confirmation.rejected_gates)
 
     def test_false_positive_filters(self):
         policy = TradingPolicy(MARKETS, "policy-test")

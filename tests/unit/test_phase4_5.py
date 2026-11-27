@@ -99,9 +99,10 @@ class Phase45Tests(unittest.TestCase):
         bars = [Bar(start, start + timedelta(minutes=1), Decimal(100), Decimal(101), Decimal(99), Decimal(100), Decimal(10), 1),
                 Bar(start + timedelta(minutes=1), start + timedelta(minutes=2), Decimal(100), Decimal(999), Decimal(99), Decimal(200), Decimal(10), 1)]
         at_t = start + timedelta(minutes=1)
-        snapshot = feature_snapshot(bars, at_t)
+        session = {"session_timezone": "UTC", "session_open": None, "session_close": None}
+        snapshot = feature_snapshot(bars, at_t, **session)
         self.assertEqual(snapshot.vwap, Decimal(100))
-        self.assertEqual(causal_vwap(bars, at_t), Decimal(100))
+        self.assertEqual(causal_vwap(bars, at_t, **session), Decimal(100))
 
     def test_vwap_resets_at_utc_day_boundary(self) -> None:
         start = datetime(2026, 11, 20, 23, 58, tzinfo=UTC)
@@ -111,10 +112,16 @@ class Phase45Tests(unittest.TestCase):
             Bar(start + timedelta(minutes=2), start + timedelta(minutes=3), Decimal(200), Decimal(200),
                 Decimal(200), Decimal(200), Decimal(1), 1),
         ]
-        self.assertEqual(causal_vwap(bars, start + timedelta(minutes=3)), Decimal(200))
+        self.assertEqual(
+            causal_vwap(
+                bars, start + timedelta(minutes=3),
+                session_timezone="UTC", session_open=None, session_close=None,
+            ),
+            Decimal(200),
+        )
 
     def test_default_trend_window_preserves_macro_direction_through_pullback(self) -> None:
-        start = datetime(2026, 11, 20, tzinfo=UTC)
+        start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
         closes = [Decimal(100 + i) for i in range(19)] + [
             Decimal(117), Decimal(116), Decimal(115), Decimal(114), Decimal(113),
         ]
@@ -129,7 +136,7 @@ class Phase45Tests(unittest.TestCase):
         self.assertEqual(causal_trend_structure(bars, timestamp)[0], "up")
 
     def test_trend_window_below_minimum_atr_displacement_is_sideways(self) -> None:
-        start = datetime(2026, 11, 20, tzinfo=UTC)
+        start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
         bars = [
             Bar(start + timedelta(minutes=5 * i), start + timedelta(minutes=5 * (i + 1)),
                 Decimal(100) + Decimal("0.02") * i,
@@ -151,10 +158,37 @@ class Phase45Tests(unittest.TestCase):
         self.assertEqual(move_room, Decimal(0))
 
     def test_atr_is_causal(self) -> None:
-        start = datetime(2026, 11, 20, tzinfo=UTC)
+        start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
         bars = [Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1), Decimal(value), Decimal(value + 2), Decimal(value - 2), Decimal(value), Decimal(1), 1)
                 for i, value in enumerate((100, 102, 104))]
-        self.assertIsNotNone(causal_atr(bars, start + timedelta(minutes=3)))
+        self.assertIsNotNone(causal_atr(
+            bars, start + timedelta(minutes=3),
+            session_timezone="UTC", session_open=None, session_close=None,
+        ))
+
+    def test_features_reset_at_exchange_open_and_keep_prior_session_targets(self) -> None:
+        prior_start = datetime(2026, 9, 1, 13, 30, tzinfo=UTC)
+        today_start = datetime(2026, 9, 2, 13, 30, tzinfo=UTC)
+        prior = [
+            Bar(prior_start + timedelta(minutes=5 * i), prior_start + timedelta(minutes=5 * (i + 1)),
+                Decimal(150), Decimal(155), Decimal(145), Decimal(150), Decimal(10), 1)
+            for i in range(2)
+        ]
+        today = [
+            Bar(today_start + timedelta(minutes=5 * i), today_start + timedelta(minutes=5 * (i + 1)),
+                Decimal(100 + i), Decimal(101 + i), Decimal(99 + i), Decimal(100 + i), Decimal(10), 1)
+            for i in range(6)
+        ]
+        bars = prior + today
+        snapshot = feature_snapshot(bars, today[-1].bar_end)
+
+        self.assertEqual(snapshot.vwap, Decimal("102.5"))
+        self.assertEqual(snapshot.trend, "up")
+        self.assertEqual(snapshot.last_close, Decimal(105))
+        self.assertEqual(snapshot.structure_target, Decimal(106))
+        self.assertEqual(snapshot.structure_source, "SESSION_HIGH")
+        self.assertEqual(snapshot.structure_target_continuation, Decimal(155))
+        self.assertEqual(snapshot.structure_source_continuation, "PRIOR_SESSION_HIGH")
 
 
 if __name__ == "__main__":

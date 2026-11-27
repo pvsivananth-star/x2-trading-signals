@@ -63,9 +63,23 @@ class StructuralTargetTests(unittest.TestCase):
         card = engine.evaluate(timestamp=NOW, symbol="AAPL", snapshot=_snap(structure_target=None,
                                pullback_depth=Decimal("0.5"), rvol=Decimal("1.2")),
                                regime=Regime.TREND_DAY, stale_feed_seconds=1,
-                               stale_threshold_seconds=10, minutes_to_close=120)
+                               stale_threshold_seconds=10, minutes_to_close=120,
+                               previous_snapshot=replace(_snap(), last_close=Decimal("99.9")))
         self.assertEqual(card.action, "enter_long")
         self.assertNotIn("insufficient_reward_to_risk", card.rejected_gates)
+
+    def test_trend_day_long_ignores_session_high_and_uses_continuation_space(self):
+        snap = _snap(
+            structure_target=Decimal(101),
+            structure_source="SESSION_HIGH",
+            structure_target_continuation=None,
+        )
+        lv = projected_levels(
+            snap, Decimal("3.5"), Decimal("4.0"), Decimal("1.0"),
+            Decimal("0.0010"), Decimal("0.0005"), regime=Regime.TREND_DAY,
+        )
+        self.assertEqual(lv.target, Decimal(107))
+        self.assertEqual(lv.target_source, "ATR_OPEN_SPACE")
 
 
 class StructureDetectionTests(unittest.TestCase):

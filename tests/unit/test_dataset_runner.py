@@ -40,6 +40,10 @@ class SessionTimingTests(unittest.TestCase):
         self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "US_EQUITIES"), 15)
         self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 21, 0, tzinfo=UTC), "US_EQUITIES"), 0)
 
+    def test_equity_minutes_to_close_tracks_dst(self):
+        self.assertEqual(minutes_to_close(datetime(2026, 9, 2, 19, 45, tzinfo=UTC), "US_EQUITIES"), 15)
+        self.assertEqual(minutes_to_close(datetime(2026, 9, 2, 20, 0, tzinfo=UTC), "US_EQUITIES"), 0)
+
     def test_commodity_minutes_to_close(self):
         self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "US_COMMODITIES"), 15)
 
@@ -53,7 +57,7 @@ class SessionTimingTests(unittest.TestCase):
         )
         self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
 
-    def test_regime_uses_rolling_causal_displacement(self):
+    def test_regime_uses_current_session_displacement_after_six_bars(self):
         start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
         flat = [
             Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
@@ -70,6 +74,26 @@ class SessionTimingTests(unittest.TestCase):
         self.assertEqual(causal_regime(flat, flat[-1].bar_end), Regime.CHOP_DAY)
         self.assertEqual(causal_regime(trending, trending[-1].bar_end), Regime.TREND_DAY)
         self.assertEqual(causal_regime(trending, trending[0].bar_end), Regime.CHOP_DAY)
+        self.assertEqual(causal_regime(trending[:5], trending[4].bar_end), Regime.CHOP_DAY)
+
+    def test_regime_recognizes_intraday_range_expansion_without_net_displacement(self):
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(
+                start + timedelta(minutes=i),
+                start + timedelta(minutes=i + 1),
+                Decimal(100),
+                Decimal("100.5"),
+                Decimal("99.5"),
+                Decimal(100),
+                Decimal(100),
+                1,
+            )
+            for i in range(5)
+        ]
+        bars.append(Bar(start + timedelta(minutes=5), start + timedelta(minutes=6),
+                        Decimal(100), Decimal(110), Decimal(90), Decimal(100), Decimal(100), 1))
+        self.assertEqual(causal_regime(bars, bars[-1].bar_end), Regime.TREND_DAY)
 
 
 class CostRuleTests(unittest.TestCase):
@@ -128,11 +152,11 @@ class CostRuleTests(unittest.TestCase):
             stop_mult = Decimal("0.75")
 
             def __init__(self):
-                self.calls = 0
+                self.entered = False
 
-            def evaluate(self, **_kwargs):
-                self.calls += 1
-                if self.calls == 1:
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
                     return SimpleNamespace(action="enter_long", parameters={"target": "110"})
                 return SimpleNamespace(action="hold", parameters={})
 

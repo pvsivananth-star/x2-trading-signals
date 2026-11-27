@@ -46,14 +46,19 @@ def classify_reaction_zone(depth: Decimal | None) -> str | None:
     return None
 
 
-def _requirement_met(requirement: str | None, snapshot: FeatureSnapshot, side: str) -> bool:
+def _requirement_met(
+    requirement: str | None,
+    snapshot: FeatureSnapshot,
+    side: str,
+    vwap_tolerance: Decimal = Decimal(0),
+) -> bool:
     if requirement is None:
         return True
     if snapshot.last_close is None or snapshot.vwap is None:
         return False
     # Long: close back at or above VWAP. Short: close back at or below VWAP (mirror).
     if side == "long":
-        return snapshot.last_close >= snapshot.vwap
+        return snapshot.last_close >= snapshot.vwap - vwap_tolerance
     return snapshot.last_close <= snapshot.vwap
 
 
@@ -61,8 +66,19 @@ def _pullback_depth(snapshot: FeatureSnapshot, side: str) -> Decimal | None:
     return snapshot.pullback_depth if side == "long" else snapshot.pullback_depth_short
 
 
-def _structure_target(snapshot: FeatureSnapshot, side: str) -> tuple[Decimal | None, str | None]:
+def _structure_target(
+    snapshot: FeatureSnapshot,
+    side: str,
+    regime: Regime | None = None,
+) -> tuple[Decimal | None, str | None]:
     if side == "long":
+        if regime is Regime.TREND_DAY:
+            target = snapshot.structure_target_continuation
+            source = snapshot.structure_source_continuation
+            if target is not None:
+                return target, source
+            if snapshot.structure_source == "SESSION_HIGH":
+                return None, None
         return snapshot.structure_target, snapshot.structure_source
     return snapshot.structure_target_short, snapshot.structure_source_short
 
@@ -78,7 +94,7 @@ class ProjectedLevels:
 
 def projected_levels(snapshot: FeatureSnapshot, open_space_mult: Decimal, max_mult: Decimal,
                      stop_mult: Decimal, roundtrip_cost: Decimal, slippage_buffer: Decimal,
-                     side: str = "long") -> ProjectedLevels | None:
+                     side: str = "long", regime: Regime | None = None) -> ProjectedLevels | None:
     """Structural-primary target for an entry at last_close, mirrored for shorts.
 
     Long:  structure above entry (nearest), capped at entry + max*ATR; open space -> entry + open*ATR.
@@ -90,7 +106,7 @@ def projected_levels(snapshot: FeatureSnapshot, open_space_mult: Decimal, max_mu
         return None
     entry = snapshot.last_close
     atr = snapshot.atr
-    structure, src = _structure_target(snapshot, side)
+    structure, src = _structure_target(snapshot, side, regime)
     sign = Decimal(1) if side == "long" else Decimal(-1)
     if structure is None:
         target = entry + sign * open_space_mult * atr
@@ -254,23 +270,37 @@ class ConfluenceV1:
             elif snapshot.trend == "down" and "short" in self.sides:
                 side_used = "short"
         if position_quantity == 0 and side_used is not None and policy.allowed and market is not None:
-            vwap_aligned = (
-                last is not None
-                and snapshot.vwap is not None
-                and (last > snapshot.vwap if side_used == "long" else last < snapshot.vwap)
-            )
-            if snapshot.vwap is None or last is None:
+            trend_day_long = side_used == "long" and regime is Regime.TREND_DAY
+            vwap_aligned = False
+            if trend_day_long and last is not None and snapshot.vwap is not None and snapshot.atr is not None:
+                vwap_aligned = last >= snapshot.vwap - Decimal("0.25") * snapshot.atr
+            elif last is not None and snapshot.vwap is not None:
+                vwap_aligned = last > snapshot.vwap if side_used == "long" else last < snapshot.vwap
+            if snapshot.vwap is None or last is None or (trend_day_long and snapshot.atr is None):
                 gates.append("vwap_alignment_unavailable")
             elif not vwap_aligned:
                 gates.append("vwap_alignment_not_met")
+            bullish_close_confirmed = (
+                not trend_day_long
+                or (
+                    previous_snapshot is not None
+                    and last is not None
+                    and previous_snapshot.last_close is not None
+                    and last > previous_snapshot.last_close
+                )
+            )
+            if not bullish_close_confirmed:
+                gates.append("bullish_close_confirmation_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
             elif snapshot.rvol is None:
                 gates.append("rvol_unavailable")
             elif snapshot.rvol < slot_rvol:
                 gates.append("rvol_below_threshold")
-            levels = projected_levels(snapshot, self.target_mult, self.max_target_mult, self.stop_mult,
-                                      self.roundtrip_cost, self.slippage_buffer, side_used)
+            levels = projected_levels(
+                snapshot, self.target_mult, self.max_target_mult, self.stop_mult,
+                self.roundtrip_cost, self.slippage_buffer, side_used, regime,
+            )
             sufficient_room = False
             if levels is None:
                 gates.append("move_room_unavailable")
@@ -287,11 +317,16 @@ class ConfluenceV1:
                 gates.append("outside_reaction_zone")
             else:
                 _lo, _hi, size_weight, requirement = REACTION_ZONES[zone]
-                if not _requirement_met(requirement, snapshot, side_used):
+                vwap_tolerance = (
+                    Decimal("0.25") * snapshot.atr
+                    if trend_day_long and snapshot.atr is not None
+                    else Decimal(0)
+                )
+                if not _requirement_met(requirement, snapshot, side_used, vwap_tolerance):
                     gates.append(f"{requirement}_not_met")
                     zone = None
             if (zone is not None and sufficient_room and "rvol_below_threshold" not in gates
-                    and "rvol_unavailable" not in gates and vwap_aligned):
+                    and "rvol_unavailable" not in gates and vwap_aligned and bullish_close_confirmed):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
         inputs = {

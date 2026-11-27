@@ -26,6 +26,13 @@ def _snap(**overrides) -> FeatureSnapshot:
 def _eval(engine, snap, **kwargs):
     base = {"timestamp": NOW, "symbol": "AAPL", "regime": Regime.TREND_DAY, "stale_feed_seconds": 1,
             "stale_threshold_seconds": 10, "minutes_to_close": 120}
+    if (
+        "previous_snapshot" not in kwargs
+        and not kwargs.get("position_quantity", 0)
+        and snap.trend == "up"
+        and snap.last_close is not None
+    ):
+        base["previous_snapshot"] = replace(snap, last_close=snap.last_close - Decimal("0.1"))
     base.update(kwargs)
     return engine.evaluate(snapshot=snap, **base)
 
@@ -100,7 +107,7 @@ class ExitContractTests(unittest.TestCase):
 
 class PullbackDepthTests(unittest.TestCase):
     def test_depth_ignores_bars_after_timestamp(self):
-        start = datetime(2026, 11, 20, 14, 0, tzinfo=UTC)
+        start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
         bars = [Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
                     Decimal(100), Decimal(110), Decimal(90), Decimal(100), Decimal(1), 1)
                 for i in range(5)]

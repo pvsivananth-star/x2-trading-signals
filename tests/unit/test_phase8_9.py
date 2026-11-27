@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from app.actors import ActorRuntime
 from app.api import ReadAPI, ReadAPIServer
 from app.execution import DemoBroker
-from app.feeds import FeedStore, load_feed_config
+from app.features import FeatureSnapshot
+from app.feeds import Candle, FeedStore, load_feed_config
 from app.policy import TradingPolicy
 from app.regime import Regime
 from app.strategy import ConfluenceV1
@@ -133,6 +134,43 @@ class Phase89Tests(unittest.TestCase):
         actor = ActorRuntime(store, policy, ConfluenceV1(strategy_config, policy), interval="1m")
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
+
+    def test_actor_does_not_use_previous_session_close_as_bullish_confirmation(self):
+        now = datetime(2026, 11, 23, 14, 35, tzinfo=UTC)
+        prior = FeatureSnapshot(
+            datetime(2026, 11, 20, 20, 0, tzinfo=UTC),
+            None, None, None, None, None, None, None, None, "unknown", "range", None,
+            last_close=Decimal(99),
+        )
+        candle = Candle(
+            datetime(2026, 11, 23, 14, 30, tzinfo=UTC),
+            now,
+            Decimal(100),
+            Decimal(101),
+            Decimal(99),
+            Decimal(100),
+            Decimal(10),
+        )
+        spec = SimpleNamespace(symbol="AAPL", enabled=True, category="equity")
+        store = SimpleNamespace(
+            config=SimpleNamespace(symbols=(spec,)),
+            bars=lambda *_args: [candle],
+            stale_seconds=lambda *_args: 1,
+        )
+        captured = {}
+
+        class CaptureStrategy:
+            def evaluate(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(rejected_gates=(), display_action="HOLD", signal_id="id", reason="")
+
+        actor = ActorRuntime(store, self.policy, CaptureStrategy())
+        actor._previous_snapshots["AAPL"] = prior
+
+        actor.evaluate_once(as_of=now)
+
+        self.assertIsNone(captured["previous_snapshot"])
+        self.assertEqual(captured["snapshot"].last_close, Decimal(100))
 
     def test_audited_backtest_report_contract(self):
         from app.backtest.report import run_audited_backtest
