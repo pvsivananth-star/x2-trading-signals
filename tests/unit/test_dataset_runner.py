@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.backtest.bars import Bar
 from app.backtest.dataset_runner import (
@@ -14,6 +15,7 @@ from app.backtest.dataset_runner import (
     Position,
     Trade,
     _commission,
+    _cost_model,
     _intrabar_exit,
     causal_regime,
     entry_costs,
@@ -49,6 +51,9 @@ class SessionTimingTests(unittest.TestCase):
 
     def test_crypto_has_no_session_clock(self):
         self.assertIsNone(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "CRYPTO_MAJORS"))
+
+    def test_unknown_profile_uses_default_session_clock(self):
+        self.assertEqual(minutes_to_close(datetime(2026, 11, 2, 20, 45, tzinfo=UTC), "UNKNOWN"), 15)
 
     def test_default_profile_includes_requested_instruments(self):
         self.assertEqual(
@@ -132,10 +137,22 @@ class CostRuleTests(unittest.TestCase):
         self.assertTrue(values["_slippage_on"])
 
     def test_crypto_cost_fields_match_crypto_spot_schema(self):
-        from app.backtest.dataset_runner import _cost_model
         for allow_estimates in (False, True):
             _values, excluded = _cost_model(self.costs, "CRYPTO_MAJORS", allow_estimates)
             self.assertEqual(excluded, ["commission", "spread_pct_full"])
+
+    def test_unmapped_cost_profile_uses_generic_cost_fields(self):
+        values, excluded = _cost_model(self.costs, "UK_LSE", False)
+        self.assertIn("commission", values)
+        self.assertIn("spread_pct_full", values)
+        self.assertEqual(excluded, ["commission", "spread_pct_full"])
+
+    def test_unknown_profile_runs_with_default_session(self):
+        engine = SimpleNamespace(evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
+        result = run_symbol("UNKNOWN", [_bar(0, "100", "101", "99", "100")], "UNKNOWN",
+                            engine, None, self.costs, Decimal(25000), Decimal("0.0025"), False)
+        self.assertFalse(result["net_available"])
+        self.assertEqual(result["excluded_cost_fields"], ["commission", "spread_pct_full"])
 
     def test_commodity_costs_inherit_etf_fees_and_are_available(self):
         from app.backtest.dataset_runner import _cost_model
@@ -147,7 +164,7 @@ class CostRuleTests(unittest.TestCase):
                             Decimal(25000), Decimal("0.0025"), False)
         self.assertTrue(result["net_available"])
 
-    def test_commodity_quantities_are_floored_to_whole_shares(self):
+    def test_whole_share_profiles_floor_but_crypto_remains_fractional(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
 
@@ -160,17 +177,31 @@ class CostRuleTests(unittest.TestCase):
                     return SimpleNamespace(action="enter_long", parameters={"target": "110"})
                 return SimpleNamespace(action="hold", parameters={})
 
-        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
-        bars = [
-            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
-                Decimal(100), Decimal(101), Decimal(99), Decimal(100), Decimal(100), 1)
-            for i in range(22)
-        ]
         policy = TradingPolicy.from_yaml("config/markets_17.yaml")
-        result = run_symbol("GLD", bars, "US_COMMODITIES", EntryOnceEngine(), policy, self.costs,
-                            Decimal(25000), Decimal("0.0025"), False)
-        self.assertEqual(result["trades"][0].risk_amount, Decimal(20))
-        self.assertEqual(result["trades"][0].qty, Decimal(13))
+        for symbol, profile, start, expected_qty in (
+            ("GLD", "US_COMMODITIES", datetime(2026, 11, 2, 14, 30, tzinfo=UTC), Decimal(13)),
+            ("NIFTYBEES.NS", "INDIA_NSE", datetime(2026, 11, 2, 3, 45, tzinfo=UTC), Decimal(13)),
+            ("BTC-USD", "CRYPTO_MAJORS", datetime(2026, 11, 2, tzinfo=UTC), Decimal(20) / Decimal("1.5")),
+        ):
+            bars = [
+                Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                    Decimal(100), Decimal(101), Decimal(99), Decimal(100), Decimal(100), 1)
+                for i in range(22)
+            ]
+            result = run_symbol(symbol, bars, profile, EntryOnceEngine(), policy, self.costs,
+                                Decimal(25000), Decimal("0.0025"), False)
+            self.assertEqual(result["trades"][0].risk_amount, Decimal(20))
+            self.assertEqual(result["trades"][0].qty, expected_qty)
+
+    def test_run_dataset_does_not_duplicate_configured_core_symbols(self):
+        with patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory:
+            run_dataset(
+                FIXTURE,
+                profile_map={"SPY": "US_EQUITIES"},
+                instrument_symbols={999: "SPY"},
+            )
+        markets = policy_factory.call_args.args[0]["markets"]
+        self.assertEqual(markets["US_EQUITIES"]["core_symbols"].count("SPY"), 1)
 
     def test_calibrated_market_thresholds(self):
         import yaml

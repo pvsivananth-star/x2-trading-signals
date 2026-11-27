@@ -43,36 +43,82 @@ from app.real_data import group_bars, load_bar_records
 from app.regime import Regime
 from app.strategy import ConfluenceV1
 
-# Synthetic instruments inherit the threshold profile of a real market, so the gates are
-# exercised with production-like numbers. The mapping is explicit and reported.
+# Synthetic and multi-asset instruments inherit the threshold profile of their configured market.
 DEFAULT_PROFILE = {
     "SIM-EQ": "US_EQUITIES",
     "SIM-COIN": "CRYPTO_MAJORS",
     "SPY": "US_EQUITIES",
+    "NVDA": "US_EQUITIES",
     "GLD": "US_COMMODITIES",
+    "USO": "US_COMMODITIES",
     "BTC-USD": "CRYPTO_MAJORS",
+    "ETH-USD": "CRYPTO_MAJORS",
+    "NIFTYBEES.NS": "INDIA_NSE",
+    "RELIANCE.NS": "INDIA_NSE",
+    "XIU.TO": "CANADA_TSX",
+    "ISF.L": "UK_LSE",
+    "SAP.DE": "GERMANY_XETRA",
+    "ASML.AS": "NETHERLANDS_AEX",
+    "1306.T": "JAPAN_TSE",
+    "D05.SI": "SINGAPORE_SGX",
+    "BHP.AX": "AUSTRALIA_ASX",
+    "005930.KS": "KOREA_KRX",
 }
-COST_SECTION = {
-    "US_EQUITIES": "US_EQUITIES",
-    "US_COMMODITIES": "US_ETF",
-    "CRYPTO_MAJORS": "CRYPTO_BTC_SPOT",
-}
+
 _US_EQUITY_COST_FIELDS = (
     "commission_per_share", "commission_min_per_order", "commission_max_pct_of_trade",
     "sec_fee_sell_rate", "finra_taf_sell_per_share", "finra_cat_per_share",
     "clearing_nscc_dtc_per_share", "spread_pct_full", "slippage_pct_per_side",
     "exchange_fee_per_share",
 )
-COST_FIELDS = {
+
+COST_SECTION = {
+    "US_EQUITIES": "US_EQUITIES",
+    "US_COMMODITIES": "US_ETF",
+    "CRYPTO_MAJORS": "CRYPTO_BTC_SPOT",
+    "INDIA_NSE": "INDIA_NSE",
+    "CANADA_TSX": "CANADA_TSX",
+    "UK_LSE": "UK_LSE",
+    "GERMANY_XETRA": "GERMANY_XETRA",
+    "NETHERLANDS_AEX": "NETHERLANDS_AEX",
+    "FRANCE_EURONEXT": "FRANCE_EURONEXT",
+    "SWITZERLAND_SIX": "SWITZERLAND_SIX",
+    "ITALY_BIT": "ITALY_BIT",
+    "SPAIN_BME": "SPAIN_BME",
+    "SWEDEN_OMX": "SWEDEN_OMX",
+    "JAPAN_TSE": "JAPAN_TSE",
+    "SINGAPORE_SGX": "SINGAPORE_SGX",
+    "AUSTRALIA_ASX": "AUSTRALIA_ASX",
+    "KOREA_KRX": "KOREA_KRX",
+}
+
+COST_FIELDS: dict[str, tuple[str, ...]] = {
     "US_EQUITIES": _US_EQUITY_COST_FIELDS,
     "US_COMMODITIES": _US_EQUITY_COST_FIELDS,
     "CRYPTO_MAJORS": ("commission", "spread_pct_full"),
 }
 
+_EQUITY_COST_PROFILES = {"US_EQUITIES", "US_COMMODITIES"}
+_FRACTIONAL_QTY_PROFILES = {"CRYPTO_MAJORS"}
+
 MARKET_SESSIONS: dict[str, tuple[str, time | None, time | None]] = {
     "US_EQUITIES": (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE),
     "US_COMMODITIES": (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE),
     "CRYPTO_MAJORS": ("UTC", None, None),
+    "INDIA_NSE": ("Asia/Kolkata", time(9, 15), time(15, 30)),
+    "CANADA_TSX": ("America/Toronto", time(9, 30), time(16, 0)),
+    "UK_LSE": ("Europe/London", time(8, 0), time(16, 30)),
+    "GERMANY_XETRA": ("Europe/Berlin", time(9, 0), time(17, 30)),
+    "NETHERLANDS_AEX": ("Europe/Amsterdam", time(9, 0), time(17, 30)),
+    "FRANCE_EURONEXT": ("Europe/Paris", time(9, 0), time(17, 30)),
+    "SWITZERLAND_SIX": ("Europe/Zurich", time(9, 0), time(17, 30)),
+    "ITALY_BIT": ("Europe/Rome", time(9, 0), time(17, 30)),
+    "SPAIN_BME": ("Europe/Madrid", time(9, 0), time(17, 30)),
+    "SWEDEN_OMX": ("Europe/Stockholm", time(9, 0), time(17, 30)),
+    "JAPAN_TSE": ("Asia/Tokyo", time(9, 0), time(15, 0)),
+    "SINGAPORE_SGX": ("Asia/Singapore", time(9, 0), time(17, 0)),
+    "AUSTRALIA_ASX": ("Australia/Sydney", time(10, 0), time(16, 0)),
+    "KOREA_KRX": ("Asia/Seoul", time(9, 0), time(15, 30)),
 }
 
 
@@ -139,9 +185,9 @@ class Position:
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
     """Minutes from the bar end to the regular close. None for 24x7 markets (no session flat)."""
-    if profile not in MARKET_SESSIONS:
-        return None
-    timezone, _session_open, session_close = MARKET_SESSIONS[profile]
+    timezone, _session_open, session_close = MARKET_SESSIONS.get(
+        profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+    )
     if session_close is None:
         return None
     local_end = _local_dt(bar_end, timezone)
@@ -150,12 +196,13 @@ def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
 
 
 def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool) -> tuple[dict[str, Any], list[str]]:
-    section = COST_SECTION[profile]
+    section = COST_SECTION.get(profile, profile)
     estimates_enabled = allow_estimates or costs.get("allow_estimates") is True
     field_costs = {**costs, "allow_estimates": estimates_enabled}
     excluded: list[str] = []
     values: dict[str, Any] = {}
-    for name in COST_FIELDS[profile]:
+    fields = COST_FIELDS.get(profile, ("commission", "spread_pct_full"))
+    for name in fields:
         try:
             values[name] = _field(field_costs, section, name)
         except CostBlockedError:
@@ -209,8 +256,10 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
-    net_available = "commission_per_share" not in excluded and profile in {"US_EQUITIES", "US_COMMODITIES"}
-    session_timezone, session_open, session_close = MARKET_SESSIONS[profile]
+    net_available = "commission_per_share" not in excluded and profile in _EQUITY_COST_PROFILES
+    session_timezone, session_open, session_close = MARKET_SESSIONS.get(
+        profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+    )
     session = {
         "session_timezone": session_timezone,
         "session_open": session_open,
@@ -235,7 +284,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             side, stop_dist, target, entry_risk_pct = pending
             entry_px = bar.open
             qty = (risk_amount := start_equity * entry_risk_pct) / stop_dist
-            if profile in {"US_EQUITIES", "US_COMMODITIES"}:
+            if profile not in _FRACTIONAL_QTY_PROFILES:
                 qty = Decimal(math.floor(qty))
             if qty > 0:
                 ecost = entry_costs(cost_values, qty, entry_px) if net_available else None
@@ -352,7 +401,9 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
     import yaml
     markets = yaml.safe_load(Path(markets_path).read_text(encoding="utf-8"))
     for symbol, profile in profile_map.items():
-        markets["markets"][profile]["core_symbols"] = list(markets["markets"][profile]["core_symbols"]) + [symbol]
+        core_symbols = markets["markets"][profile]["core_symbols"]
+        if symbol not in core_symbols:
+            core_symbols.append(symbol)
     policy = TradingPolicy(markets, "dataset-run")
     engine = ConfluenceV1.from_yaml(strategy_path, policy)
     costs = load_costs(costs_path)
