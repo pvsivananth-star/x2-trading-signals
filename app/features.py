@@ -27,6 +27,9 @@ class FeatureSnapshot:
     pullback_depth: Decimal | None = None
     structure_target: Decimal | None = None
     structure_source: str | None = None
+    pullback_depth_short: Decimal | None = None
+    structure_target_short: Decimal | None = None
+    structure_source_short: str | None = None
 
 
 def bars_through(bars: list[Bar], timestamp: datetime) -> list[Bar]:
@@ -187,9 +190,53 @@ def causal_structure_target(bars: list[Bar], timestamp: datetime) -> tuple[Decim
     return lvl, src
 
 
+def causal_pullback_depth_short(bars: list[Bar], timestamp: datetime, lookback: int = 20) -> Decimal | None:
+    """Bounce depth for a short: (close - window low) / (window high - window low)."""
+    eligible = bars_through(bars, timestamp)
+    if lookback <= 0:
+        raise ValueError("lookback must be positive")
+    if not eligible:
+        return None
+    window = eligible[-lookback:]
+    rng = max(bar.high for bar in window) - min(bar.low for bar in window)
+    if rng <= 0:
+        return None
+    return (eligible[-1].close - min(bar.low for bar in window)) / rng
+
+
+def causal_structure_target_short(bars: list[Bar], timestamp: datetime) -> tuple[Decimal | None, str | None]:
+    """Nearest structural support strictly below the last close (short targets).
+
+    Candidates: confirmed swing low, prior session low, current session low so far.
+    Sessions are UTC-date approximations, as for the long target.
+    """
+    eligible = bars_through(bars, timestamp)
+    if not eligible:
+        return None, None
+    last = eligible[-1]
+    close = last.close
+    candidates: list[tuple[str, Decimal]] = []
+    _swing_high, swing_low = causal_swing(bars, timestamp)
+    if swing_low is not None:
+        candidates.append(("SWING_LOW", swing_low))
+    today = last.bar_start.date()
+    prior = [b for b in eligible if b.bar_start.date() < today]
+    if prior:
+        prev_day = max(b.bar_start.date() for b in prior)
+        candidates.append(("PRIOR_SESSION_LOW", min(b.low for b in prior if b.bar_start.date() == prev_day)))
+    current = [b for b in eligible if b.bar_start.date() == today]
+    candidates.append(("SESSION_LOW", min(b.low for b in current)))
+    below = [(src, lvl) for src, lvl in candidates if lvl < close]
+    if not below:
+        return None, None
+    src, lvl = max(below, key=lambda item: item[1])
+    return lvl, src
+
+
 def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
     swing_high, swing_low = causal_swing(bars, timestamp)
     structure_target, structure_source = causal_structure_target(bars, timestamp)
+    structure_target_short, structure_source_short = causal_structure_target_short(bars, timestamp)
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp)
     trend, structure = causal_trend_structure(bars, timestamp)
     last_close, pullback_depth = causal_pullback_depth(bars, timestamp)
@@ -210,4 +257,7 @@ def feature_snapshot(bars: list[Bar], timestamp: datetime) -> FeatureSnapshot:
         pullback_depth=pullback_depth,
         structure_target=structure_target,
         structure_source=structure_source,
+        pullback_depth_short=causal_pullback_depth_short(bars, timestamp),
+        structure_target_short=structure_target_short,
+        structure_source_short=structure_source_short,
     )
