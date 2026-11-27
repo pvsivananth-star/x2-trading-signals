@@ -55,6 +55,19 @@ def build_parser() -> argparse.ArgumentParser:
     audited.add_argument("--interval", type=float, default=1.0,
                          help="real seconds to sleep per replay tick; 0 disables timing")
 
+    dataset = subparsers.add_parser(
+        "backtest-dataset",
+        help="run the strategy on a local bars folder (bars.csv, instruments.csv) and write a ledger",
+    )
+    dataset.add_argument("--dir", type=Path, required=True,
+                         help="folder with bars.csv and instruments.csv (synthetic fixture or local licensed copy)")
+    dataset.add_argument("--interval", type=int, default=300, help="bar interval in seconds (60, 300, 900)")
+    dataset.add_argument("--start-equity", type=str, default="25000", help="starting equity per symbol")
+    dataset.add_argument("--risk-pct", type=str, default="0.0025", help="equity risk per trade (A-tier cap)")
+    dataset.add_argument("--allow-estimates", action="store_true",
+                         help="apply unverified cost estimates (slippage); off by default")
+    dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
+
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
     start_api.add_argument("--host", default="127.0.0.1")
     start_api.add_argument("--port", type=int, default=8080)
@@ -123,6 +136,24 @@ def main(argv: list[str] | None = None) -> int:
                 "portfolio": {"cash": str(broker.cash), "positions": len(broker.positions),
                               "fills": len(broker.fills), "orders": len(broker.orders)},
             }, indent=2))
+            return 0
+
+        if args.command == "backtest-dataset":
+            from decimal import Decimal
+
+            from app.backtest.dataset_runner import run_dataset, write_outputs
+
+            result = run_dataset(
+                args.dir,
+                interval_seconds=args.interval,
+                start_equity=Decimal(args.start_equity),
+                risk_pct=Decimal(args.risk_pct),
+                allow_estimates=args.allow_estimates,
+            )
+            write_outputs(result, args.out)
+            printable = {k: v for k, v in result.items() if k != "_trades"}
+            print(json.dumps(printable, indent=2, default=str))
+            print(f"ledger and summary written to {args.out}", file=sys.stderr)
             return 0
 
         if args.command == "backtest-report":

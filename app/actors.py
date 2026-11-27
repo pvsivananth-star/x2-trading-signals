@@ -6,10 +6,17 @@ import logging
 import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from app.actor_runtime import Actor02RegimeScanner, Actor04ExecutionEngine, Actor06TradeAnalyzer
 from app.backtest.bars import Bar
-from app.features import FeatureSnapshot, feature_snapshot
+from app.features import (
+    DEFAULT_SESSION_CLOSE,
+    DEFAULT_SESSION_OPEN,
+    DEFAULT_SESSION_TZ,
+    FeatureSnapshot,
+    feature_snapshot,
+)
 from app.feeds import FeedStore
 from app.policy import TradingPolicy
 from app.regime import Regime, StaticRegimeProvider
@@ -58,15 +65,32 @@ class ActorRuntime:
                 continue
             bars = [Bar(c.bar_start, c.bar_end, c.open, c.high, c.low, c.close,
                         c.volume, c.trade_count) for c in candle_bars]
-            snapshot = feature_snapshot(bars, now)
+            session_timezone = "UTC" if spec.category.lower() == "crypto" else DEFAULT_SESSION_TZ
+            session_open = None if session_timezone == "UTC" else DEFAULT_SESSION_OPEN
+            session_close = None if session_timezone == "UTC" else DEFAULT_SESSION_CLOSE
+            snapshot = feature_snapshot(
+                bars,
+                now,
+                session_timezone=session_timezone,
+                session_open=session_open,
+                session_close=session_close,
+            )
             regime = self.regime_provider.regime_at(now, spec.symbol)
             position_quantity = position_quantities.get(spec.symbol, 0) if position_quantities else 0
+            previous_snapshot = self._previous_snapshots.get(spec.symbol)
+            session_zone = ZoneInfo(session_timezone)
+            if (
+                previous_snapshot is not None
+                and previous_snapshot.timestamp.astimezone(session_zone).date()
+                != now.astimezone(session_zone).date()
+            ):
+                previous_snapshot = None
             card = self.strategy.evaluate(timestamp=now, symbol=spec.symbol, snapshot=snapshot,
                                           regime=regime, stale_feed_seconds=stale,
                                           stale_threshold_seconds=self.stale_threshold_seconds,
                                           position_quantity=position_quantity,
                                           live_mode=False,
-                                          previous_snapshot=self._previous_snapshots.get(spec.symbol))
+                                          previous_snapshot=previous_snapshot)
             self._previous_snapshots[spec.symbol] = snapshot
             self.cards[spec.symbol] = card
             cards.append(card)

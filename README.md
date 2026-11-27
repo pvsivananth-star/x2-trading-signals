@@ -179,7 +179,7 @@ All categories contain deterministic, synthetic 1-minute, 5-minute, and 15-minut
 
 The provider-neutral live collector foundation supports replay, bounded exponential reconnect backoff, terminal failure, in-memory restart checkpoints, event/sequence/venue-ID dedupe, health and lag reporting, stale-feed blocking, and graceful stop/restart. The existing Binance parser supplies trade payload adaptation only; no live WebSocket socket or network transport is implemented.
 
-Quality findings cover required fields, positive values, UTC timestamps, symbol mapping, ordering, dedupe, sequence gaps, and timestamp gaps. Causal VWAP, ATR, RVOL, swing, Fibonacci zones, trend/structure, and net MoveRoom calculations are cutoff at time `t` and exclude bars ending after `t`.
+Quality findings cover required fields, positive values, UTC timestamps, symbol mapping, ordering, dedupe, sequence gaps, and timestamp gaps. US equity and commodity features use the regular 09:30–16:00 `America/New_York` session (including daylight-saving changes); continuous crypto features reset on the UTC calendar day. VWAP, ATR, RVOL, swing, Fibonacci zones, trend/structure, and net MoveRoom calculations are cutoff at time `t` and exclude bars ending after `t`; intraday trend and pullback windows reset at each session while prior-session highs and lows remain structural references.
 
 The existing Binance BTCUSDT files remain an optional crypto sample implementation. They are not a system default or required for EQ, ETF, index, gold, oil, or provider-neutral tests.
 
@@ -192,6 +192,8 @@ python -m app.cli load-fixtures
 ## Regime, Policy, Replay, and Backtesting
 
 Phases 6 and 7 now provide provider-neutral `NEWS_DAY`, `CHOP_DAY`, and `TREND_DAY` regimes; a fail-closed, versioned policy; and the causal `Confluence_v1` signal engine. Decision cards include gate rejections, Fib zone, MoveRoom, configuration version, deterministic signal ID, and dedupe key. Probationary and disabled markets and live routing remain blocked.
+
+The dataset backtest classifies each session as `CHOP_DAY` until six session bars are available, then uses session-open displacement (1.25× ATR) or intraday range (2.25× ATR) to confirm `TREND_DAY`. Trend-day longs may target prior-session/swing continuation levels or ATR open space instead of being capped by the current session high; they also require a rising close and allow a maximum 0.25× ATR dip below VWAP. Short-side entry rules are unchanged.
 
 Replay clocks consume normalized in-memory event feeds and existing `Trade`/`Bar` rollups; replay currently reuses the causal feature/bar path, while the Phase-6 strategy card API remains available for callers rather than an internal replay-loop dependency. The replay run exposes chronological and walk-forward splits, market/limit/partial/rejected simulation, spread/slippage/fee configuration, quality gap thresholds, deterministic provenance, and backtest metrics (profit factor, drawdown, win rate, expectancy, streaks, exposure, and turnover). Migration `005_backtest_tables.sql` adds optional PostgreSQL audit storage; unit tests do not require PostgreSQL.
 

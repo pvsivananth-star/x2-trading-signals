@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -52,6 +53,7 @@ STRATEGY = {
         "enabled": True,
         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
         "timeframes": {"discovery_mins": 30, "swing_mins": 15, "signal_mins": 5},
+        "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005},
     }
 }
 
@@ -60,7 +62,7 @@ def snapshot() -> FeatureSnapshot:
     now = datetime(2026, 11, 20, tzinfo=UTC)
     return FeatureSnapshot(
         now,
-        Decimal(100),
+        Decimal(99),
         Decimal(2),
         Decimal("1.2"),
         Decimal(105),
@@ -88,6 +90,7 @@ class Phase67Tests(unittest.TestCase):
             stale_feed_seconds=1,
             stale_threshold_seconds=10,
             minutes_to_close=120,
+            previous_snapshot=replace(snapshot(), last_close=Decimal(99)),
         )
         card2 = engine.evaluate(
             timestamp=datetime(2026, 11, 20, tzinfo=UTC),
@@ -97,6 +100,7 @@ class Phase67Tests(unittest.TestCase):
             stale_feed_seconds=1,
             stale_threshold_seconds=10,
             minutes_to_close=120,
+            previous_snapshot=replace(snapshot(), last_close=Decimal(99)),
         )
         self.assertEqual(card1.action, "enter_long")
         self.assertEqual(card1.signal_id, card2.signal_id)
@@ -110,7 +114,7 @@ class Phase67Tests(unittest.TestCase):
         policy = TradingPolicy(MARKETS, "policy-test")
         engine = ConfluenceV1(STRATEGY, policy)
         negative = FeatureSnapshot(
-            snapshot().timestamp, Decimal(100), Decimal(2), Decimal("1.2"),
+            snapshot().timestamp, Decimal(100), Decimal(0), Decimal("1.2"),
             Decimal(105), Decimal(95), Decimal(98), Decimal(100), Decimal(102),
             "up", "higher-highs-higher-lows", Decimal("-0.10"),
             last_close=Decimal(100), pullback_depth=Decimal("0.5"),
@@ -126,7 +130,24 @@ class Phase67Tests(unittest.TestCase):
         )
         self.assertEqual(card.action, "hold")
         self.assertEqual(card.display_action, "HOLD")
-        self.assertIn("insufficient_move_room", card.rejected_gates)
+        self.assertIn("move_room_unavailable", card.rejected_gates)  # zero ATR fails closed
+
+    def test_long_vwap_alignment_is_required_in_every_reaction_zone(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        for depth in (Decimal("0.30"), Decimal("0.50"), Decimal("0.70")):
+            misaligned = replace(snapshot(), vwap=Decimal(101), pullback_depth=depth)
+            card = engine.evaluate(
+                timestamp=misaligned.timestamp,
+                symbol="AAPL",
+                snapshot=misaligned,
+                regime=Regime.TREND_DAY,
+                stale_feed_seconds=1,
+                stale_threshold_seconds=10,
+                minutes_to_close=120,
+            )
+            self.assertNotEqual(card.action, "enter_long")
+            self.assertIn("vwap_alignment_not_met", card.rejected_gates)
 
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")
@@ -163,17 +184,51 @@ class Phase67Tests(unittest.TestCase):
                              last_close=Decimal(101), pullback_depth=Decimal("0.5"))
         buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
-                              stale_threshold_seconds=10, minutes_to_close=120)
+                              stale_threshold_seconds=10, minutes_to_close=120,
+                              previous_snapshot=replace(up, last_close=Decimal("100.9")))
         self.assertEqual(buy.display_action, "BUY")
 
         down = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
                                Decimal(105), Decimal(95), Decimal(98), Decimal(100),
-                               Decimal(102), "down", "lower-highs-lower-lows", Decimal("-0.008"))
+                               Decimal(102), "down", "lower-highs-lower-lows", Decimal("-0.008"),
+                               last_close=Decimal(98))
         sell = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=down,
                                regime=Regime.TREND_DAY, stale_feed_seconds=1,
                                stale_threshold_seconds=10, minutes_to_close=120,
                                position_quantity=Decimal(1), previous_snapshot=down)
         self.assertEqual(sell.display_action, "SELL")
+
+    def test_trend_day_long_allows_quarter_atr_vwap_dip_but_requires_bullish_close(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        aligned_dip = replace(
+            snapshot(), last_close=Decimal("99.6"), vwap=Decimal(100),
+            pullback_depth=Decimal("0.30"),
+        )
+        previous = replace(aligned_dip, last_close=Decimal("99.5"))
+        card = engine.evaluate(
+            timestamp=aligned_dip.timestamp,
+            symbol="AAPL",
+            snapshot=aligned_dip,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+            previous_snapshot=previous,
+        )
+        self.assertEqual(card.action, "enter_long")
+
+        no_confirmation = engine.evaluate(
+            timestamp=aligned_dip.timestamp,
+            symbol="AAPL",
+            snapshot=aligned_dip,
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=1,
+            stale_threshold_seconds=10,
+            minutes_to_close=120,
+        )
+        self.assertNotEqual(no_confirmation.action, "enter_long")
+        self.assertIn("bullish_close_confirmation_not_met", no_confirmation.rejected_gates)
 
     def test_false_positive_filters(self):
         policy = TradingPolicy(MARKETS, "policy-test")
@@ -224,6 +279,7 @@ class Phase67Tests(unittest.TestCase):
             "down",
             "lower-highs-lower-lows",
             Decimal(-2),
+            last_close=Decimal(98),
         )
         card = engine.evaluate(
             timestamp=down.timestamp,

@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from app.actors import ActorRuntime
 from app.api import ReadAPI, ReadAPIServer
 from app.execution import DemoBroker
-from app.feeds import FeedStore, load_feed_config
+from app.features import FeatureSnapshot
+from app.feeds import Candle, FeedStore, load_feed_config
 from app.policy import TradingPolicy
 from app.regime import Regime
 from app.strategy import ConfluenceV1
@@ -129,10 +130,47 @@ class Phase89Tests(unittest.TestCase):
         policy = TradingPolicy(MARKETS, "phase89")
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                        "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                        "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, policy, ConfluenceV1(strategy_config, policy), interval="1m")
         cards = actor.evaluate_once()
         self.assertEqual(cards, [])
+
+    def test_actor_does_not_use_previous_session_close_as_bullish_confirmation(self):
+        now = datetime(2026, 11, 23, 14, 35, tzinfo=UTC)
+        prior = FeatureSnapshot(
+            datetime(2026, 11, 20, 20, 0, tzinfo=UTC),
+            None, None, None, None, None, None, None, None, "unknown", "range", None,
+            last_close=Decimal(99),
+        )
+        candle = Candle(
+            datetime(2026, 11, 23, 14, 30, tzinfo=UTC),
+            now,
+            Decimal(100),
+            Decimal(101),
+            Decimal(99),
+            Decimal(100),
+            Decimal(10),
+        )
+        spec = SimpleNamespace(symbol="AAPL", enabled=True, category="equity")
+        store = SimpleNamespace(
+            config=SimpleNamespace(symbols=(spec,)),
+            bars=lambda *_args: [candle],
+            stale_seconds=lambda *_args: 1,
+        )
+        captured = {}
+
+        class CaptureStrategy:
+            def evaluate(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(rejected_gates=(), display_action="HOLD", signal_id="id", reason="")
+
+        actor = ActorRuntime(store, self.policy, CaptureStrategy())
+        actor._previous_snapshots["AAPL"] = prior
+
+        actor.evaluate_once(as_of=now)
+
+        self.assertIsNone(captured["previous_snapshot"])
+        self.assertEqual(captured["snapshot"].last_close, Decimal(100))
 
     def test_audited_backtest_report_contract(self):
         from app.backtest.report import run_audited_backtest
@@ -141,7 +179,7 @@ class Phase89Tests(unittest.TestCase):
         store = FeedStore(config)
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                          "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m")
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
 
@@ -167,7 +205,7 @@ class Phase89Tests(unittest.TestCase):
         store = FeedStore(config)
         strategy_config = {"strategy": {"id": "confluence_pullback_v1", "enabled": True,
                                          "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}}}
+                                         "timeframes": {"signal_mins": 5, "swing_mins": 15, "discovery_mins": 30}, "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005}}}
         actor = ActorRuntime(store, self.policy, ConfluenceV1(strategy_config, self.policy), interval="1m",
                              stale_threshold_seconds=config.stale_threshold_seconds)
         broker = DemoBroker(self.policy, starting_cash=Decimal(25000))
