@@ -10,6 +10,8 @@ from app.collector import (
 )
 from app.domain.events import RawTradeEvent
 from app.features import (
+    _local_dt,
+    _zone,
     causal_atr,
     causal_trend_structure,
     causal_vwap,
@@ -189,6 +191,19 @@ class Phase45Tests(unittest.TestCase):
         self.assertEqual(snapshot.structure_source, "SESSION_HIGH")
         self.assertEqual(snapshot.structure_target_continuation, Decimal(155))
         self.assertEqual(snapshot.structure_source_continuation, "PRIOR_SESSION_HIGH")
+
+    def test_timezone_and_local_datetime_conversions_are_cached(self) -> None:
+        timestamp = datetime(2026, 9, 2, 13, 30, tzinfo=UTC)
+        zone = _zone("America/New_York")
+        before = _local_dt.cache_info()
+
+        first = _local_dt(timestamp, "America/New_York")
+        second = _local_dt(timestamp, "America/New_York")
+
+        self.assertIs(_zone("America/New_York"), zone)
+        self.assertEqual(first.isoformat(), "2026-09-02T09:30:00-04:00")
+        self.assertIs(first, second)
+        self.assertGreater(_local_dt.cache_info().hits, before.hits)
 
 
 if __name__ == "__main__":

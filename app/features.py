@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from app.backtest.bars import Bar
@@ -12,6 +13,16 @@ from app.backtest.bars import Bar
 DEFAULT_SESSION_TZ = "America/New_York"
 DEFAULT_SESSION_OPEN = time(9, 30)
 DEFAULT_SESSION_CLOSE = time(16, 0)
+
+
+@lru_cache(maxsize=16)
+def _zone(name: str) -> ZoneInfo:
+    return ZoneInfo(name)
+
+
+@lru_cache(maxsize=32768)
+def _local_dt(timestamp: datetime, timezone: str) -> datetime:
+    return timestamp.astimezone(_zone(timezone))
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,9 +50,40 @@ class FeatureSnapshot:
     structure_source_continuation: str | None = None
 
 
+@dataclass(slots=True)
+class _SessionContext:
+    eligible: list[Bar]
+    history: list[Bar]
+    current: list[Bar]
+    session_date: date
+
+
 def bars_through(bars: list[Bar], timestamp: datetime) -> list[Bar]:
     """Return bars whose complete end time is at or before t; never a later bar."""
     return [bar for bar in bars if bar.bar_end <= timestamp]
+
+
+def _session_context(
+    bars: list[Bar],
+    timestamp: datetime,
+    session_timezone: str,
+    session_open: time | None,
+    session_close: time | None,
+) -> _SessionContext:
+    session_date = _local_dt(timestamp, session_timezone).date()
+    eligible = bars_through(bars, timestamp)
+    history: list[Bar] = []
+    current: list[Bar] = []
+    for bar in eligible:
+        local_start = _local_dt(bar.bar_start, session_timezone)
+        if session_open is not None and local_start.timetz().replace(tzinfo=None) < session_open:
+            continue
+        if session_close is not None and local_start.timetz().replace(tzinfo=None) >= session_close:
+            continue
+        history.append(bar)
+        if local_start.date() == session_date:
+            current.append(bar)
+    return _SessionContext(eligible, history, current, session_date)
 
 
 def _session_history(
@@ -51,16 +93,7 @@ def _session_history(
     session_open: time | None,
     session_close: time | None,
 ) -> list[Bar]:
-    zone = ZoneInfo(session_timezone)
-    history = []
-    for bar in bars_through(bars, timestamp):
-        local_start = bar.bar_start.astimezone(zone)
-        if session_open is not None and local_start.timetz().replace(tzinfo=None) < session_open:
-            continue
-        if session_close is not None and local_start.timetz().replace(tzinfo=None) >= session_close:
-            continue
-        history.append(bar)
-    return history
+    return _session_context(bars, timestamp, session_timezone, session_open, session_close).history
 
 
 def _session_bars(
@@ -71,12 +104,7 @@ def _session_bars(
     session_close: time | None = DEFAULT_SESSION_CLOSE,
 ) -> list[Bar]:
     """Return only bars from the current exchange-local session."""
-    zone = ZoneInfo(session_timezone)
-    session_date = timestamp.astimezone(zone).date()
-    return [
-        bar for bar in _session_history(bars, timestamp, session_timezone, session_open, session_close)
-        if bar.bar_start.astimezone(zone).date() == session_date
-    ]
+    return _session_context(bars, timestamp, session_timezone, session_open, session_close).current
 
 
 def causal_vwap(
@@ -86,9 +114,13 @@ def causal_vwap(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> Decimal | None:
     """Return the volume-weighted close for the current exchange-local session."""
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if not eligible:
         return None
     volume = sum((bar.volume for bar in eligible), Decimal(0))
@@ -106,10 +138,14 @@ def causal_atr(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> Decimal | None:
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
     if period <= 0:
         raise ValueError("period must be positive")
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if len(eligible) < 2:
         return None
     true_ranges: list[Decimal] = []
@@ -124,8 +160,14 @@ def causal_atr(
     return sum(selected, Decimal(0)) / Decimal(len(selected))
 
 
-def causal_rvol(bars: list[Bar], timestamp: datetime, lookback: int = 20) -> Decimal | None:
-    eligible = bars_through(bars, timestamp)
+def causal_rvol(
+    bars: list[Bar],
+    timestamp: datetime,
+    lookback: int = 20,
+    *,
+    _eligible_bars: list[Bar] | None = None,
+) -> Decimal | None:
+    eligible = _eligible_bars if _eligible_bars is not None else bars_through(bars, timestamp)
     if lookback <= 0:
         raise ValueError("lookback must be positive")
     if not eligible:
@@ -146,10 +188,14 @@ def causal_swing(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[Decimal | None, Decimal | None]:
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
     if period <= 0:
         raise ValueError("period must be positive")
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if len(eligible) < 2 * period + 1:
         return None, None
     recent = eligible[-(2 * period + 1):]
@@ -173,10 +219,14 @@ def fibonacci_zones(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
     if lookback <= 0:
         raise ValueError("lookback must be positive")
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if not eligible:
         return None, None, None
     window = eligible[-lookback:] if len(eligible) >= lookback else eligible
@@ -194,16 +244,20 @@ def causal_trend_structure(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[str, str]:
     if period <= 0:
         raise ValueError("period must be positive")
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if len(eligible) < 6:
         return "unknown", "range"
     window = eligible[-min(len(eligible), period):]
     atr = causal_atr(
         bars, timestamp, session_timezone=session_timezone,
-        session_open=session_open, session_close=session_close,
+        session_open=session_open, session_close=session_close, _context=context,
     )
     if atr is None or abs(window[-1].close - window[0].close) < Decimal("1.25") * atr:
         return "sideways", "range"
@@ -219,8 +273,15 @@ def causal_trend_structure(
     return trend, structure
 
 
-def net_move_room(bars: list[Bar], timestamp: datetime, target: Decimal, stop: Decimal) -> Decimal | None:
-    eligible = bars_through(bars, timestamp)
+def net_move_room(
+    bars: list[Bar],
+    timestamp: datetime,
+    target: Decimal,
+    stop: Decimal,
+    *,
+    _eligible_bars: list[Bar] | None = None,
+) -> Decimal | None:
+    eligible = _eligible_bars if _eligible_bars is not None else bars_through(bars, timestamp)
     if not eligible:
         return None
     last = eligible[-1].close
@@ -240,11 +301,15 @@ def causal_pullback_depth(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[Decimal | None, Decimal | None]:
     """Return (last_close, retracement) where retracement = (high - close) / (high - low) over the window."""
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
     if lookback <= 0:
         raise ValueError("lookback must be positive")
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if not eligible:
         return None, None
     window = eligible[-lookback:]
@@ -264,13 +329,17 @@ def causal_structure_target(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[Decimal | None, str | None]:
     """Nearest structural resistance strictly above the last close (long targets).
 
     Candidates: confirmed swing high, prior session high, current session high so far.
     Historical candidates are grouped by the configured exchange-local session date.
     """
-    eligible = _session_history(bars, timestamp, session_timezone, session_open, session_close)
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.history
     if not eligible:
         return None, None
     last = eligible[-1]
@@ -278,19 +347,18 @@ def causal_structure_target(
     candidates: list[tuple[str, Decimal]] = []
     swing_high, _swing_low = causal_swing(
         bars, timestamp, session_timezone=session_timezone,
-        session_open=session_open, session_close=session_close,
+        session_open=session_open, session_close=session_close, _context=context,
     )
     if swing_high is not None:
         candidates.append(("SWING_HIGH", swing_high))
-    zone = ZoneInfo(session_timezone)
-    today = timestamp.astimezone(zone).date()
-    prior = [b for b in eligible if b.bar_start.astimezone(zone).date() < today]
+    today = context.session_date
+    prior = [b for b in eligible if _local_dt(b.bar_start, session_timezone).date() < today]
     if prior:
-        prev_day = max(b.bar_start.astimezone(zone).date() for b in prior)
+        prev_day = max(_local_dt(b.bar_start, session_timezone).date() for b in prior)
         candidates.append(("PRIOR_SESSION_HIGH", max(
-            b.high for b in prior if b.bar_start.astimezone(zone).date() == prev_day
+            b.high for b in prior if _local_dt(b.bar_start, session_timezone).date() == prev_day
         )))
-    current = [b for b in eligible if b.bar_start.astimezone(zone).date() == today]
+    current = context.current
     if include_session_high and current:
         candidates.append(("SESSION_HIGH", max(b.high for b in current)))
     above = [(src, lvl) for src, lvl in candidates if lvl > close]
@@ -308,11 +376,15 @@ def causal_pullback_depth_short(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> Decimal | None:
     """Bounce depth for a short: (close - window low) / (window high - window low)."""
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
     if lookback <= 0:
         raise ValueError("lookback must be positive")
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.current
     if not eligible:
         return None
     window = eligible[-lookback:]
@@ -329,13 +401,17 @@ def causal_structure_target_short(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    _context: _SessionContext | None = None,
 ) -> tuple[Decimal | None, str | None]:
     """Nearest structural support strictly below the last close (short targets).
 
     Candidates: confirmed swing low, prior session low, current session low so far.
     Historical candidates are grouped by the configured exchange-local session date.
     """
-    eligible = _session_history(bars, timestamp, session_timezone, session_open, session_close)
+    context = _context or _session_context(
+        bars, timestamp, session_timezone, session_open, session_close
+    )
+    eligible = context.history
     if not eligible:
         return None, None
     last = eligible[-1]
@@ -343,19 +419,18 @@ def causal_structure_target_short(
     candidates: list[tuple[str, Decimal]] = []
     _swing_high, swing_low = causal_swing(
         bars, timestamp, session_timezone=session_timezone,
-        session_open=session_open, session_close=session_close,
+        session_open=session_open, session_close=session_close, _context=context,
     )
     if swing_low is not None:
         candidates.append(("SWING_LOW", swing_low))
-    zone = ZoneInfo(session_timezone)
-    today = timestamp.astimezone(zone).date()
-    prior = [b for b in eligible if b.bar_start.astimezone(zone).date() < today]
+    today = context.session_date
+    prior = [b for b in eligible if _local_dt(b.bar_start, session_timezone).date() < today]
     if prior:
-        prev_day = max(b.bar_start.astimezone(zone).date() for b in prior)
+        prev_day = max(_local_dt(b.bar_start, session_timezone).date() for b in prior)
         candidates.append(("PRIOR_SESSION_LOW", min(
-            b.low for b in prior if b.bar_start.astimezone(zone).date() == prev_day
+            b.low for b in prior if _local_dt(b.bar_start, session_timezone).date() == prev_day
         )))
-    current = [b for b in eligible if b.bar_start.astimezone(zone).date() == today]
+    current = context.current
     if current:
         candidates.append(("SESSION_LOW", min(b.low for b in current)))
     below = [(src, lvl) for src, lvl in candidates if lvl < close]
@@ -373,10 +448,12 @@ def feature_snapshot(
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
 ) -> FeatureSnapshot:
+    context = _session_context(bars, timestamp, session_timezone, session_open, session_close)
     session = {
         "session_timezone": session_timezone,
         "session_open": session_open,
         "session_close": session_close,
+        "_context": context,
     }
     swing_high, swing_low = causal_swing(bars, timestamp, **session)
     structure_target, structure_source = causal_structure_target(bars, timestamp, **session)
@@ -391,7 +468,7 @@ def feature_snapshot(
         timestamp=timestamp,
         vwap=causal_vwap(bars, timestamp, **session),
         atr=causal_atr(bars, timestamp, **session),
-        rvol=causal_rvol(bars, timestamp),
+        rvol=causal_rvol(bars, timestamp, _eligible_bars=context.eligible),
         swing_high=swing_high,
         swing_low=swing_low,
         fib_382=fib_382,
@@ -399,7 +476,13 @@ def feature_snapshot(
         fib_618=fib_618,
         trend=trend,
         structure=structure,
-        move_room=net_move_room(bars, timestamp, fib_618 or Decimal(0), fib_382 or Decimal(0)) if fib_382 is not None and fib_618 is not None else None,
+        move_room=(
+            net_move_room(
+                bars, timestamp, fib_618 or Decimal(0), fib_382 or Decimal(0),
+                _eligible_bars=context.eligible,
+            )
+            if fib_382 is not None and fib_618 is not None else None
+        ),
         last_close=last_close,
         pullback_depth=pullback_depth,
         structure_target=structure_target,

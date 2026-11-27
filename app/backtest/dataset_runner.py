@@ -24,7 +24,6 @@ from datetime import datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from app.backtest.bars import Bar
 from app.costs import CostBlockedError, _field, load_costs
@@ -33,7 +32,9 @@ from app.features import (
     DEFAULT_SESSION_OPEN,
     DEFAULT_SESSION_TZ,
     FeatureSnapshot,
-    _session_bars,
+    _local_dt,
+    _session_context,
+    _zone,
     causal_atr,
     feature_snapshot,
 )
@@ -84,7 +85,8 @@ def causal_regime(
     session_close: time | None = DEFAULT_SESSION_CLOSE,
 ) -> Regime:
     """Classify the current session after six bars using displacement or range."""
-    eligible = _session_bars(bars, timestamp, session_timezone, session_open, session_close)
+    context = _session_context(bars, timestamp, session_timezone, session_open, session_close)
+    eligible = context.current
     if len(eligible) < 6:
         return Regime.CHOP_DAY
     atr = causal_atr(
@@ -93,6 +95,7 @@ def causal_regime(
         session_timezone=session_timezone,
         session_open=session_open,
         session_close=session_close,
+        _context=context,
     )
     if atr is None:
         return Regime.CHOP_DAY
@@ -141,8 +144,8 @@ def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
     timezone, _session_open, session_close = MARKET_SESSIONS[profile]
     if session_close is None:
         return None
-    local_end = bar_end.astimezone(ZoneInfo(timezone))
-    close = datetime.combine(local_end.date(), session_close, tzinfo=ZoneInfo(timezone))
+    local_end = _local_dt(bar_end, timezone)
+    close = datetime.combine(local_end.date(), session_close, tzinfo=_zone(timezone))
     return int((close - local_end).total_seconds() // 60)
 
 
