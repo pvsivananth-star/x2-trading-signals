@@ -17,7 +17,7 @@ NOW = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)
 
 def _short(**kw):
     base = replace(snapshot(), trend="down", structure="lower-highs-lower-lows",
-                   pullback_depth=None, vwap=Decimal(100), last_close=Decimal(100), atr=Decimal(2),
+                   pullback_depth=None, vwap=Decimal(101), last_close=Decimal(100), atr=Decimal(2),
                    pullback_depth_short=Decimal("0.5"), structure_target_short=Decimal(95),
                    structure_source_short="SWING_LOW", rvol=Decimal("1.2"))
     return replace(base, **kw)
@@ -38,6 +38,13 @@ class ShortEntryTests(unittest.TestCase):
         self.assertEqual(card.display_action, "SHORT")
         self.assertEqual(card.parameters["side"], "short")
         self.assertEqual(card.parameters["target_source"], "SWING_LOW")
+
+    def test_short_vwap_alignment_is_required_in_every_reaction_zone(self):
+        for depth in (Decimal("0.30"), Decimal("0.50"), Decimal("0.70")):
+            misaligned = _short(vwap=Decimal(99), pullback_depth_short=depth)
+            card = _eval(misaligned)
+            self.assertNotEqual(card.action, "enter_short")
+            self.assertIn("vwap_alignment_not_met", card.rejected_gates)
 
     def test_short_target_is_structure_below_entry(self):
         card = _eval(_short())

@@ -128,6 +128,19 @@ class Phase45Tests(unittest.TestCase):
         self.assertEqual(causal_trend_structure(bars, timestamp, period=5)[0], "down")
         self.assertEqual(causal_trend_structure(bars, timestamp)[0], "up")
 
+    def test_trend_window_below_minimum_atr_displacement_is_sideways(self) -> None:
+        start = datetime(2026, 11, 20, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=5 * i), start + timedelta(minutes=5 * (i + 1)),
+                Decimal(100) + Decimal("0.02") * i,
+                Decimal("100.5") + Decimal("0.02") * i,
+                Decimal("99.5") + Decimal("0.02") * i,
+                Decimal(100) + Decimal("0.02") * i,
+                Decimal(1), 1)
+            for i in range(24)
+        ]
+        self.assertEqual(causal_trend_structure(bars, bars[-1].bar_end), ("sideways", "range"))
+
     def test_move_room_is_returned_as_price_relative_fraction(self) -> None:
         now = datetime(2026, 11, 20, tzinfo=UTC)
         bars = [Bar(now, now + timedelta(minutes=1), Decimal(100), Decimal(110),

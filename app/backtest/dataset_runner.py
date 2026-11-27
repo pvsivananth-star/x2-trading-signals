@@ -27,7 +27,7 @@ from typing import Any
 
 from app.backtest.bars import Bar
 from app.costs import CostBlockedError, _field, load_costs
-from app.features import FeatureSnapshot, feature_snapshot
+from app.features import FeatureSnapshot, bars_through, causal_atr, feature_snapshot
 from app.policy import TradingPolicy
 from app.real_data import group_bars, load_bar_records
 from app.regime import Regime
@@ -60,6 +60,20 @@ COST_FIELDS = {
 }
 
 EQUITY_SESSION_CLOSE = time(21, 0)  # 16:00 ET, UTC during winter time in the fixture
+
+
+def causal_regime(bars: list[Bar], timestamp: datetime, period: int = 24) -> Regime:
+    """Classify a rolling window by close displacement relative to causal ATR."""
+    eligible = bars_through(bars, timestamp)
+    if period <= 0:
+        raise ValueError("period must be positive")
+    if len(eligible) < period:
+        return Regime.CHOP_DAY
+    atr = causal_atr(bars, timestamp)
+    if atr is None:
+        return Regime.CHOP_DAY
+    displacement = abs(eligible[-1].close - eligible[-period].close)
+    return Regime.CHOP_DAY if displacement < Decimal("1.5") * atr else Regime.TREND_DAY
 
 
 @dataclass
@@ -163,7 +177,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     snaps: list[FeatureSnapshot] = [feature_snapshot(bars[: i + 1], bars[i].bar_end) for i in range(len(bars))]
     trades: list[Trade] = []
     pos: Position | None = None
-    pending: tuple[int, str] | None = None  # (side, ...) entry decided on previous bar
+    pending: tuple[int, Decimal, Decimal, Decimal] | None = None
 
     for i in range(20, len(bars)):
         bar = bars[i]
@@ -174,9 +188,9 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                 pos = None
         if pos is None and pending is not None:
-            side, stop_dist, target = pending
+            side, stop_dist, target, entry_risk_pct = pending
             entry_px = bar.open
-            qty = (risk_amount := start_equity * risk_pct) / stop_dist
+            qty = (risk_amount := start_equity * entry_risk_pct) / stop_dist
             if profile in {"US_EQUITIES", "US_COMMODITIES"}:
                 qty = Decimal(math.floor(qty))
             if qty > 0:
@@ -185,8 +199,9 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
             pending = None
         if pos is not None:
+            regime = causal_regime(bars[: i + 1], bar.bar_end)
             sig = engine.evaluate(
-                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=Regime.TREND_DAY,
+                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 position_quantity=pos.qty * pos.side, previous_snapshot=snaps[i - 1],
@@ -196,15 +211,28 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
         elif pos is None and pending is None:
+            regime = causal_regime(bars[: i + 1], bar.bar_end)
             sig = engine.evaluate(
-                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=Regime.TREND_DAY,
+                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile), previous_snapshot=snaps[i - 1],
             )
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
                 target = Decimal(sig.parameters["target"])
-                pending = (side, snaps[i].atr * engine.stop_mult, target)
+                policy_decision = policy.evaluate(
+                    timestamp=bar.bar_end,
+                    symbol=symbol,
+                    regime=regime,
+                    stale_feed_seconds=0,
+                    stale_threshold_seconds=10,
+                    minutes_to_close=minutes_to_close(bar.bar_end, profile),
+                )
+                effective_risk_pct = (
+                    min(risk_pct, Decimal(str(policy_decision.max_risk_pct)))
+                    if policy_decision.max_risk_pct is not None else risk_pct
+                )
+                pending = (side, snaps[i].atr * engine.stop_mult, target, effective_risk_pct)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]

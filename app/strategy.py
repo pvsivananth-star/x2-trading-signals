@@ -254,6 +254,15 @@ class ConfluenceV1:
             elif snapshot.trend == "down" and "short" in self.sides:
                 side_used = "short"
         if position_quantity == 0 and side_used is not None and policy.allowed and market is not None:
+            vwap_aligned = (
+                last is not None
+                and snapshot.vwap is not None
+                and (last > snapshot.vwap if side_used == "long" else last < snapshot.vwap)
+            )
+            if snapshot.vwap is None or last is None:
+                gates.append("vwap_alignment_unavailable")
+            elif not vwap_aligned:
+                gates.append("vwap_alignment_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
             elif snapshot.rvol is None:
@@ -282,7 +291,7 @@ class ConfluenceV1:
                     gates.append(f"{requirement}_not_met")
                     zone = None
             if (zone is not None and sufficient_room and "rvol_below_threshold" not in gates
-                    and "rvol_unavailable" not in gates):
+                    and "rvol_unavailable" not in gates and vwap_aligned):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
         inputs = {

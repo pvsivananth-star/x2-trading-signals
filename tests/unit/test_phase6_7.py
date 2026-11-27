@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -61,7 +62,7 @@ def snapshot() -> FeatureSnapshot:
     now = datetime(2026, 11, 20, tzinfo=UTC)
     return FeatureSnapshot(
         now,
-        Decimal(100),
+        Decimal(99),
         Decimal(2),
         Decimal("1.2"),
         Decimal(105),
@@ -128,6 +129,23 @@ class Phase67Tests(unittest.TestCase):
         self.assertEqual(card.action, "hold")
         self.assertEqual(card.display_action, "HOLD")
         self.assertIn("move_room_unavailable", card.rejected_gates)  # zero ATR fails closed
+
+    def test_long_vwap_alignment_is_required_in_every_reaction_zone(self):
+        policy = TradingPolicy(MARKETS, "policy-test")
+        engine = ConfluenceV1(STRATEGY, policy)
+        for depth in (Decimal("0.30"), Decimal("0.50"), Decimal("0.70")):
+            misaligned = replace(snapshot(), vwap=Decimal(101), pullback_depth=depth)
+            card = engine.evaluate(
+                timestamp=misaligned.timestamp,
+                symbol="AAPL",
+                snapshot=misaligned,
+                regime=Regime.TREND_DAY,
+                stale_feed_seconds=1,
+                stale_threshold_seconds=10,
+                minutes_to_close=120,
+            )
+            self.assertNotEqual(card.action, "enter_long")
+            self.assertIn("vwap_alignment_not_met", card.rejected_gates)
 
     def test_negative_policy_gates(self):
         policy = TradingPolicy(MARKETS, "policy-test")

@@ -122,6 +122,9 @@ def causal_trend_structure(bars: list[Bar], timestamp: datetime, period: int = 2
     if len(eligible) < period:
         return "unknown", "range"
     window = eligible[-period:]
+    atr = causal_atr(bars, timestamp)
+    if atr is None or abs(window[-1].close - window[0].close) < Decimal("1.25") * atr:
+        return "sideways", "range"
     highs = [bar.high for bar in window]
     lows = [bar.low for bar in window]
     trend = "up" if window[-1].close > window[0].close else "down" if window[-1].close < window[0].close else "sideways"

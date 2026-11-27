@@ -15,6 +15,7 @@ from app.backtest.dataset_runner import (
     Trade,
     _commission,
     _intrabar_exit,
+    causal_regime,
     entry_costs,
     exit_costs,
     minutes_to_close,
@@ -23,6 +24,8 @@ from app.backtest.dataset_runner import (
     summarize,
 )
 from app.costs import load_costs
+from app.policy import TradingPolicy
+from app.regime import Regime
 
 FIXTURE = Path(__file__).resolve().parents[2] / "data" / "fixtures" / "synthetic_ci"
 
@@ -49,6 +52,24 @@ class SessionTimingTests(unittest.TestCase):
             {"SPY": "US_EQUITIES", "GLD": "US_COMMODITIES", "BTC-USD": "CRYPTO_MAJORS"},
         )
         self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
+
+    def test_regime_uses_rolling_causal_displacement(self):
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        flat = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.5"), Decimal("99.5"), Decimal(100),
+                Decimal(100), 1)
+            for i in range(24)
+        ]
+        trending = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100 + i), Decimal(100 + i) + Decimal("0.5"),
+                Decimal(100 + i) - Decimal("0.5"), Decimal(100 + i), Decimal(100), 1)
+            for i in range(24)
+        ]
+        self.assertEqual(causal_regime(flat, flat[-1].bar_end), Regime.CHOP_DAY)
+        self.assertEqual(causal_regime(trending, trending[-1].bar_end), Regime.TREND_DAY)
+        self.assertEqual(causal_regime(trending, trending[0].bar_end), Regime.CHOP_DAY)
 
 
 class CostRuleTests(unittest.TestCase):
@@ -104,7 +125,7 @@ class CostRuleTests(unittest.TestCase):
 
     def test_commodity_quantities_are_floored_to_whole_shares(self):
         class EntryOnceEngine:
-            stop_mult = Decimal(1)
+            stop_mult = Decimal("0.75")
 
             def __init__(self):
                 self.calls = 0
@@ -121,17 +142,19 @@ class CostRuleTests(unittest.TestCase):
                 Decimal(100), Decimal(101), Decimal(99), Decimal(100), Decimal(100), 1)
             for i in range(22)
         ]
-        result = run_symbol("GLD", bars, "US_COMMODITIES", EntryOnceEngine(), None, self.costs,
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("GLD", bars, "US_COMMODITIES", EntryOnceEngine(), policy, self.costs,
                             Decimal(25000), Decimal("0.0025"), False)
-        self.assertEqual(result["trades"][0].qty, Decimal(31))
+        self.assertEqual(result["trades"][0].risk_amount, Decimal(20))
+        self.assertEqual(result["trades"][0].qty, Decimal(13))
 
     def test_calibrated_market_thresholds(self):
         import yaml
 
         config = yaml.safe_load(Path("config/markets_17.yaml").read_text(encoding="utf-8"))["markets"]
         expected = {
-            "US_EQUITIES": (0.0025, 0.85),
-            "US_COMMODITIES": (0.0030, 0.85),
+            "US_EQUITIES": (0.0032, 0.95),
+            "US_COMMODITIES": (0.0035, 0.95),
             "CRYPTO_MAJORS": (0.0080, 0.95),
         }
         for market, (move_room, rvol) in expected.items():
@@ -201,10 +224,13 @@ class EndToEndSyntheticTests(unittest.TestCase):
             self.assertEqual(t.entry_time.date(), t.exit_time.date())
             self.assertLessEqual(t.exit_time.hour * 60 + t.exit_time.minute, 21 * 60)
 
-    def test_equity_risk_is_quarter_percent_of_allocation(self):
+    def test_equity_risk_respects_causal_regime_cap(self):
         for t in self.trades:
             if t.symbol == "SIM-EQ":
-                self.assertEqual(t.risk_amount, Decimal(25000) * Decimal("0.0025"))
+                self.assertIn(t.risk_amount, {
+                    Decimal(25000) * Decimal("0.0008"),
+                    Decimal(25000) * Decimal("0.0025"),
+                })
 
     def test_equity_quantities_are_whole_shares(self):
         for t in self.trades:
