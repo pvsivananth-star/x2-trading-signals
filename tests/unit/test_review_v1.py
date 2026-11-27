@@ -81,7 +81,7 @@ class ReactionZoneTests(unittest.TestCase):
 
 class ExitContractTests(unittest.TestCase):
     def _down(self):
-        return _snap(trend="down", structure="lower-highs-lower-lows", move_room=Decimal(-2))
+        return _snap(trend="down", structure="lower-highs-lower-lows", move_room=Decimal(-2), vwap=Decimal(101))
 
     def test_single_bar_break_does_not_exit(self):
         card = _eval(_engine(), self._down(), position_quantity=Decimal(1))

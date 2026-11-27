@@ -190,7 +190,8 @@ class Phase67Tests(unittest.TestCase):
 
         down = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
                                Decimal(105), Decimal(95), Decimal(98), Decimal(100),
-                               Decimal(102), "down", "lower-highs-lower-lows", Decimal("-0.008"))
+                               Decimal(102), "down", "lower-highs-lower-lows", Decimal("-0.008"),
+                               last_close=Decimal(98))
         sell = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=down,
                                regime=Regime.TREND_DAY, stale_feed_seconds=1,
                                stale_threshold_seconds=10, minutes_to_close=120,
@@ -278,6 +279,7 @@ class Phase67Tests(unittest.TestCase):
             "down",
             "lower-highs-lower-lows",
             Decimal(-2),
+            last_close=Decimal(98),
         )
         card = engine.evaluate(
             timestamp=down.timestamp,

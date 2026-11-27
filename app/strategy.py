@@ -123,10 +123,18 @@ def projected_levels(snapshot: FeatureSnapshot, open_space_mult: Decimal, max_mu
     return ProjectedLevels(target, stop, gross - roundtrip_cost - slippage_buffer, rr, source)
 
 
-def _trend_broken(snapshot: FeatureSnapshot, side: str) -> bool:
-    if side == "long":
-        return snapshot.trend == "down" or snapshot.structure == "lower-highs-lower-lows"
-    return snapshot.trend == "up" or snapshot.structure == "higher-highs-higher-lows"
+def _trend_broken(snapshot: FeatureSnapshot, pos_side: str, regime: Regime) -> bool:
+    if pos_side == "long":
+        trend_broken = snapshot.trend == "down" or snapshot.structure == "lower-highs-lower-lows"
+    else:
+        trend_broken = snapshot.trend == "up" or snapshot.structure == "higher-highs-higher-lows"
+    if not trend_broken or regime is not Regime.TREND_DAY:
+        return trend_broken
+    if snapshot.last_close is None or snapshot.vwap is None:
+        return False
+    if pos_side == "long":
+        return snapshot.last_close < snapshot.vwap
+    return snapshot.last_close > snapshot.vwap
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,8 +266,8 @@ class ConfluenceV1:
                 last >= position_target if is_long else last <= position_target):
                 action = "exit_long" if is_long else "exit_short"
                 zone = "TARGET_HIT"
-            elif (_trend_broken(snapshot, side_used) and previous_snapshot is not None
-                  and _trend_broken(previous_snapshot, side_used)):
+            elif (_trend_broken(snapshot, side_used, regime) and previous_snapshot is not None
+                  and _trend_broken(previous_snapshot, side_used, regime)):
                 action = "exit_long" if is_long else "exit_short"
                 zone = "TRENDLINE_BREAK" if (
                     snapshot.structure in {"lower-highs-lower-lows", "higher-highs-higher-lows"}

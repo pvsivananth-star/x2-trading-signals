@@ -123,14 +123,14 @@ MARKET_SESSIONS: dict[str, tuple[str, time | None, time | None]] = {
 
 
 def causal_regime(
-    bars: list[Bar],
-    timestamp: datetime,
-    *,
-    session_timezone: str = DEFAULT_SESSION_TZ,
-    session_open: time | None = DEFAULT_SESSION_OPEN,
-    session_close: time | None = DEFAULT_SESSION_CLOSE,
+        bars: list[Bar],
+        timestamp: datetime,
+        *,
+        session_timezone: str = DEFAULT_SESSION_TZ,
+        session_open: time | None = DEFAULT_SESSION_OPEN,
+        session_close: time | None = DEFAULT_SESSION_CLOSE,
 ) -> Regime:
-    """Classify the current session after six bars using displacement or range."""
+    """Classify the current session after six bars using session or rolling efficiency."""
     context = _session_context(bars, timestamp, session_timezone, session_open, session_close)
     eligible = context.current
     if len(eligible) < 6:
@@ -145,14 +145,22 @@ def causal_regime(
     )
     if atr is None:
         return Regime.CHOP_DAY
-    session_displacement = abs(eligible[-1].close - eligible[0].open)
+    window = eligible[-min(len(eligible), 6):]
+    window_disp = abs(window[-1].close - window[0].open)
+    window_range = max(bar.high for bar in window) - min(bar.low for bar in window)
+    window_eff = (window_disp / window_range) if window_range > 0 else Decimal(0)
+    session_disp = abs(eligible[-1].close - eligible[0].open)
     session_range = max(bar.high for bar in eligible) - min(bar.low for bar in eligible)
     is_trend = (
-        session_displacement >= Decimal("1.25") * atr
-        or session_range >= Decimal("2.25") * atr
+            session_disp >= Decimal("1.35") * atr
+            or (window_disp >= Decimal("1.35") * atr and window_eff >= Decimal("0.45"))
+            or (
+                session_range >= Decimal("2.25") * atr
+                and window_eff >= Decimal("0.45")
+                and window_disp > 0
+            )
     )
     return Regime.TREND_DAY if is_trend else Regime.CHOP_DAY
-
 
 @dataclass
 class Trade:

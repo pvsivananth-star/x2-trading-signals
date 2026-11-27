@@ -81,6 +81,24 @@ class SessionTimingTests(unittest.TestCase):
         self.assertEqual(causal_regime(trending, trending[0].bar_end), Regime.CHOP_DAY)
         self.assertEqual(causal_regime(trending[:5], trending[4].bar_end), Regime.CHOP_DAY)
 
+    def test_regime_rejects_directionless_range_spike_and_detects_reversal_leg(self):
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        whipsaw_flat = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.5"), Decimal("99.5"), Decimal(100), Decimal(100), 1)
+            for i in range(5)
+        ]
+        whipsaw_flat.append(Bar(start + timedelta(minutes=5), start + timedelta(minutes=6),
+                                Decimal(100), Decimal(110), Decimal(90), Decimal(100), Decimal(100), 1))
+        self.assertEqual(causal_regime(whipsaw_flat, whipsaw_flat[-1].bar_end), Regime.CHOP_DAY)
+
+        reversal = whipsaw_flat + [
+            Bar(start + timedelta(minutes=6 + i), start + timedelta(minutes=7 + i),
+                Decimal(95 + i), Decimal(96 + i), Decimal(94 + i), Decimal(96 + i), Decimal(100), 1)
+            for i in range(6)
+        ]
+        self.assertEqual(causal_regime(reversal, reversal[-1].bar_end), Regime.TREND_DAY)
+
     def test_regime_recognizes_intraday_range_expansion_without_net_displacement(self):
         start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
         bars = [
@@ -98,6 +116,12 @@ class SessionTimingTests(unittest.TestCase):
         ]
         bars.append(Bar(start + timedelta(minutes=5), start + timedelta(minutes=6),
                         Decimal(100), Decimal(110), Decimal(90), Decimal(100), Decimal(100), 1))
+        bars.extend([
+            Bar(start + timedelta(minutes=6 + i), start + timedelta(minutes=7 + i),
+                Decimal(100 + i), Decimal(101) + Decimal(i), Decimal(99) + Decimal(i),
+                Decimal(100 + i), Decimal(100), 1)
+            for i in range(6)
+        ])
         self.assertEqual(causal_regime(bars, bars[-1].bar_end), Regime.TREND_DAY)
 
 
@@ -210,7 +234,7 @@ class CostRuleTests(unittest.TestCase):
         expected = {
             "US_EQUITIES": (0.0032, 0.95),
             "US_COMMODITIES": (0.0035, 0.95),
-            "CRYPTO_MAJORS": (0.0080, 0.95),
+            "CRYPTO_MAJORS": (0.0110, 1.15),
         }
         for market, (move_room, rvol) in expected.items():
             self.assertEqual(config[market]["min_net_moveroom_pct"], move_room)

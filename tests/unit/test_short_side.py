@@ -101,7 +101,7 @@ class ShortExitTests(unittest.TestCase):
         self.assertNotEqual(card.action, "exit_short")
 
     def test_confirmed_up_break_exits_short(self):
-        up = replace(_short(), trend="up", structure="higher-highs-higher-lows")
+        up = replace(_short(), trend="up", structure="higher-highs-higher-lows", vwap=Decimal(100), last_close=Decimal(101))
         card = _eval(up, position_quantity=Decimal(-1), previous_snapshot=up)
         self.assertEqual(card.action, "exit_short")
 

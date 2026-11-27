@@ -20,9 +20,10 @@ engine:
 capital_allocation_pct:
   us_equities_etfs: 0.35
   europe: 0.20
-  commodities: 0.20
-  asia_pacific: 0.15
-  india: 0.10
+  commodities: 0.15
+  india: 0.15
+  asia_pacific: 0.10
+  crypto: 0.05
 
 market_tiering:
   tier_a: ["FRANCE_EURONEXT", "JAPAN_TSE", "ASIA_PACIFIC_SLEEVE", "US_EQUITIES", "US_COMMODITIES_OIL"]
@@ -63,6 +64,8 @@ markets:
     slot_rvol_min: 0.95
     core_symbols: ["GLD", "GC=F", "USO", "CL=F"]
     excluded_symbols: ["SLV"]
+    symbol_overrides:
+      USO: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 
   CRYPTO_MAJORS:
     name: "24/7 Liquid Crypto Spot/ETFs"
@@ -72,10 +75,12 @@ markets:
     broker_route: "DEMO_OR_IBKR"
     cluster: "CRYPTO"
     cluster_risk_cap: 0.0035
-    min_net_moveroom_pct: 0.0080
+    min_net_moveroom_pct: 0.0110
     est_roundtrip_cost_pct: 0.0014
-    slot_rvol_min: 0.95
+    slot_rvol_min: 1.15
     core_symbols: ["BTC-USD", "ETH-USD", "SOL-USD", "IBIT", "ETHA"]
+    symbol_overrides:
+      ETH-USD: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 
   INDIA_NSE:
     name: "National Stock Exchange of India (NSE)"
