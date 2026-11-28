@@ -763,6 +763,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
             self.assertIn("rejection_gate_counts", diagnostics)
             self.assertIn("slot_rvol_sample_count_distribution", diagnostics)
             self.assertLess(diagnostics["max_slot_rvol_samples"], 5)
+            self.assertFalse(diagnostics["slot_rvol_warmup_satisfied"])
             self.assertEqual(report["trade_status"], "no_strategy_entries")
 
 
