@@ -85,6 +85,20 @@ class ReactionZoneTests(unittest.TestCase):
         self.assertNotEqual(card.action, "enter_long")
         self.assertIn("30m_context_unavailable_or_stale", card.rejected_gates)
 
+    def test_impulse_volume_does_not_bypass_baseline_rvol_floor(self):
+        card = _eval(_engine(), _snap(
+            rvol=Decimal("1.00"), impulse_rvol=Decimal("1.80")
+        ))
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("rvol_below_threshold", card.rejected_gates)
+
+    def test_impulse_volume_still_requires_pullback_dry_up(self):
+        card = _eval(_engine(), _snap(
+            rvol=Decimal("1.30"), impulse_rvol=Decimal("1.80")
+        ))
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("dry_up_not_met", card.rejected_gates)
+
     def test_entry_requires_confirmed_aligned_15m_swing(self):
         card = _eval(_engine(), _snap(swing_15m_direction="down"))
         self.assertNotEqual(card.action, "enter_long")
