@@ -755,6 +755,18 @@ class EndToEndSyntheticTests(unittest.TestCase):
     def test_synthetic_fixture_is_never_market_performance_evidence(self):
         self.assertEqual(self.result["evidence_class"], "synthetic_software_fixture_only")
 
+    def test_disabled_market_is_excluded_before_capital_preallocation(self):
+        result = run_dataset(
+            FIXTURE,
+            profile_map={"SIM-EQ": "HONGKONG_HKEX", "SIM-COIN": "CRYPTO_MAJORS"},
+            baseline_scope=False,
+        )
+        self.assertNotIn("SIM-EQ", result["per_symbol"])
+        self.assertEqual(result["excluded_instruments"], [
+            {"symbol": "SIM-EQ", "profile": "HONGKONG_HKEX", "reason": "market_disabled"}
+        ])
+        self.assertNotIn("HONGKONG_HKEX", result["portfolio"]["market_allocation_pct"])
+
     def test_shared_portfolio_budget_is_reported(self):
         portfolio = self.result["portfolio"]
         self.assertEqual(portfolio["capital"], "25000")
