@@ -81,7 +81,16 @@ def _session_context(
     session_close: time | None,
 ) -> _SessionContext:
     eligible = bars_through(bars, timestamp)
-    # For 24x7 markets there is no exchange close separating calendar dates. A bar that\n    # closes exactly at 00:00 UTC still belongs to the session represented by its start\n    # timestamp. Using the timestamp date here would make the final bar of every crypto\n    # day look like it belongs to an empty new session, which breaks causal ATR/VWAP/swing\n    # features and can falsely report the strategy as not warmed up.\n    if session_open is None and session_close is None and eligible:\n        session_date = _local_dt(eligible[-1].bar_start, session_timezone).date()\n    else:\n        session_date = _local_dt(timestamp, session_timezone).date()\n    history: list[Bar] = []
+    # For 24x7 markets there is no exchange close separating calendar dates. A bar that
+    # closes exactly at 00:00 UTC still belongs to the session represented by its start
+    # timestamp. Using the timestamp date here would make the final bar of every crypto
+    # day look like it belongs to an empty new session, which breaks causal ATR/VWAP/swing
+    # features and can falsely report the strategy as not warmed up.
+    if session_open is None and session_close is None and eligible:
+        session_date = _local_dt(eligible[-1].bar_start, session_timezone).date()
+    else:
+        session_date = _local_dt(timestamp, session_timezone).date()
+    history: list[Bar] = []
     current: list[Bar] = []
     for bar in eligible:
         local_start = _local_dt(bar.bar_start, session_timezone)
