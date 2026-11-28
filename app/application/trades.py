@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from app.application.strategy_manager import StrategyDecision
-from app.domain.trades.model import TradeIntent, TradeIntentStatus
+from app.domain.trades.model import TradeIntent
 
 @dataclass(frozen=True, slots=True)
 class TradeManager:
