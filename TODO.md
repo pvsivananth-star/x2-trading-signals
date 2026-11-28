@@ -25,18 +25,18 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 18. Enforce causal cutoff and stale-data/feed-health gates.
 
 ## Phase 3 — Signal and strategy
-- [ ] 19. Implement Signal Manager with SETUP versus TRIGGER.
-- [ ] 20. Make signals immutable, explainable, deterministic and deduplicated.
-- [ ] 21. Implement one isolated Strategy Manager per strategy.
-- [ ] 22. Implement Strategy Registry / Portfolio Strategy Orchestrator.
-- [ ] 23. Implement Long-Term: Weekly Trend Following.
-- [ ] 24. Implement Long-Term: Weekly Breakout/Pullback.
-- [ ] 25. Implement Daily: MTF Trend Pullback Continuation.
-- [ ] 26. Implement Daily: VWAP/Relative-Strength Continuation.
-- [ ] 27. Implement Daily: Opening-Range Breakout with Trend Filter.
-- [ ] 28. Add explicit strategy-to-portfolio assignments and versioning.
-- [ ] 29. Prevent strategy-to-strategy state mutation and risk-budget borrowing.
-- [ ] 30. Keep NO_TRADE first-class; no single indicator may create a trade.
+- [x] 19. Implement Signal Manager with SETUP versus TRIGGER.
+- [x] 20. Make signals immutable, explainable, deterministic and deduplicated.
+- [x] 21. Implement one isolated Strategy Manager per strategy.
+- [x] 22. Implement Strategy Registry / Portfolio Strategy Orchestrator.
+- [x] 23. Implement Long-Term: Weekly Trend Following.
+- [x] 24. Implement Long-Term: Weekly Breakout/Pullback.
+- [x] 25. Implement Daily: MTF Trend Pullback Continuation.
+- [x] 26. Implement Daily: VWAP/Relative-Strength Continuation.
+- [x] 27. Implement Daily: Opening-Range Breakout with Trend Filter.
+- [x] 28. Add explicit strategy-to-portfolio assignments and versioning.
+- [x] 29. Prevent strategy-to-strategy state mutation and risk-budget borrowing.
+- [x] 30. Keep NO_TRADE first-class; no single indicator may create a trade.
 
 ## Phase 4 — Trade, portfolio and risk
 - [ ] 31. Implement Trade Manager / TradeIntent lifecycle.
