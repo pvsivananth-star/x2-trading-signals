@@ -24,9 +24,10 @@ from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.backtest.bars import Bar, aggregate_bars
+from app.event_risk import EventRiskAssessment
 from app.backtest.simulator import OrderSimulator, SimulationConfig
 from app.costs import CostBlockedError, _field, load_costs
 from app.features import (
@@ -302,7 +303,8 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
 
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
-               allow_estimates: bool, order_simulator: OrderSimulator | None = None) -> dict[str, Any]:
+               allow_estimates: bool, order_simulator: OrderSimulator | None = None,
+               event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates, symbol)
     execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
     simulator = order_simulator or OrderSimulator(SimulationConfig(
@@ -486,6 +488,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 previous_snapshot=snaps[i - 1] if i > 0 else None,
+                event_risk=event_risk_provider(bar.bar_end, symbol) if event_risk_provider else None,
             )
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
@@ -635,7 +638,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             continue
         profile = profile_map[symbol]
         results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity,
-                                  risk_pct, allow_estimates))
+                                  risk_pct, allow_estimates, event_risk_provider=event_risk_provider))
 
     all_trades = [t for r in results for t in r["trades"]]
     return {
