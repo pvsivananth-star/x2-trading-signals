@@ -39,13 +39,13 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 30. Keep NO_TRADE first-class; no single indicator may create a trade.
 
 ## Phase 4 — Trade, portfolio and risk
-- [ ] 31. Implement Trade Manager / TradeIntent lifecycle.
-- [ ] 32. Implement central Portfolio Controller.
-- [ ] 33. Implement independent Risk Manager.
-- [ ] 34. Enforce per-strategy, per-portfolio and account-wide limits.
-- [ ] 35. Implement long-term trend-change/partial-liquidation policy.
-- [ ] 36. Implement daily session/flattening policy.
-- [ ] 37. Add circuit breakers and emergency kill switch invariants.
+- [x] 31. Implement Trade Manager / TradeIntent lifecycle.
+- [x] 32. Implement central Portfolio Controller.
+- [x] 33. Implement independent Risk Manager.
+- [x] 34. Enforce per-strategy, per-portfolio and account-wide limits.
+- [x] 35. Implement long-term trend-change/partial-liquidation policy.
+- [x] 36. Implement daily session/flattening policy.
+- [x] 37. Add circuit breakers and emergency kill switch invariants.
 
 ## Phase 5 — Execution
 - [ ] 38. Implement Execution Manager and order state machine.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 3 (#19 onward). Strategy thresholds remain subordinate to portfolio/risk controls.**
+**Current work: Phase 4 complete. Execution remains gated by portfolio/risk approvals and live routing remains disabled.**
