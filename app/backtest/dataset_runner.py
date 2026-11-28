@@ -343,7 +343,7 @@ def _safe_event_risk(
         return None
     try:
         return provider(timestamp, symbol)
-    except Exception as exc:  # provider failure is a fail-closed unknown state
+    except Exception as exc:  # noqa: BLE001 - any provider failure must fail closed as unknown
         return EventRiskAssessment(
             "unknown", timestamp, f"provider_error:{type(exc).__name__}", "event-risk-provider"
         )
