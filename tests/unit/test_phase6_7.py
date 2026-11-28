@@ -192,7 +192,7 @@ class Phase67Tests(unittest.TestCase):
                              Decimal(102), "up", "higher-highs-higher-lows", Decimal("0.008"),
                              last_close=Decimal(101), pullback_depth=Decimal("0.5"),
                              context_regime="TREND_DAY", context_timestamp=now,
-                             swing_15m_direction="up", swing_15m_size_atr=Decimal("5"),
+                             swing_15m_direction="up", swing_15m_size_atr=Decimal(5),
                              swing_15m_confirmed=True)
         buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
