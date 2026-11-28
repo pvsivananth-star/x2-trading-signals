@@ -40,35 +40,35 @@ flowchart TD
 
 ## 1. Entry quality and multi-timeframe causality
 
-- [ ] Use completed 30-minute bars for discovery/context; never use a still-forming higher-timeframe bar.
+- [x] Use completed 30-minute bars for discovery/context; never use a still-forming higher-timeframe bar. Aggregation rejects incomplete, non-final, partial, or non-contiguous source buckets.
 - [ ] Implement a fail-closed event/news-risk gate. If event-risk data is unavailable or stale, record the uncertainty and reject entries where policy requires this gate.
-- [ ] Build 15-minute swing/structure anchors from completed 15-minute bars, not 5-minute bars relabeled as 15-minute structure.
-- [ ] Require minimum swing size of at least 0.60 ATR.
-- [ ] Require two-bar confirmation after the swing point; confirmation is available only after both bars close.
-- [ ] Use 5-minute bars for entry timing, pullback/reaction-zone qualification, and execution decisions.
+- [x] Build 15-minute swing/structure anchors from completed 15-minute bars, not 5-minute bars relabeled as 15-minute structure.
+- [x] Require minimum swing size of at least 0.60 ATR using 15-minute ATR.
+- [x] Require two-bar confirmation after the swing point; confirmation is available only after both bars close.
+- [x] Use 5-minute bars for entry timing, pullback/reaction-zone qualification, and execution decisions (the runner uses its supplied signal interval; the configured production baseline is 5 minutes).
 - [ ] Add time-of-day/slot-normalized RVOL using comparable prior sessions. Do not compare an opening bar with a full-session average.
 - [ ] Make impulse-RVOL and ordinary slot-RVOL requirements consistent. An impulse branch must not accidentally bypass the baseline volume gate unless explicitly configured.
 - [ ] Keep trend and chop playbooks distinct. Do not force trend-following entries into sideways/choppy conditions.
 - [ ] Evaluate long/short performance by regime. Do not globally disable shorts based on aggregate results.
-- [ ] Record diagnostics for regime, direction, timeframe finality, swing size, confirmation, RVOL, and event-risk state.
+- [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, and the existing 5-minute feature/RVOL inputs. Event-risk diagnostics remain pending with the event gate.
 
 ## 2. Position lifecycle and time exits
 
-- [x] Enforce a hard maximum holding period of **4 hours from actual fill time**, not signal or order-submission time. On aligned bar intervals, exit at the first bar open at/after the deadline; if a deadline falls inside an OHLC bar, close at that bar's close and retain the bar-resolution limitation.
+- [x] Enforce a hard maximum holding period of **4 hours from actual fill time**, not signal or order-submission time. On aligned intervals, exit at the deadline bar open; if the deadline falls inside a bar or data gap, use the last completed pre-deadline close to avoid post-deadline data and never exceed the cap.
 - [x] Add a configurable stagnation/time-stop when the trade fails to make required progress within configured bars/minutes. Keep this separate from the hard four-hour limit. Current default: 60 minutes without +0.25R maximum favourable excursion.
-- [ ] Define stop/target levels relative to the actual simulated fill and initial risk. Recalculate or reject trades when next-bar gaps invalidate intended reward/risk.
+- [x] Define stops relative to actual fill and re-anchor ATR-extension targets to the fill while preserving their signal-time distance. Structural targets remain fixed market levels; reject next-bar gaps that invalidate direction or minimum reward/risk.
 - [x] Apply reaction-zone `size_weight` values to final risk sizing; core defaults to 1.00 and shallow/deep/momentum weights scale the risk budget when supplied by the strategy card. Broader per-zone integration coverage remains.
 - [ ] Preserve mandatory session/pre-close flattening where applicable. Do not apply regular-session cutoffs to instruments with different sessions.
-- [ ] Record exit reason and elapsed holding time for every trade.
+- [x] Record exit reason and elapsed holding time for every trade in the trade ledger; report average, median, and maximum holding duration.
 
 ## 3. Execution simulator correctness
 
 - [x] Check the entry bar for stop/target touches after a pending entry fills; do not skip its high/low.
 - [x] Model adverse opening gaps through stops with gap-aware fills at the bar open rather than always filling exactly at the stop price.
 - [ ] Anchor stop/target calculations to actual fill price, not only signal-bar close.
-- [ ] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity in diagnostics.
+- [x] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity through distinct exit reasons.
 - [ ] Model spread, slippage, fees, and partial/rejected fills consistently between signal qualification, simulated execution, and realized P&L.
-- [ ] Add deterministic tests for next-bar gaps, entry-bar stop-outs, entry-bar targets, gap-through-stop, both-levels-touched bars, and session flattening.
+- [x] Add deterministic tests for next-bar gaps, entry-bar stop-outs/targets, gap-through-stop, both-levels-touched bars, and session flattening (session flatten also has a strategy-level contract test).
 
 ## 4. Trading costs and reporting integrity
 
@@ -113,8 +113,8 @@ flowchart TD
 ## 8. Implementation order
 
 1. [x] Four-hour hard time limit and stagnation exit.
-2. [ ] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk).
-3. [ ] True 30m/15m/5m causal timeframe pipeline and swing confirmation.
+2. [x] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk and gap-entry rejection).
+3. [x] True 30m/15m/5m causal timeframe pipeline and swing confirmation. Event/news gating and slot-normalized RVOL remain open under item 1.
 4. [ ] Slot-normalized RVOL, direction/regime diagnostics, and reaction-zone sizing.
 5. [ ] Instrument-specific costs and truthful gross/partial-net/fully-net reporting.
 6. [ ] Shared portfolio capital, concurrency, and exposure constraints.
