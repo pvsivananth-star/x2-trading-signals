@@ -552,6 +552,20 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             pending = None
         if pos is not None:
             regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
+            sig = engine.evaluate(
+                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
+                stale_feed_seconds=0, stale_threshold_seconds=10,
+                minutes_to_close=minutes_to_close(bar.bar_end, profile),
+                position_quantity=pos.qty * pos.side,
+                previous_snapshot=snaps[i - 1] if i > 0 else None,
+                position_stop=pos.stop, position_target=pos.target,
+            )
+            if sig.action.startswith("exit_"):
+                trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, costs_applicable))
+                pos = None
+                exited_this_bar = True
+        elif pos is None and pending is None and not exited_this_bar:
+            regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
             known_roundtrip_cost_pct = None
             if costs_applicable and snaps[i].atr and snaps[i].last_close and snaps[i].last_close > 0:
                 try:
@@ -584,20 +598,6 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         known_roundtrip_cost_pct = known_cost / estimated_notional
                 except ValueError:
                     known_roundtrip_cost_pct = None
-            sig = engine.evaluate(
-                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
-                stale_feed_seconds=0, stale_threshold_seconds=10,
-                minutes_to_close=minutes_to_close(bar.bar_end, profile),
-                position_quantity=pos.qty * pos.side,
-                previous_snapshot=snaps[i - 1] if i > 0 else None,
-                position_stop=pos.stop, position_target=pos.target,
-            )
-            if sig.action.startswith("exit_"):
-                trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, costs_applicable))
-                pos = None
-                exited_this_bar = True
-        elif pos is None and pending is None and not exited_this_bar:
-            regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
