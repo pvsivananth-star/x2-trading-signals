@@ -2,81 +2,101 @@
 
 Source of truth: `requirements.md` and `architecture.md`.
 
-## Phase 1 — Domain foundation
-- [x] 1. Create canonical domain package boundaries.
-- [x] 2. Model Long-Term and Daily Trading portfolios with isolated capital/risk contexts.
-- [x] 3. Define immutable domain entities and stable reason codes.
-- [x] 4. Define canonical event envelope: event_id, timestamp, correlation_id, causation_id, version, provenance.
-- [x] 5. Define ports for market data, execution, account, history, clock, calendar, event bus, event store and notifications.
-- [x] 6. Define runtime modes: backtest, paper/demo and live-disabled.
-- [x] 7. Add clock/calendar abstractions and causal replay semantics.
-- [x] 8. Add domain invariants and unit/property tests.
+## Completed baseline
 
-## Phase 2 — Market data and analysis
-- [x] 9. Put existing feed/feature code behind MarketDataPort.
-- [x] 10. Implement Instrument/Universe Actor and liquidity/quality gates.
-- [x] 11. Implement Regime Actor.
-- [x] 12. Implement Trend Analyzer for 1W/1D and 30m/15m/5m.
-- [x] 13. Implement Volume/RVOL Analyzer.
-- [x] 14. Implement Relative Strength Analyzer.
-- [x] 15. Implement Structure/Fibonacci Analyzer.
-- [x] 16. Implement DMA Analyzer.
-- [x] 17. Implement Momentum Analyzer.
-- [x] 18. Enforce causal cutoff and stale-data/feed-health gates.
+Phases 1–8 are implemented. The current branch is **compilable and test-clean**:
+- `python -m unittest discover -s tests -v` → 177 tests passed, 3 skipped
+- `python -m app.cli --help` → working
+- Live broker routing remains disabled
 
-## Phase 3 — Signal and strategy
-- [x] 19. Implement Signal Manager with SETUP versus TRIGGER.
-- [x] 20. Make signals immutable, explainable, deterministic and deduplicated.
-- [x] 21. Implement one isolated Strategy Manager per strategy.
-- [x] 22. Implement Strategy Registry / Portfolio Strategy Orchestrator.
-- [x] 23. Implement Long-Term: Weekly Trend Following.
-- [x] 24. Implement Long-Term: Weekly Breakout/Pullback.
-- [x] 25. Implement Daily: MTF Trend Pullback Continuation.
-- [x] 26. Implement Daily: VWAP/Relative-Strength Continuation.
-- [x] 27. Implement Daily: Opening-Range Breakout with Trend Filter.
-- [x] 28. Add explicit strategy-to-portfolio assignments and versioning.
-- [x] 29. Prevent strategy-to-strategy state mutation and risk-budget borrowing.
-- [x] 30. Keep NO_TRADE first-class; no single indicator may create a trade.
+## Phase 9 — Backtest correctness and dataset validation
+- [ ] 59. Reconcile `backtest-dataset` CLI options with the documented backtest workflow, including warmup/session options.
+- [ ] 60. Add preflight dataset validator for OHLCV integrity, timestamp ordering, duplicates and missing candles.
+- [ ] 61. Validate timeframe/session/calendar consistency for every input dataset.
+- [ ] 62. Validate instrument metadata, symbol eligibility, liquidity and tradability before replay.
+- [ ] 63. Detect corporate-action/split-adjustment inconsistencies where applicable.
+- [ ] 64. Add explicit look-ahead/leakage checks across all features, signals and strategy decisions.
+- [ ] 65. Validate synthetic warmup boundaries and ensure warmup data cannot contribute to scored performance.
+- [ ] 66. Produce a machine-readable dataset validation report and fail closed on critical violations.
+- [ ] 67. Add deterministic end-to-end backtest smoke fixtures and verify repeatability.
 
-## Phase 4 — Trade, portfolio and risk
-- [x] 31. Implement Trade Manager / TradeIntent lifecycle.
-- [x] 32. Implement central Portfolio Controller.
-- [x] 33. Implement independent Risk Manager.
-- [x] 34. Enforce per-strategy, per-portfolio and account-wide limits.
-- [x] 35. Implement long-term trend-change/partial-liquidation policy.
-- [x] 36. Implement daily session/flattening policy.
-- [x] 37. Add circuit breakers and emergency kill switch invariants.
+## Phase 10 — Strategy implementation and profitability validation
+- [ ] 68. Replace first-pass analyzer/strategy heuristics with production-quality implementations backed by explicit requirements.
+- [ ] 69. Validate Weekly Trend Following independently.
+- [ ] 70. Validate Weekly Breakout/Pullback independently.
+- [ ] 71. Validate MTF Trend Pullback Continuation independently.
+- [ ] 72. Validate VWAP/Relative-Strength Continuation independently.
+- [ ] 73. Validate Opening-Range Breakout with Trend Filter independently.
+- [ ] 74. Add setup/trigger quality scoring and calibrated NO_TRADE thresholds.
+- [ ] 75. Evaluate each strategy by symbol, regime, timeframe, setup, score and session.
+- [ ] 76. Add walk-forward train/test evaluation with strict temporal separation.
+- [ ] 77. Add out-of-sample acceptance gates: minimum trades, positive expectancy, PF > 1, controlled drawdown and stability across periods.
+- [ ] 78. Add fee/slippage stress tests at normal, elevated and severe assumptions.
+- [ ] 79. Add latency and execution-quality sensitivity analysis.
+- [ ] 80. Add Monte Carlo/bootstrap trade-order stress analysis where statistically appropriate.
+- [ ] 81. Reject strategies that only work in-sample or depend on fragile parameter values.
+- [ ] 82. Produce a reproducible profitability-validation report with full lineage.
 
-## Phase 5 — Execution
-- [x] 38. Implement Execution Manager and order state machine.
-- [x] 39. Add idempotency and duplicate-order protection.
-- [x] 40. Add partial fills, cancel/replace, rejects and reconciliation.
-- [x] 41. Keep Mock Broker behind ExecutionPort.
-- [x] 42. Keep IBKR/Binance adapters isolated and live-disabled.
-- [x] 43. Test disconnect/retry/recovery.
+## Phase 11 — Portfolio optimization and account-level validation
+- [ ] 83. Validate Long-Term portfolio independently from Daily Trading portfolio.
+- [ ] 84. Validate capital allocation and risk budgets across strategies.
+- [ ] 85. Validate portfolio-level gross/net exposure and concentration limits under concurrent signals.
+- [ ] 86. Validate reservation/accounting behavior with concurrent orders and partial fills.
+- [ ] 87. Validate strategy correlation and overlapping-position risk.
+- [ ] 88. Evaluate combined-account drawdown, daily loss distribution and recovery behavior.
+- [ ] 89. Verify that Long-Term positions are not incorrectly liquidated by Daily Trading signals.
+- [ ] 90. Verify Daily Trading flattening/session policies under exchange calendar edge cases.
+- [ ] 91. Define conservative account-level acceptance criteria; never force trades to meet a daily profit target.
 
-## Phase 6 — Backtest and paper
-- [x] 44. Route replay through the same strategy/portfolio/risk pipeline.
-- [x] 45. Model fees, spread, slippage, latency, partial fills and rejects.
-- [x] 46. Add walk-forward and out-of-sample evaluation.
-- [x] 47. Report performance by portfolio, strategy, symbol, regime, setup and score.
-- [x] 48. Add deterministic regression fixtures.
+## Phase 12 — Reliability and recovery hardening
+- [ ] 92. Add integration tests covering Market Data → Signal → Strategy → Trade → Portfolio → Risk → Execution → Fill → Position.
+- [ ] 93. Add restart/recovery tests for every stateful component.
+- [ ] 94. Add duplicate, delayed and out-of-order event tests across the complete pipeline.
+- [ ] 95. Add broker disconnect/reconnect/reconciliation integration scenarios.
+- [ ] 96. Add database failure/recovery tests and verify fail-closed behavior.
+- [ ] 97. Verify audit lineage survives retries, restarts and reconciliation.
+- [ ] 98. Add concurrency tests proving strategy isolation and portfolio isolation.
+- [ ] 99. Add kill-switch tests at strategy, portfolio, account and execution boundaries.
 
-## Phase 7 — Persistence, API and UI
-- [x] 49. Separate operational state, market history, audit events and backtest artifacts.
-- [x] 50. Persist complete signal → risk → trade → order → fill → position lineage.
-- [x] 51. Define versioned API/read models.
-- [x] 52. Build dashboard, signal drill-down, strategy monitor, portfolio, orders, fills, risk and audit views.
-- [x] 53. Keep manual execution behind explicit authorization and risk controls.
+## Phase 13 — Persistence and API productionization
+- [ ] 100. Replace in-memory operational state used by production paths with durable persistence.
+- [ ] 101. Implement durable event/audit storage with idempotent writes.
+- [ ] 102. Implement durable order/fill/position reconciliation state.
+- [ ] 103. Add API authentication/authorization for non-public operational endpoints.
+- [ ] 104. Add API request idempotency and operator audit logging.
+- [ ] 105. Add pagination/filtering/sorting for operational read models.
+- [ ] 106. Add dashboard drill-down from signal → decision → risk → order → fill → position.
 
-## Phase 8 — Observability, security and deployment
-- [x] 54. Add structured logs, correlation IDs, health/readiness and metrics.
-- [x] 55. Enforce external secrets and least privilege.
-- [x] 56. Containerize the validated modular monolith.
-- [x] 57. Add AWS deployment configuration without cloud logic in the domain.
-- [x] 58. Add backup, restore, retention and migration procedures.
+## Phase 14 — Deployment and operational readiness
+- [ ] 107. Run Docker build and container smoke tests.
+- [ ] 108. Run backup/restore drill against a disposable PostgreSQL instance.
+- [ ] 109. Run migration upgrade/rollback/recovery tests.
+- [ ] 110. Add resource limits, graceful shutdown and startup/recovery checks.
+- [ ] 111. Add production alerting for stale data, broker health, reconciliation failures, risk-off and kill switch.
+- [ ] 112. Add operational runbooks for startup, shutdown, reconciliation, incident response and recovery.
+- [ ] 113. Validate AWS deployment configuration in a non-production environment.
+- [ ] 114. Verify secrets, IAM/network boundaries and database access using least privilege.
 
-## Completion gates
+## Phase 15 — Paper trading readiness
+- [ ] 115. Enable paper trading only after all Phase 9–14 acceptance gates pass.
+- [ ] 116. Run paper trading with live market data but simulated/no-live-risk execution.
+- [ ] 117. Compare paper fills against expected backtest execution assumptions.
+- [ ] 118. Monitor strategy drift, data quality, latency, slippage and reconciliation.
+- [ ] 119. Define minimum paper-trading observation period and acceptance criteria.
+- [ ] 120. Confirm emergency kill switch, flattening and recovery procedures in paper mode.
+
+## Phase 16 — Live trading authorization gate
+- [ ] 121. Perform final architecture/security/risk review.
+- [ ] 122. Verify every live-order path passes Portfolio Controller and Risk Manager.
+- [ ] 123. Verify no strategy, UI, API or connector can bypass execution controls.
+- [ ] 124. Verify live broker credentials are external, scoped and disabled by default.
+- [ ] 125. Require explicit operator authorization before enabling live routing.
+- [ ] 126. Start with conservative capital/risk limits and explicit instrument allowlists.
+- [ ] 127. Monitor live reconciliation, risk, fills and kill-switch state continuously.
+- [ ] 128. Document and approve the live trading go/no-go decision.
+
+## Non-negotiable completion gates
+
 1. No future data enters a decision.
 2. Risk cannot be bypassed.
 3. Kill switch prevents new orders.
@@ -87,5 +107,10 @@ Source of truth: `requirements.md` and `architecture.md`.
 8. Live routing remains disabled until explicitly authorized.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
+11. Dataset integrity and leakage checks pass before profitability results are accepted.
+12. Strategy acceptance is based on out-of-sample/walk-forward evidence, not in-sample performance alone.
+13. Portfolio/account risk limits remain valid under concurrent strategies.
+14. Recovery and reconciliation are tested, not merely documented.
+15. No daily profit target may force a trade or increase risk.
 
-**Current work: Phase 8 complete. Observability, security boundaries, container hardening, AWS deployment boundaries, and backup/restore/retention procedures are in place; live routing remains disabled.**
+**Current work: Phase 9 — validate the backtest interface and datasets before making profitability claims.**
