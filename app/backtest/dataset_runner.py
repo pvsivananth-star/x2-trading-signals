@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time
 from decimal import Decimal
@@ -263,7 +264,8 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
 
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
-               allow_estimates: bool, warmup_sessions: int = 0) -> dict[str, Any]:
+               allow_estimates: bool, warmup_sessions: int = 0,
+               progress_callback: Callable[[str, str, int, int], None] | None = None) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
     net_available = "commission_per_share" not in excluded and profile in _EQUITY_COST_PROFILES
     session_timezone, session_open, session_close = MARKET_SESSIONS.get(
@@ -274,9 +276,11 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         "session_open": session_open,
         "session_close": session_close,
     }
-    snaps: list[FeatureSnapshot] = [
-        feature_snapshot(bars[: i + 1], bars[i].bar_end, **session) for i in range(len(bars))
-    ]
+    # Features only depend on the current and immediately preceding exchange session.
+    # Retaining this bounded window avoids repeatedly rescanning the entire history.
+    feature_window: list[Bar] = []
+    feature_window_session = None
+    previous_snapshot: FeatureSnapshot | None = None
     trades: list[Trade] = []
     pos: Position | None = None
     pending: tuple[int, int, Decimal, Decimal, Decimal] | None = None
@@ -293,8 +297,24 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     scored_session_dates = session_dates[max(0, warmup_sessions):]
     first_scored_session = str(scored_session_dates[0]) if scored_session_dates else None
 
-    for i in range(len(bars)):
-        bar = bars[i]
+    if progress_callback is not None:
+        progress_callback(symbol, "starting", 0, len(bars))
+    for i, bar in enumerate(bars):
+        bar_session = _local_dt(bar.bar_end, session_timezone).date()
+        if feature_window_session != bar_session:
+            if feature_window_session is not None:
+                feature_window = [
+                    item for item in feature_window
+                    if _local_dt(item.bar_end, session_timezone).date() == feature_window_session
+                ]
+            feature_window_session = bar_session
+        feature_window.append(bar)
+        snapshot = feature_snapshot(feature_window, bar.bar_end, **session)
+        if progress_callback is not None and (
+            i == 0 or (i + 1) % 500 == 0 or i + 1 == len(bars)
+        ):
+            phase = "warmup" if bar_session in warmup_dates else "scored"
+            progress_callback(symbol, phase, i + 1, len(bars))
         if pos is not None:
             hit = _intrabar_exit(pos, bar)
             if hit is not None:
@@ -315,19 +335,19 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             pending = None
         assert_causal_window(bars[: i + 1], bar.bar_end)
         if pos is not None:
-            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
+            regime = causal_regime(feature_window, bar.bar_end, **session)
             sig = engine.evaluate(
-                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
+                timestamp=bar.bar_end, symbol=symbol, snapshot=snapshot, regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 position_quantity=pos.qty * pos.side,
-                previous_snapshot=snaps[i - 1] if i > 0 else None,
+                previous_snapshot=previous_snapshot,
                 position_stop=pos.stop, position_target=pos.target,
             )
             if sig.action.startswith("exit_"):
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
-        elif pos is None and pending is None and _local_dt(bar.bar_end, session_timezone).date() not in warmup_dates:
+        elif pos is None and pending is None and bar_session not in warmup_dates:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
@@ -335,7 +355,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 previous_snapshot=snaps[i - 1] if i > 0 else None,
             )
-            if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
+            if sig.action in ("enter_long", "enter_short") and snapshot.atr:
                 side = 1 if sig.action == "enter_long" else -1
                 target = Decimal(sig.parameters["target"])
                 policy_decision = policy.evaluate(
@@ -351,7 +371,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     if policy_decision.max_risk_pct is not None else risk_pct
                 )
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
-                pending = (i, side, snaps[i].atr * stop_mult, target, effective_risk_pct)
+                pending = (i, side, snapshot.atr * stop_mult, target, effective_risk_pct)
+        previous_snapshot = snapshot
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
@@ -569,7 +590,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 warmup_sessions: int = 0, min_scored_sessions: int = 20,
                 markets_path: str | Path = "config/markets_17.yaml",
                 costs_path: str | Path = "config/costs.yaml",
-                strategy_path: str | Path = "config/strategies/confluence_pullback.yaml") -> dict[str, Any]:
+                strategy_path: str | Path = "config/strategies/confluence_pullback.yaml",
+                progress_callback: Callable[[str, str, int, int], None] | None = None) -> dict[str, Any]:
     directory = Path(directory)
     profile_map = profile_map or DEFAULT_PROFILE
     instrument_symbols = instrument_symbols or _instrument_symbols(directory)
@@ -597,8 +619,10 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         if not bars:
             continue
         profile = profile_map[symbol]
-        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity, risk_pct, allow_estimates,
-                                   warmup_sessions=warmup_sessions))
+        results.append(run_symbol(
+            symbol, bars, profile, engine, policy, costs, start_equity, risk_pct, allow_estimates,
+            warmup_sessions=warmup_sessions, progress_callback=progress_callback,
+        ))
 
     all_trades = [t for r in results for t in r["trades"]]
     return {
