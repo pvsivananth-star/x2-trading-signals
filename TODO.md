@@ -19,6 +19,7 @@ Phases 1–8 are implemented. The current branch is **compilable and test-clean*
 - [x] 65. Validate synthetic warmup boundaries and ensure warmup data cannot contribute to scored performance.
 - [x] 66. Produce a machine-readable dataset validation report and fail closed on critical violations.
 - [x] 67. Add deterministic end-to-end backtest smoke fixtures and verify repeatability.
+- [x] 67a. Block backtests when warmup consumes all history or scored sessions fall below the configured per-instrument minimum; never silently truncate requested warmup.
 
 ## Phase 10 — Strategy implementation and profitability validation
 - [ ] 68. Replace first-pass analyzer/strategy heuristics with production-quality implementations backed by explicit requirements.
@@ -113,4 +114,4 @@ Phases 1–8 are implemented. The current branch is **compilable and test-clean*
 14. Recovery and reconciliation are tested, not merely documented.
 15. No daily profit target may force a trade or increase risk.
 
-**Current work: Phase 10 — strategy implementation and profitability validation.**
+**Current work: Phase 9 — insufficient-scored-data guard and backtest preflight.**
