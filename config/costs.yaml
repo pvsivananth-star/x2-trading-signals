@@ -96,6 +96,14 @@ US_ETF:
     status: verified
     source: "SSGA SPY bid/ask: 0.27 bps (June 2024); 0.21 bps (March 2024)"
     note: "Liquid ETF only. Less-liquid ETFs (ETF.com: average US equity ETP spread 0.24%) must be measured individually."
+  spread_pct_full_gld:
+    value: null
+    status: not_found
+    note: "GLD-specific full spread must be measured from historical NBBO/quote data."
+  spread_pct_full_uso:
+    value: null
+    status: not_found
+    note: "USO-specific full spread must be measured from historical NBBO/quote data."
 
 # ----------------------------------------------------------------------------
 # US INDEX exposure (SPX itself is not directly tradable here; use futures or SPY)
