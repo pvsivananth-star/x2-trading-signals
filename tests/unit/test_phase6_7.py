@@ -82,7 +82,7 @@ def snapshot() -> FeatureSnapshot:
         swing_15m_high=Decimal(105),
         swing_15m_low=Decimal(95),
         swing_15m_direction="up",
-        swing_15m_size_atr=Decimal("5"),
+        swing_15m_size_atr=Decimal(5),
         swing_15m_confirmed=True,
     )
 
