@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.backtest.bars import Bar
-from app.features import FeatureSnapshot, causal_pullback_depth
+from app.features import FeatureSnapshot, causal_pullback_depth, causal_slot_rvol
 from app.policy import TradingPolicy
 from app.regime import Regime
 from app.strategy import ConfluenceV1, classify_reaction_zone
@@ -129,6 +129,35 @@ class ExitContractTests(unittest.TestCase):
         card = _eval(_engine(), snapshot(), minutes_to_close=30)
         self.assertNotEqual(card.action, "enter_long")
         self.assertIn("entry_cutoff", card.rejected_gates)
+
+
+class SlotRvolTests(unittest.TestCase):
+    def test_same_time_slot_uses_prior_sessions_only(self):
+        start_dates = [datetime(2026, 11, day, 14, 30, tzinfo=UTC) for day in (16, 17, 18, 19, 20, 23)]
+        volumes = [Decimal(100), Decimal(200), Decimal(100), Decimal(200), Decimal(100), Decimal(280)]
+        bars = [Bar(start, start + timedelta(minutes=5), Decimal(100), Decimal(101),
+                    Decimal(99), Decimal(100), volume, 1)
+                for start, volume in zip(start_dates, volumes)]
+        value, samples = causal_slot_rvol(bars, bars[-1].bar_end, min_sessions=5)
+        self.assertEqual(samples, 5)
+        self.assertEqual(value, Decimal(2))
+
+    def test_slot_rvol_fails_closed_with_insufficient_prior_sessions(self):
+        start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
+        bars = [Bar(start, start + timedelta(minutes=5), Decimal(100), Decimal(101),
+                    Decimal(99), Decimal(100), Decimal(100), 1)]
+        value, samples = causal_slot_rvol(bars, bars[-1].bar_end, min_sessions=5)
+        self.assertIsNone(value)
+        self.assertEqual(samples, 0)
+
+    def test_slot_rvol_ignores_future_bars(self):
+        starts = [datetime(2026, 11, day, 14, 30, tzinfo=UTC) for day in (16, 17, 18, 19, 20, 23)]
+        bars = [Bar(start, start + timedelta(minutes=5), Decimal(100), Decimal(101),
+                    Decimal(99), Decimal(100), Decimal(100), 1) for start in starts]
+        cutoff = bars[-1].bar_end
+        future = Bar(cutoff, cutoff + timedelta(minutes=5), Decimal(100), Decimal(101),
+                     Decimal(99), Decimal(100), Decimal(10000), 1)
+        self.assertEqual(causal_slot_rvol(bars + [future], cutoff), causal_slot_rvol(bars, cutoff))
 
 
 class PullbackDepthTests(unittest.TestCase):
