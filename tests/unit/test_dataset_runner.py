@@ -509,7 +509,7 @@ class IntrabarExitTests(unittest.TestCase):
 
 class SummaryTests(unittest.TestCase):
     def test_empty_summary(self):
-        self.assertEqual(summarize([], Decimal(1000)), {"trades": 0})
+        self.assertEqual(summarize([], Decimal(1000)), {"trades": 0, "cost_status": "no_trades"})
 
     def test_profit_factor_and_drawdown(self):
         t = lambda pnl: Trade("X", "long", Decimal(1), datetime(2026, 1, 1, tzinfo=UTC), Decimal(1),
