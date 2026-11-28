@@ -107,7 +107,7 @@ markets:
     name: "Toronto Stock Exchange (TSX)"
     tier: "TIER_B"
     allocation_pct: 0.00
-    enabled: true
+    enabled: false
     broker_route: "IBKR"
     cluster: "NA_EQUITIES"
     cluster_risk_cap: 0.0040

@@ -30,7 +30,7 @@ REACTION_ZONES: dict[str, tuple[Decimal, Decimal, Decimal, str | None]] = {
 }
 
 # Volume rules (upgrade 1). Impulse pump on the push, dry-up on the pullback bar.
-IMPULSE_RVOL_MIN = Decimal("1.40")
+IMPULSE_RVOL_MIN = Decimal("1.15")
 DRY_UP_RVOL_MAX = Decimal("1.15")
 # Volume climax exit (upgrade 1): opposing high-volume bar that crosses VWAP against the position.
 CLIMAX_RVOL_MIN = Decimal("2.20")
@@ -42,19 +42,22 @@ def _decimal_text(value: Decimal | None) -> str:
 
 
 def classify_reaction_zone(
-    depth: Decimal | None,
-    regime: Regime | None = None,
-    impulse_rvol: Decimal | None = None,
+        depth: Decimal | None,
+        regime: Regime | None = None,
+        impulse_rvol: Decimal | None = None,
+        session_efficiency: Decimal | None = None,
+        allow_momentum_zone: bool = True,
 ) -> str | None:
-    """Return the reaction zone for a pullback depth. Core is checked first; boundaries are inclusive
-    for core, and shallow/deep use half-open ranges so adjacent zones never overlap.
-
-    The momentum zone (0.12 to 0.236) applies only on TREND_DAY after an impulse volume pump.
-    """
     if depth is None:
         return None
-    if (Decimal("0.12") <= depth < Decimal("0.236") and regime is Regime.TREND_DAY
-            and impulse_rvol is not None and impulse_rvol >= IMPULSE_RVOL_MIN):
+    if (
+            allow_momentum_zone
+            and Decimal("0.12") <= depth < Decimal("0.236")
+            and regime is Regime.TREND_DAY
+            and impulse_rvol is not None
+            and impulse_rvol >= IMPULSE_RVOL_MIN
+            and (session_efficiency is None or session_efficiency >= Decimal("0.55"))
+    ):
         return "MOMENTUM_VWAP_12_236"
     if Decimal("0.382") <= depth <= Decimal("0.618"):
         return "CORE_382_618"
@@ -63,6 +66,7 @@ def classify_reaction_zone(
     if Decimal("0.618") < depth <= Decimal("0.786"):
         return "DEEP_RECLAIM_618_786"
     return None
+
 
 
 def _requirement_met(
@@ -342,14 +346,6 @@ class ConfluenceV1:
                 gates.append("bullish_close_confirmation_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
-            elif snapshot.impulse_rvol is not None:
-                # Upgrade 1: volume pump on the impulse, dry-up on the pullback bar.
-                if snapshot.rvol is None:
-                    gates.append("rvol_unavailable")
-                elif snapshot.impulse_rvol < IMPULSE_RVOL_MIN:
-                    gates.append("impulse_volume_not_met")
-                elif snapshot.rvol > DRY_UP_RVOL_MAX:
-                    gates.append("dry_up_not_met")
             elif snapshot.rvol is None:
                 gates.append("rvol_unavailable")
             elif snapshot.rvol < slot_rvol:
@@ -374,7 +370,14 @@ class ConfluenceV1:
                     sufficient_room = False
                     gates.append("insufficient_reward_to_risk")
             depth = _pullback_depth(snapshot, side_used)
-            zone = classify_reaction_zone(depth, regime, snapshot.impulse_rvol)
+            is_crypto = _market_name == "CRYPTO_MAJORS"
+            zone = classify_reaction_zone(
+                depth,
+                regime,
+                snapshot.impulse_rvol,
+                snapshot.session_efficiency,
+                allow_momentum_zone=not is_crypto,
+            )
             if zone is None:
                 gates.append("outside_reaction_zone")
             else:

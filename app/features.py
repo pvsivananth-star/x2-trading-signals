@@ -49,7 +49,7 @@ class FeatureSnapshot:
     structure_target_continuation: Decimal | None = None
     structure_source_continuation: str | None = None
     impulse_rvol: Decimal | None = None
-
+    session_efficiency: Decimal | None = None
 
 @dataclass(slots=True)
 class _SessionContext:
@@ -490,6 +490,13 @@ def feature_snapshot(
     continuation_target, continuation_source = causal_structure_target(
         bars, timestamp, include_session_high=False, **session
     )
+    session_bars = context.current
+    if session_bars:
+        s_disp = abs(session_bars[-1].close - next(iter(session_bars)).open)
+        s_range = max(b.high for b in session_bars) - min(b.low for b in session_bars)
+        s_eff = (s_disp / s_range) if s_range > 0 else Decimal(0)
+    else:
+        s_eff = None
     structure_target_short, structure_source_short = causal_structure_target_short(bars, timestamp, **session)
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp, **session)
     trend, structure = causal_trend_structure(bars, timestamp, **session)
@@ -523,4 +530,5 @@ def feature_snapshot(
         structure_target_continuation=continuation_target,
         structure_source_continuation=continuation_source,
         impulse_rvol=causal_impulse_rvol(bars, timestamp, _eligible_bars=context.eligible),
+        session_efficiency=s_eff,
     )
