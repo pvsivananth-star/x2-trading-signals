@@ -10,7 +10,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -323,6 +323,22 @@ class ConfluenceV1:
             elif snapshot.trend == "down" and "short" in self.sides:
                 side_used = "short"
         if position_quantity == 0 and side_used is not None and policy.allowed and market is not None:
+            timeframe_cfg = self.strategy.get("timeframes", {})
+            if timeframe_cfg.get("require_completed_context", False):
+                context_time = snapshot.context_timestamp
+                if (snapshot.context_regime is None or context_time is None
+                        or context_time > timestamp
+                        or timestamp - context_time > timedelta(minutes=int(timeframe_cfg.get("max_context_age_mins", 30)))
+                        or snapshot.context_regime != regime.value):
+                    gates.append("30m_context_unavailable_or_stale")
+                swing_cfg = self.strategy.get("swing", {})
+                required_swing = Decimal(str(swing_cfg.get("min_atr_mult", "0.60")))
+                expected_direction = "up" if side_used == "long" else "down"
+                if (not snapshot.swing_15m_confirmed
+                        or snapshot.swing_15m_direction != expected_direction
+                        or snapshot.swing_15m_size_atr is None
+                        or snapshot.swing_15m_size_atr < required_swing):
+                    gates.append("15m_swing_unconfirmed_or_misaligned")
             trend_day_long = side_used == "long" and regime is Regime.TREND_DAY
             vwap_aligned = False
             if trend_day_long and last is not None and snapshot.vwap is not None and snapshot.atr is not None:
