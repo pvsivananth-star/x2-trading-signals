@@ -6,10 +6,10 @@ ExecutionManager contracts as paper execution. It never enables live routing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from app.application.analyzers.core import AnalyzerContext, RelativeStrengthAnalyzer
 from app.application.execution import ExecutionManager, InMemoryExecutionAdapter
@@ -17,8 +17,7 @@ from app.application.portfolio_controller import PortfolioController, PortfolioL
 from app.application.risk_manager import RiskLimits, RiskManager, RiskSnapshot
 from app.application.strategy_manager import StrategyContext, StrategyManager
 from app.application.trades import TradeManager
-from app.backtest.bars import Bar, rollup
-from app.domain.risk.model import RiskDecisionStatus
+from app.backtest.bars import Bar
 from app.domain.runtime import RuntimeMode
 
 
