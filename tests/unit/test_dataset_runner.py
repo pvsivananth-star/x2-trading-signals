@@ -225,7 +225,7 @@ class CostRuleTests(unittest.TestCase):
 
     def test_runner_rejects_double_counted_simulator_friction(self):
         engine = SimpleNamespace(strategy={}, evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
-        simulator = OrderSimulator(SimulationConfig(spread_bps=Decimal("1")))
+        simulator = OrderSimulator(SimulationConfig(spread_bps=Decimal(1)))
         with self.assertRaisesRegex(ValueError, "owned by the shared cost ledger"):
             run_symbol("SPY", [_bar(0, "100", "101", "99", "100")], "US_EQUITIES",
                        engine, None, self.costs, Decimal(25000), Decimal("0.0025"), False, simulator)
