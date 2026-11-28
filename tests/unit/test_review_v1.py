@@ -20,7 +20,9 @@ def _engine() -> ConfluenceV1:
 
 
 def _snap(**overrides) -> FeatureSnapshot:
-    return replace(snapshot(), context_timestamp=NOW, **overrides)
+    values = {"context_timestamp": NOW}
+    values.update(overrides)
+    return replace(snapshot(), **values)
 
 
 def _eval(engine, snap, **kwargs):
