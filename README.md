@@ -88,3 +88,36 @@ Vendor SDKs, HTTP servers, databases and filesystem details belong behind ports/
 
 Do not create microservices prematurely. First establish strong module boundaries, deterministic contracts, state machines, idempotency, auditability and tests inside the modular monolith. Containers and service extraction come after local acceptance.
 
+
+
+## Free historical research data
+
+The repository includes a no-key downloader for recent 5-minute OHLCV data:
+
+```bash
+python -m app.cli download-free-data \
+  --days 60 \
+  --out ../back-test-copyright/free-market-data
+```
+
+It downloads the configured 16-symbol multi-market universe into `bars.csv`,
+`instruments.csv`, `manifest.json` and `download_failures.csv`. The downloader
+refuses to overwrite a non-empty output directory and never fills missing bars.
+Yahoo Finance intraday history is limited to the most recent 60 calendar days.
+The public `yfinance` documentation describes this access as intended for
+personal use; check the provider's terms before use and do not redistribute
+downloaded data without permission.
+
+Validate and run the backtest:
+
+```bash
+python -m app.cli backtest-dataset \
+  --dir ../back-test-copyright/free-market-data \
+  --interval 300 \
+  --synthetic-warmup-sessions 15 \
+  --out backtest_runs/free-market-data
+```
+
+This free source is suitable for pipeline and short-window strategy research,
+not consolidated-volume or bid/ask execution validation. It does not replace
+multi-year historical data for robust out-of-sample profitability analysis.
