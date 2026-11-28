@@ -250,16 +250,22 @@ def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
 
 def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool, symbol: str | None = None) -> tuple[dict[str, Any], list[str]]:
     section = COST_SECTION.get(profile, profile)
+    spread_field = "spread_pct_full"
+    # Index ETFs use the ETF schedule; do not classify them as single stocks.
+    # A missing symbol-specific spread stays excluded rather than borrowing SPY.
+    if symbol and profile == "US_EQUITIES":
+        if symbol in {"SPY", "QQQ", "IWM"}:
+            section = "US_ETF"
+            spread_field = "spread_pct_full" if symbol == "SPY" else f"spread_pct_full_{symbol.lower()}"
+        else:
+            spread_field = "spread_pct_full_single_stocks"
+    elif symbol and profile == "US_COMMODITIES":
+        spread_field = f"spread_pct_full_{symbol.lower()}"
     estimates_enabled = allow_estimates or costs.get("allow_estimates") is True
     field_costs = {**costs, "allow_estimates": estimates_enabled}
     excluded: list[str] = []
     values: dict[str, Any] = {}
     fields = list(COST_FIELDS.get(profile, ("commission", "spread_pct_full")))
-    spread_field = "spread_pct_full"
-    if symbol and profile == "US_EQUITIES" and symbol != "SPY":
-        spread_field = "spread_pct_full_single_stocks"
-    elif symbol and profile == "US_COMMODITIES":
-        spread_field = f"spread_pct_full_{symbol.lower()}"
     if "spread_pct_full" in fields:
         fields[fields.index("spread_pct_full")] = spread_field
     estimated: list[str] = []
