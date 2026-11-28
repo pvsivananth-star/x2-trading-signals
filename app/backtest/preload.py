@@ -54,9 +54,18 @@ def _parse_utc(text: str) -> datetime:
     return parsed
 
 
-def resolve_profile(symbol: str, markets: dict[str, Any]) -> str | None:
-    """Return the single market profile whose core_symbols contains the symbol, or None."""
-    matches = [name for name, cfg in markets["markets"].items() if symbol in cfg.get("core_symbols", [])]
+def resolve_profile(symbol: str, markets: dict[str, Any], *, allow_backtest_excluded: bool = True) -> str | None:
+    """Resolve a symbol to one market profile.
+
+    Backtest fixtures may intentionally use production-excluded instruments such as index/futures
+    symbols. Those remain blocked by live policy, but the dataset loader must still know their
+    market profile so the backtest can exercise the category.
+    """
+    matches = [
+        name for name, cfg in markets["markets"].items()
+        if symbol in cfg.get("core_symbols", [])
+        or (allow_backtest_excluded and symbol in cfg.get("excluded_symbols", []))
+    ]
     if len(matches) > 1:
         raise PreloadError(f"symbol {symbol} is listed in more than one profile: {sorted(matches)}")
     return matches[0] if matches else None
@@ -135,7 +144,7 @@ def preload_directory(directory: str | Path, interval_seconds: int,
     for symbol, rows in series.items():
         if not rows:
             raise PreloadError(f"{symbol}: no bars")
-        profile = resolve_profile(symbol, markets)
+        profile = resolve_profile(symbol, markets, allow_backtest_excluded=True)
         if profile is None:
             raise PreloadError(f"{symbol}: no market profile lists this symbol in markets_17.yaml")
         for previous, current in pairwise(rows):
