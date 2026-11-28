@@ -5,8 +5,12 @@ from decimal import Decimal
 from enum import StrEnum
 
 class TradeIntentStatus(StrEnum):
-    CREATED="CREATED"; PORTFOLIO_APPROVED="PORTFOLIO_APPROVED"; RISK_APPROVED="RISK_APPROVED"
-    REJECTED="REJECTED"; CANCELLED="CANCELLED"; EXPIRED="EXPIRED"
+    CREATED="CREATED"
+    PORTFOLIO_APPROVED="PORTFOLIO_APPROVED"
+    RISK_APPROVED="RISK_APPROVED"
+    REJECTED="REJECTED"
+    CANCELLED="CANCELLED"
+    EXPIRED="EXPIRED"
 
 @dataclass(frozen=True, slots=True)
 class TradeIntent:
@@ -26,8 +30,11 @@ class TradeIntent:
     reason_codes: tuple[str,...]=()
     reservation_id: str|None=None
     def __post_init__(self):
-        if not self.intent_id or not self.signal_id or not self.symbol: raise ValueError("intent identity required")
-        if self.quantity <= 0: raise ValueError("quantity must be positive")
-        if self.side not in {"BUY","SELL"}: raise ValueError("side must be BUY or SELL")
+        if not self.intent_id or not self.signal_id or not self.symbol:
+            raise ValueError("intent identity required")
+        if self.quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if self.side not in {"BUY","SELL"}:
+            raise ValueError("side must be BUY or SELL")
         if self.status is TradeIntentStatus.CREATED and not self.reason_codes:
             raise ValueError("trade intent requires reason codes")
