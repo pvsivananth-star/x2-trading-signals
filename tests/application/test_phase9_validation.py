@@ -6,14 +6,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.backtest.validation import validate_dataset
-from app.backtest.dataset_runner import (
-    InsufficientScoredDataError, dump_synthetic_warmup, inspect_scored_data, run_dataset,
-)
-from app.backtest.bars import Bar
-from app.backtest.causality import validate_causal_window, validate_next_bar_execution
+import csv
+import json
+import tempfile
+import unittest
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
+
+from app.backtest.bars import Bar
+from app.backtest.causality import validate_causal_window, validate_next_bar_execution
+from app.backtest.dataset_runner import (
+    InsufficientScoredDataError,
+    dump_synthetic_warmup,
+    inspect_scored_data,
+    run_dataset,
+)
+from app.backtest.validation import validate_dataset
 
 
 class Phase9DatasetValidationTests(unittest.TestCase):
@@ -230,17 +239,17 @@ class Phase9DatasetValidationTests(unittest.TestCase):
 
     def test_causal_window_rejects_future_bar(self) -> None:
         t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
-        bar = Bar(t, t + timedelta(minutes=5), Decimal("100"), Decimal("101"),
-                  Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        bar = Bar(t, t + timedelta(minutes=5), Decimal(100), Decimal(101),
+                  Decimal(99), Decimal(100), Decimal(1000), 10)
         self.assertEqual(len(validate_causal_window([bar], t)), 1)
 
     def test_next_bar_execution_is_strictly_after_decision_close(self) -> None:
         t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
-        decision = Bar(t - timedelta(minutes=5), t, Decimal("100"), Decimal("101"),
-                       Decimal("99"), Decimal("100"), Decimal("1000"), 10)
-        same = Bar(t - timedelta(minutes=5), t, Decimal("100"), Decimal("101"),
-                   Decimal("99"), Decimal("100"), Decimal("1000"), 10)
-        next_bar = Bar(t, t + timedelta(minutes=5), Decimal("100"), Decimal("101"),
-                       Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        decision = Bar(t - timedelta(minutes=5), t, Decimal(100), Decimal(101),
+                       Decimal(99), Decimal(100), Decimal(1000), 10)
+        same = Bar(t - timedelta(minutes=5), t, Decimal(100), Decimal(101),
+                   Decimal(99), Decimal(100), Decimal(1000), 10)
+        next_bar = Bar(t, t + timedelta(minutes=5), Decimal(100), Decimal(101),
+                       Decimal(99), Decimal(100), Decimal(1000), 10)
         self.assertEqual(len(validate_next_bar_execution(decision, same)), 1)
         self.assertEqual(validate_next_bar_execution(decision, next_bar), ())
