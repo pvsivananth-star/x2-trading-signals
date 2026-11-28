@@ -741,9 +741,10 @@ class EndToEndSyntheticTests(unittest.TestCase):
     def test_equity_risk_respects_causal_regime_cap(self):
         for t in self.trades:
             if t.symbol == "SIM-EQ":
+                symbol_capital = Decimal(self.result["per_symbol"]["SIM-EQ"]["capital_allocation"])
                 base_risks = {
-                    Decimal(25000) * Decimal("0.0008"),
-                    Decimal(25000) * Decimal("0.0025"),
+                    symbol_capital * Decimal("0.0008"),
+                    symbol_capital * Decimal("0.0025"),
                 }
                 allowed_risks = {
                     base * weight for base in base_risks
