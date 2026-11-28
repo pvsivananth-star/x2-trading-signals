@@ -6,6 +6,8 @@ strategy:
     discovery_mins: 30
     signal_mins: 5
     swing_mins: 15
+    require_completed_context: true
+    max_context_age_mins: 30
   swing:
     min_candles: 3
     min_atr_mult: 0.60
