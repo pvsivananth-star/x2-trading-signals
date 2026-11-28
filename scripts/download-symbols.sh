@@ -45,15 +45,15 @@ SUCCESS=()
 FAILED=()
 SKIPPED=()
 
-echo "Sequential market data download: \${#SYMBOLS[@]} symbols"
+echo "Sequential market data download: ${#SYMBOLS[@]} symbols"
 echo "Days: $DAYS"
 echo "Output: $OUT"
 
-for INDEX in "\${!SYMBOLS[@]}"; do
-  SYMBOL="\${SYMBOLS[$INDEX]}"
+for INDEX in "${!SYMBOLS[@]}"; do
+  SYMBOL="${SYMBOLS[$INDEX]}"
   echo
   echo "----------------------------------------"
-  echo "[$((INDEX + 1))/\${#SYMBOLS[@]}] Downloading: $SYMBOL"
+  echo "[$((INDEX + 1))/${#SYMBOLS[@]}] Downloading: $SYMBOL"
   echo "----------------------------------------"
 
   if is_downloaded "$SYMBOL"; then
@@ -64,7 +64,7 @@ for INDEX in "\${!SYMBOLS[@]}"; do
 
   CMD=(python -m app.cli download-free-data --symbol "$SYMBOL" --days "$DAYS" --out "$OUT" --append)
 
-  if "\${CMD[@]}"; then
+  if "${CMD[@]}"; then
     SUCCESS+=("$SYMBOL")
     echo "SUCCESS: $SYMBOL"
   else
@@ -79,14 +79,14 @@ echo
 echo "========================================"
 echo "DOWNLOAD SUMMARY"
 echo "========================================"
-echo "Successful (\${#SUCCESS[@]}):"
-printf '  %s\n' "\${SUCCESS[@]:-None}"
-echo "Skipped (\${#SKIPPED[@]}):"
-printf '  %s\n' "\${SKIPPED[@]:-None}"
-echo "Failed (\${#FAILED[@]}):"
-printf '  %s\n' "\${FAILED[@]:-None}"
+echo "Successful (${#SUCCESS[@]}):"
+printf '  %s\n' "${SUCCESS[@]:-None}"
+echo "Skipped (${#SKIPPED[@]}):"
+printf '  %s\n' "${SKIPPED[@]:-None}"
+echo "Failed (${#FAILED[@]}):"
+printf '  %s\n' "${FAILED[@]:-None}"
 echo "Dataset: $OUT"
 
-if [[ \${#FAILED[@]} -gt 0 ]]; then
+if [[ ${#FAILED[@]} -gt 0 ]]; then
   exit 2
 fi
