@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from app.backtest.bars import Bar, aggregate_bars
+from app.backtest.portfolio import PortfolioLedger
 from app.backtest.simulator import OrderSimulator, SimulationConfig
 from app.costs import CostBlockedError, _field, load_costs
 from app.event_risk import EventRiskAssessment
