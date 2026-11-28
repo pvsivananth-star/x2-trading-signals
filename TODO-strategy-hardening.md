@@ -78,7 +78,7 @@ flowchart TD
 - [x] Correct full-net eligibility: any excluded or estimated required cost field prevents a `fully_net` label. Per-symbol reports expose `cost_status`, excluded fields, and estimated fields.
 - [x] Do not map commodity futures to generic US ETF cost assumptions. GC=F/CL=F remain outside the baseline; GLD and USO use separate symbol-specific spread fields. Their spread values are still unavailable, so those instruments remain `partial_net` until measured.
 - [x] Keep GLD/USO ETF proxy metadata and cost-spread fields separate from futures. Their US regular-session calendar, USD/share units, 0.01 tick, and 1x share multiplier are explicit; instrument-specific spreads remain not-found until measured. Futures remain excluded pending distinct calendars, multipliers, margin, and fee profiles.
-- [x] Ensure MoveRoom and realized P&L use the same instrument-specific cost ledger: the entry gate applies the greater of the configured round-trip floor and known cost percentage, plus the configured slippage buffer; realized P&L deducts known costs once. Excluded fields keep the result partial-net.
+- [ ] Ensure exact MoveRoom / realized-P&L cost parity. MoveRoom now uses the greater of the strategy round-trip floor and market-specific round-trip estimate, plus the slippage buffer; realized P&L applies the itemized cost ledger once. Exact quantity-dependent commission parity and measured spread evidence remain open.
 - [x] If slippage is estimated or unavailable, disclose it in `estimated_cost_fields` / `cost_fields_excluded` and downgrade the result to `partial_net`; known cost components are still applied.
 
 ## 5. Shared portfolio simulation
@@ -86,6 +86,7 @@ flowchart TD
 - [x] Apply a deterministic shared portfolio ledger to combined-run trade candidates in chronological entry order (entry timestamp, symbol, exit time tie-break).
 - [x] Enforce total capital, per-trade risk, per-market allocation, correlated-cluster exposure, maximum concurrent positions, and available-cash constraints; initial baseline capital defaults to USD 100,000 and rejects higher values.
 - [x] Resolve simultaneous candidate trades deterministically by entry time, symbol, then exit time; shared reservations prevent multiple symbols spending the same cash.
+- [x] Reserve cash using the greater of known itemized entry costs and the configured market round-trip cost buffer; this is a reservation only and is not added to realized P&L.
 - [ ] Refactor candidate generation so setup weights and portfolio constraints determine quantity before the simulated position lifecycle. Current implementation conservatively rescales/rejects completed per-symbol candidates afterward; it does not yet feed portfolio reservations back into each symbol's signal-generation loop.
 - [x] Report portfolio-rejected trades with symbol, timestamp, requested size/notional, and exact blocking constraint.
 - [x] Keep the initial portfolio capital ceiling at the approved **USD 100,000**, unless explicitly changed by the user.
@@ -116,7 +117,7 @@ flowchart TD
 1. [x] Four-hour hard time limit and stagnation exit.
 2. [x] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk and gap-entry rejection).
 3. [x] True 30m/15m/5m causal timeframe pipeline, swing confirmation, fail-closed event-risk gate, and slot-normalized RVOL.
-4. [ ] Slot-normalized RVOL (pending); higher-timeframe diagnostics and reaction-zone sizing are implemented.
+4. [x] Slot-normalized RVOL, higher-timeframe diagnostics, and reaction-zone sizing are implemented and covered by focused regression tests.
 5. [x] Instrument-specific ETF proxy spread profiles and truthful gross/partial-net/fully-net reporting; MoveRoom cost parity remains open under section 4.
 6. [x] Shared portfolio capital, concurrency, and exposure constraints are applied chronologically after symbol replay; portfolio feedback into candidate generation remains open under section 5. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback remains open.
 7. [ ] Full regression suite, chronological out-of-sample, and walk-forward report.
