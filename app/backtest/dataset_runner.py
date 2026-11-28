@@ -856,13 +856,13 @@ def write_outputs(result: dict[str, Any], out_dir: str | Path) -> Path:
     with ledger.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["symbol", "side", "qty", "entry_time", "entry_price", "exit_time", "exit_price",
-                         "exit_reason", "holding_minutes", "risk_amount", "gross_pnl", "cost", "net_pnl", "r_multiple", "regime", "fill_status", "cost_status"])
+                         "exit_reason", "holding_minutes", "risk_amount", "gross_pnl", "cost", "net_pnl", "r_multiple", "regime", "market_phase", "fill_status", "cost_status", "portfolio_status"])
         for t in trades:
             writer.writerow([t.symbol, t.side, t.qty, t.entry_time.isoformat(), t.entry_price,
                              t.exit_time.isoformat(), t.exit_price, t.exit_reason, t.holding_minutes, t.risk_amount,
                              t.gross_pnl, "" if t.cost is None else t.cost,
                              "" if t.net_pnl is None else t.net_pnl, "" if t.r_multiple is None else t.r_multiple,
-                              t.regime, t.fill_status, t.cost_status])
+                              t.regime, t.market_phase, t.fill_status, t.cost_status, t.portfolio_status])
     summary = out / "summary.json"
     summary.write_text(json.dumps(result, indent=2, default=str) + "\n", encoding="utf-8")
     result["_trades"] = trades
