@@ -46,7 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     tick_pump.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
     tick_pump.add_argument("--ticks", type=int, default=None)
     tick_pump.add_argument("--interval", type=float, default=1.0)
-    tick_pump.add_argument("--warmup", type=float, default=0.25)
+    tick_pump.add_argument("--warmup", type=float, default=0.25,
+                           help="minimum fraction of each stream to preload; six sessions are always required")
+    tick_pump.add_argument("--warmup-sessions", type=int, default=6,
+                           help="minimum completed sessions preloaded before tick replay (slot-RVOL needs 5 prior sessions)")
 
     audited = subparsers.add_parser("backtest-report", help="produce an audited 252-session multi-market summary")
     audited.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
@@ -125,7 +128,8 @@ def main(argv: list[str] | None = None) -> int:
                                  stale_threshold_seconds=config.stale_threshold_seconds)
             broker = DemoBroker(policy, starting_cash=Decimal(25000))
             pump = TickPumpRuntime(store, actor, broker, warmup_fraction=args.warmup,
-                                   interval_seconds=args.interval)
+                                   interval_seconds=args.interval,
+                                   minimum_warmup_sessions=args.warmup_sessions)
             result = pump.run(max_ticks=args.ticks)
             print(json.dumps({
                 "status": "completed", "mode": "backtest",
