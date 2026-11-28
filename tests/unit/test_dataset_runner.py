@@ -321,6 +321,14 @@ class CostRuleTests(unittest.TestCase):
         self.assertEqual(result["trades"][0].exit_reason, "TARGET_HIT")
         self.assertEqual(result["trades"][0].exit_price, Decimal(103))
 
+    def test_phase2_baseline_rejects_crypto_and_non_us_symbols(self):
+        with self.assertRaisesRegex(ValueError, "restricted to US equities"):
+            run_dataset(FIXTURE, profile_map={"SIM-COIN": "CRYPTO_MAJORS"})
+
+    def test_phase2_baseline_rejects_unapproved_symbols(self):
+        with self.assertRaisesRegex(ValueError, "outside the Phase 2 baseline universe"):
+            run_dataset(FIXTURE, profile_map={"SPY": "US_EQUITIES"})
+
     def test_run_dataset_rejects_nonconfigured_signal_interval(self):
         with self.assertRaisesRegex(ValueError, "does not match configured"):
             run_dataset(FIXTURE, interval_seconds=60)
@@ -590,7 +598,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.out_dir = tempfile.mkdtemp()
-        cls.result = run_dataset(FIXTURE, interval_seconds=300)
+        cls.result = run_dataset(FIXTURE, interval_seconds=300, start_equity=Decimal(25000), baseline_scope=False)
         cls.trades = cls.result.pop("_trades")
 
     def test_both_symbols_run_and_crypto_net_is_blocked(self):
@@ -623,7 +631,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
                 self.assertEqual(t.qty, t.qty.to_integral_value())
 
     def test_deterministic_rerun(self):
-        again = run_dataset(FIXTURE, interval_seconds=300)
+        again = run_dataset(FIXTURE, interval_seconds=300, start_equity=Decimal(25000), baseline_scope=False)
         again.pop("_trades")
         self.result.pop("net_definition", None)
         again.pop("net_definition", None)
