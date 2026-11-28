@@ -754,6 +754,10 @@ class EndToEndSyntheticTests(unittest.TestCase):
         self.assertEqual(set(self.result["per_symbol"]), {"SIM-EQ", "SIM-COIN"})
         self.assertFalse(self.result["per_symbol"]["SIM-COIN"]["net_costs_available"])
 
+    def test_every_synthetic_trade_respects_four_hour_hard_cap(self):
+        for trade in self.trades:
+            self.assertLessEqual(trade.holding_minutes, Decimal(240))
+
     def test_equity_positions_never_held_overnight_or_past_close(self):
         for t in self.trades:
             if t.symbol != "SIM-EQ":
