@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("load-fixtures", help="validate the deterministic local market-data fixtures")
 
-    tick_pump = subparsers.add_parser("tick-pump", help="backtest 25% warmup then pump fixture ticks once per second")
+    tick_pump = subparsers.add_parser("tick-pump", help="backtest 25%% warmup then pump fixture ticks once per second")
     tick_pump.add_argument("--config", type=Path, default=Path("config/feeds.yaml"))
     tick_pump.add_argument("--ticks", type=int, default=None)
     tick_pump.add_argument("--interval", type=float, default=1.0)
