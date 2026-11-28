@@ -456,7 +456,7 @@ class IntrabarExitTests(unittest.TestCase):
                 return SimpleNamespace(action="hold", parameters={})
 
         start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
-        offsets = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        offsets = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
         bars = [
             Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
                 Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
