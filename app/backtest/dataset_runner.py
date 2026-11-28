@@ -21,7 +21,7 @@ import csv
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -297,27 +297,36 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         bar = bars[i]
         exited_this_bar = False
         if pos is not None:
-            stop_distance = abs(pos.entry_price - pos.stop)
-            favourable = (bar.high - pos.entry_price) if pos.side > 0 else (pos.entry_price - bar.low)
-            if stop_distance > 0:
-                pos.best_favorable_r = max(pos.best_favorable_r, favourable / stop_distance)
-            hit = _intrabar_exit(pos, bar)
-            if hit is not None:
-                price, reason = hit
-                trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
+            deadline = pos.entry_time + timedelta(minutes=max_holding_minutes)
+            if bar.bar_start >= deadline:
+                # At/after the deadline, use this bar's open; do not inspect later prices in the bar.
+                trades.append(_close(symbol, pos, bar.bar_start, bar.open, "MAX_HOLD_TIME", cost_values, net_available))
                 pos = None
                 exited_this_bar = True
             else:
-                held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
-                if held_minutes >= max_holding_minutes:
-                    trades.append(_close(symbol, pos, bar.bar_end, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                stop_distance = abs(pos.entry_price - pos.stop)
+                favourable = (bar.high - pos.entry_price) if pos.side > 0 else (pos.entry_price - bar.low)
+                if stop_distance > 0:
+                    pos.best_favorable_r = max(pos.best_favorable_r, favourable / stop_distance)
+                hit = _intrabar_exit(pos, bar)
+                if hit is not None:
+                    price, reason = hit
+                    trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                     pos = None
                     exited_this_bar = True
-                elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
-                      and pos.best_favorable_r < stagnation_min_favorable_r):
-                    trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
-                    pos = None
-                    exited_this_bar = True
+                else:
+                    held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
+                    if bar.bar_end >= deadline:
+                        # If the deadline falls inside an OHLC bar, exact execution time is unknowable.
+                        # Close at that bar's close and expose the bar-resolution limitation.
+                        trades.append(_close(symbol, pos, bar.bar_end, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                        pos = None
+                        exited_this_bar = True
+                    elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
+                          and pos.best_favorable_r < stagnation_min_favorable_r):
+                        trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
+                        pos = None
+                        exited_this_bar = True
         if pos is None and pending is not None:
             side, stop_dist, target, entry_risk_pct = pending
             entry_px = bar.open
