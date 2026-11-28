@@ -389,9 +389,8 @@ class IntrabarExitTests(unittest.TestCase):
     def test_max_holding_time_closes_from_actual_fill_timestamp(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
-            strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
-
             def __init__(self):
+                self.strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
                 self.entered = False
 
             def evaluate(self, **kwargs):
@@ -472,10 +471,9 @@ class IntrabarExitTests(unittest.TestCase):
     def test_stagnation_exit_requires_insufficient_favourable_excursion(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
-            strategy = {"exit": {"max_holding_minutes": 240, "stagnation_minutes": 2,
-                                 "stagnation_min_favorable_r": "1.0"}}
-
             def __init__(self):
+                self.strategy = {"exit": {"max_holding_minutes": 240, "stagnation_minutes": 2,
+                                          "stagnation_min_favorable_r": "1.0"}}
                 self.entered = False
 
             def evaluate(self, **kwargs):
@@ -536,7 +534,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
                 }
                 allowed_risks = {
                     base * weight for base in base_risks
-                    for weight in (Decimal("1"), Decimal("0.68"), Decimal("0.75"))
+                    for weight in (Decimal(1), Decimal("0.68"), Decimal("0.75"))
                 }
                 self.assertIn(t.risk_amount, allowed_risks)
 
