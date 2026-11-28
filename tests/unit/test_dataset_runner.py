@@ -396,6 +396,10 @@ class CostRuleTests(unittest.TestCase):
         self.assertEqual(result["trades"][0].exit_reason, "TARGET_HIT")
         self.assertEqual(result["trades"][0].exit_price, Decimal(103))
 
+    def test_phase2_baseline_rejects_capital_above_one_hundred_thousand(self):
+        with self.assertRaisesRegex(ValueError, "cannot exceed USD 100,000"):
+            run_dataset(FIXTURE, start_equity=Decimal(100001), profile_map={"SPY": "US_EQUITIES"})
+
     def test_phase2_baseline_rejects_crypto_and_non_us_symbols(self):
         with self.assertRaisesRegex(ValueError, "restricted to US equities"):
             run_dataset(FIXTURE, profile_map={"SIM-COIN": "CRYPTO_MAJORS"})
@@ -742,6 +746,8 @@ class EndToEndSyntheticTests(unittest.TestCase):
     def test_shared_portfolio_budget_is_reported(self):
         portfolio = self.result["portfolio"]
         self.assertEqual(portfolio["capital"], "25000")
+        self.assertEqual(self.result["per_symbol"]["SIM-EQ"]["capital_allocation"], "8750.00")
+        self.assertEqual(self.result["per_symbol"]["SIM-COIN"]["capital_allocation"], "1250.00")
         self.assertEqual(portfolio["candidate_trades"], portfolio["accepted_trades"] + portfolio["rejected_trades"])
 
     def test_both_symbols_run_and_crypto_net_is_blocked(self):
