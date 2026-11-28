@@ -771,7 +771,10 @@ def _apply_portfolio_constraints(
 ) -> tuple[list[Trade], list[dict[str, Any]], dict[str, Any]]:
     market_config = markets["markets"]
     allocations = {
-        name: Decimal(str(config.get("allocation_pct", 0)))
+        name: (
+            Decimal(str(config.get("allocation_pct", 0)))
+            if config.get("enabled", True) else Decimal(0)
+        )
         for name, config in market_config.items()
     }
     cluster_caps = {
