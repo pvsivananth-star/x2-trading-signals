@@ -531,6 +531,12 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             core_symbols.append(symbol)
     policy = TradingPolicy(markets, "dataset-run")
     engine = ConfluenceV1.from_yaml(strategy_path, policy)
+    configured_signal_seconds = int(engine.strategy["timeframes"]["signal_mins"]) * 60
+    if interval_seconds != configured_signal_seconds:
+        raise ValueError(
+            f"dataset interval {interval_seconds}s does not match configured "
+            f"{engine.strategy['timeframes']['signal_mins']}m signal timeframe"
+        )
     costs = load_costs(costs_path)
 
     results = []
