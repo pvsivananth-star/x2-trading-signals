@@ -85,12 +85,16 @@ def _metrics(pnls: Sequence[Decimal], start_equity: Decimal) -> dict[str, object
         return {"trades": 0, "win_rate": 0.0, "profit_factor": None, "total_pnl": 0.0, "max_drawdown_pct": 0.0}
     wins=[p for p in pnls if p > 0]
     losses=[p for p in pnls if p < 0]
-    gross_win=sum(wins, Decimal(0)); gross_loss=-sum(losses, Decimal(0))
-    equity=start_equity; peak=equity; max_dd=Decimal(0)
+    gross_win=sum(wins, Decimal(0))
+    gross_loss=-sum(losses, Decimal(0))
+    equity=start_equity
+    peak=equity
+    max_dd=Decimal(0)
     for pnl in pnls:
         equity += pnl
         peak=max(peak,equity)
-        if peak: max_dd=max(max_dd,(peak-equity)/peak)
+        if peak:
+            max_dd=max(max_dd,(peak-equity)/peak)
     return {
         "trades": len(pnls),
         "win_rate": round(len(wins)/len(pnls),4),
@@ -131,7 +135,8 @@ def run_replay(
     open_trades: dict[str,_OpenTrade]={}
     closed:list[ReplayTrade]=[]
     equity=start_equity
-    curve=[]; rejected=0
+    curve=[]
+    rejected=0
     pending:list[tuple[int,StrategyManager,object]]= []
 
     for i,bar in enumerate(ordered):
@@ -140,13 +145,15 @@ def run_replay(
         due=[x for x in pending if x[0] <= i]
         pending=[x for x in pending if x[0] > i]
         for _,manager,decision in due:
-            if not decision.trade_candidate: continue
+            if not decision.trade_candidate:
+                continue
             price=bar.open
             notional=price*Decimal("1")
             intent=trade_manager.create_intent(decision,quantity=Decimal("1"),now=as_of,limit_price=price)
             pdecision=portfolio.evaluate(intent,PortfolioSnapshot(equity,Decimal(0),Decimal(0),Decimal(0),Decimal(0)),risk_amount=equity*risk_per_trade,expected_notional=notional,reservation_id=intent.intent_id)
             if not pdecision.approved:
-                rejected+=1; continue
+                rejected+=1
+                continue
             rsnapshot=RiskSnapshot(Decimal(0),Decimal(0),0,notional,False,True,True)
             rdecision=risk.evaluate(intent,risk_amount=equity*risk_per_trade,snapshot=rsnapshot,now=as_of,decision_id=f"RD-{intent.intent_id}")
             result=execution.submit(intent,portfolio_approved=pdecision.approved,risk_status=rdecision.status,timestamp=as_of)
