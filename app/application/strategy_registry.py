@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping
 
 from app.application.strategy_manager import (
-    BaseStrategy, MTFTrendPullbackContinuation, OpeningRangeBreakoutTrend,
-    Strategy, StrategyContext, StrategyDecision, StrategyManager, StrategySpec,
+    MTFTrendPullbackContinuation, OpeningRangeBreakoutTrend,
+    StrategyContext, StrategyDecision, StrategyManager, StrategySpec,
     WeeklyBreakoutPullback, WeeklyTrendFollowing, VWAPRelativeStrengthContinuation,
 )
 
