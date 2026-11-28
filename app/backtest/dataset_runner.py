@@ -606,7 +606,104 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     return out
 
 
-def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(25000),
+
+def _apply_portfolio_constraints(
+    results: list[dict[str, Any]],
+    markets: dict[str, Any],
+    costs: dict[str, Any],
+    capital: Decimal,
+    risk_pct: Decimal,
+    allow_estimates: bool,
+) -> tuple[list[Trade], list[dict[str, Any]], dict[str, Any]]:
+    market_config = markets["markets"]
+    allocations = {
+        name: Decimal(str(config.get("allocation_pct", 0)))
+        for name, config in market_config.items()
+    }
+    cluster_caps = {
+        str(config["cluster"]): Decimal(str(config["cluster_risk_cap"]))
+        for config in market_config.values()
+        if config.get("cluster") and config.get("cluster_risk_cap") is not None
+    }
+    engine_config = markets.get("engine", {})
+    max_concurrent = int(engine_config.get("max_concurrent_positions", 10))
+    total_risk_cap = Decimal(str(engine_config.get("max_total_open_risk_pct", "0.01")))
+    ledger = PortfolioLedger(
+        capital, allocations, cluster_caps,
+        max_concurrent_positions=max_concurrent,
+        max_total_open_risk_pct=total_risk_cap,
+    )
+    profiles = {item["symbol"]: item["profile"] for item in results}
+    candidates = sorted(
+        (trade for item in results for trade in item["trades"]),
+        key=lambda trade: (trade.entry_time, trade.symbol, trade.exit_time),
+    )
+    accepted: list[Trade] = []
+    rejected: list[dict[str, Any]] = []
+    scaled_count = 0
+    for trade in candidates:
+        profile = profiles[trade.symbol]
+        config = market_config[profile]
+        stop_distance = trade.risk_amount / trade.qty if trade.qty > 0 else Decimal(0)
+        decision = ledger.reserve(
+            timestamp=trade.entry_time,
+            exit_time=trade.exit_time,
+            symbol=trade.symbol,
+            market=profile,
+            cluster=str(config.get("cluster", "")),
+            requested_quantity=trade.qty,
+            entry_price=trade.entry_price,
+            stop_distance=stop_distance,
+            max_risk_amount=min(trade.risk_amount, capital * risk_pct),
+            whole_shares=profile not in _FRACTIONAL_QTY_PROFILES,
+        )
+        if not decision.accepted:
+            rejected.append({
+                "symbol": trade.symbol,
+                "entry_time": trade.entry_time.isoformat(),
+                "reason": decision.reason,
+                "requested_quantity": str(trade.qty),
+                "requested_notional": str(trade.qty * trade.entry_price),
+            })
+            continue
+        if decision.status == "scaled":
+            scaled_count += 1
+            gross = (trade.exit_price - trade.entry_price) * decision.quantity * (
+                Decimal(1) if trade.side == "long" else Decimal(-1)
+            )
+            cost_values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
+            if profile in _EQUITY_COST_PROFILES:
+                cost = (
+                    entry_costs(cost_values, decision.quantity, trade.entry_price)
+                    + exit_costs(cost_values, decision.quantity, trade.exit_price)
+                )
+                net = gross - cost
+            else:
+                cost = None
+                net = None
+            r_multiple = (
+                net / decision.risk_amount if net is not None and decision.risk_amount
+                else gross / decision.risk_amount if decision.risk_amount else None
+            )
+            accepted.append(replace(
+                trade, qty=decision.quantity, risk_amount=decision.risk_amount,
+                gross_pnl=gross, cost=cost, net_pnl=net, r_multiple=r_multiple,
+                portfolio_status="scaled",
+            ))
+        else:
+            accepted.append(replace(trade, portfolio_status="accepted"))
+    return accepted, rejected, {
+        "capital": str(capital),
+        "max_concurrent_positions": max_concurrent,
+        "max_total_open_risk_pct": str(total_risk_cap),
+        "candidate_trades": len(candidates),
+        "accepted_trades": len(accepted),
+        "scaled_trades": scaled_count,
+        "rejected_trades": len(rejected),
+    }
+
+
+def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(100000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
                 markets_path: str | Path = "config/markets_17.yaml",
@@ -614,17 +711,28 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 strategy_path: str | Path = "config/strategies/confluence_pullback.yaml",
                 event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None) -> dict[str, Any]:
     directory = Path(directory)
-    profile_map = profile_map or DEFAULT_PROFILE
     instrument_symbols = instrument_symbols or _instrument_symbols(directory)
     records = load_bar_records(directory / "bars.csv")
     grouped = group_bars(records)
 
     import yaml
     markets = yaml.safe_load(Path(markets_path).read_text(encoding="utf-8"))
-    for symbol, profile in profile_map.items():
-        core_symbols = markets["markets"][profile]["core_symbols"]
-        if symbol not in core_symbols:
-            core_symbols.append(symbol)
+    if baseline_scope:
+        allowed_profiles = {"US_EQUITIES", "US_COMMODITIES"}
+        if profile_map is None:
+            profile_map = {
+                symbol: profile
+                for profile in sorted(allowed_profiles)
+                for symbol in markets["markets"][profile]["core_symbols"]
+            }
+        if any(profile not in allowed_profiles for profile in profile_map.values()):
+            raise ValueError("Phase 2 baseline is restricted to US equities and US-listed gold/oil ETF proxies")
+    else:
+        profile_map = profile_map or DEFAULT_PROFILE
+        for symbol, profile in profile_map.items():
+            core_symbols = markets["markets"][profile]["core_symbols"]
+            if symbol not in core_symbols:
+                core_symbols.append(symbol)
     policy = TradingPolicy(markets, "dataset-run")
     engine = ConfluenceV1.from_yaml(strategy_path, policy)
     configured_signal_seconds = int(engine.strategy["timeframes"]["signal_mins"]) * 60
@@ -633,8 +741,19 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             f"dataset interval {interval_seconds}s does not match configured "
             f"{engine.strategy['timeframes']['signal_mins']}m signal timeframe"
         )
-    costs = load_costs(costs_path)
+    if start_equity <= 0:
+        raise ValueError("portfolio capital must be positive")
+    if baseline_scope and start_equity > Decimal(100000):
+        raise ValueError("Phase 2 portfolio capital cannot exceed USD 100,000")
+    if baseline_scope:
+        for symbol in instrument_symbols.values():
+            profile = profile_map.get(symbol)
+            if profile is None:
+                raise ValueError(f"instrument {symbol} is outside the Phase 2 baseline universe")
+            if symbol not in markets["markets"][profile]["core_symbols"]:
+                raise ValueError(f"instrument {symbol} is not approved in {profile}.core_symbols")
 
+    costs = load_costs(costs_path)
     results = []
     for iid, symbol in sorted(instrument_symbols.items()):
         bars = grouped.get((iid, interval_seconds), [])
@@ -644,24 +763,37 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity,
                                   risk_pct, allow_estimates, event_risk_provider=event_risk_provider))
 
-    all_trades = [t for r in results for t in r["trades"]]
+    all_trades, portfolio_rejections, portfolio_summary = _apply_portfolio_constraints(
+        results, markets, costs, start_equity, risk_pct, allow_estimates
+    )
+    accepted_by_symbol = {
+        symbol: [trade for trade in all_trades if trade.symbol == symbol]
+        for symbol in (item["symbol"] for item in results)
+    }
     return {
-        "net_definition": ("gross minus costs from config/costs.yaml. Fields listed in cost_fields_excluded "
-                           "are treated as zero (not verified or estimate blocked); the result is NOT a full "
-                           "net-of-all-costs figure unless that list is empty."),
+        "net_definition": (
+            "gross is before costs; partial_net applies available cost components but has excluded "
+            "or estimated fields; fully_net is permitted only when every required cost field is verified "
+            "and applied. Portfolio sizing is applied chronologically against shared capital."
+        ),
         "dataset": str(directory),
         "interval_seconds": interval_seconds,
+        "portfolio_capital": str(start_equity),
         "risk_pct_per_trade": float(risk_pct),
         "allow_estimates": allow_estimates,
+        "baseline_scope": baseline_scope,
         "per_symbol": {
-            r["symbol"]: {
-                "bars": r["bars"], "profile": r["profile"], "net_costs_available": r["net_available"], "cost_status": r["cost_status"],
-                "cost_fields_excluded": r["excluded_cost_fields"],
-                "estimated_cost_fields": r["estimated_cost_fields"], "execution": r["execution"],
-                "summary": summarize(r["trades"], r["start_equity"]),
-            } for r in results
+            item["symbol"]: {
+                "bars": item["bars"], "profile": item["profile"],
+                "net_costs_available": item["net_available"], "cost_status": item["cost_status"],
+                "cost_fields_excluded": item["excluded_cost_fields"],
+                "estimated_cost_fields": item["estimated_cost_fields"], "execution": item["execution"],
+                "summary": summarize(accepted_by_symbol[item["symbol"]], start_equity),
+            } for item in results
         },
-        "combined": summarize(all_trades, start_equity * len(results)) if results else {"trades": 0},
+        "portfolio": portfolio_summary,
+        "portfolio_rejections": portfolio_rejections,
+        "combined": summarize(all_trades, start_equity),
         "_trades": all_trades,
     }
 
