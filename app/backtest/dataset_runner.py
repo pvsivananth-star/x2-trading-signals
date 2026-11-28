@@ -939,10 +939,17 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
 
     costs = load_costs(costs_path)
     active_instruments = []
+    excluded_instruments: list[dict[str, str]] = []
     for iid, symbol in sorted(instrument_symbols.items()):
         bars = grouped.get((iid, interval_seconds), [])
-        if bars:
-            active_instruments.append((symbol, profile_map[symbol], bars))
+        if not bars:
+            continue
+        profile = profile_map[symbol]
+        market_config = markets["markets"][profile]
+        if market_config.get("enabled") is not True:
+            excluded_instruments.append({"symbol": symbol, "profile": profile, "reason": "market_disabled"})
+            continue
+        active_instruments.append((symbol, profile, bars))
     active_counts: dict[str, int] = {}
     for _symbol, profile, _bars in active_instruments:
         active_counts[profile] = active_counts.get(profile, 0) + 1
@@ -1004,6 +1011,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         },
         "portfolio": portfolio_summary,
         "portfolio_rejections": portfolio_rejections,
+        "excluded_instruments": excluded_instruments,
         "combined": summarize(all_trades, start_equity),
         "_trades": all_trades,
     }
