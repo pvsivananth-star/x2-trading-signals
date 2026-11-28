@@ -57,6 +57,9 @@ DEFAULT_PROFILE = {
     "SIM-COIN": "CRYPTO_MAJORS",
     "SPY": "US_EQUITIES",
     "NVDA": "US_EQUITIES",
+    "SPX": "US_EQUITIES",
+    "GC=F": "US_COMMODITIES",
+    "CL=F": "US_COMMODITIES",
     "GLD": "US_COMMODITIES",
     "USO": "US_COMMODITIES",
     "BTC-USD": "CRYPTO_MAJORS",
@@ -679,6 +682,10 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 "max_slot_rvol_samples": max((item.slot_rvol_samples for item in snaps), default=0),
                 "minimum_slot_rvol_sessions_required": slot_min_sessions,
                 "slot_rvol_warmup_satisfied": max((item.slot_rvol_samples for item in snaps), default=0) >= slot_min_sessions,
+                "warmup_requirement": (
+                    f"requires at least {slot_min_sessions + 1} trading sessions in the input "
+                    "so the signal session has enough prior comparable slots"
+                ),
                 "missing_30m_context_bars": sum(1 for item in snaps if item.context_regime is None),
                 "unconfirmed_15m_swing_bars": sum(1 for item in snaps if not item.swing_15m_confirmed),
                 "action_counts": dict(sorted(decision_action_counts.items())),
