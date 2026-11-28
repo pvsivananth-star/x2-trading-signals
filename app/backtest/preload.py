@@ -54,7 +54,9 @@ def _parse_utc(text: str) -> datetime:
     return parsed
 
 
-def resolve_profile(symbol: str, markets: dict[str, Any], *, allow_backtest_excluded: bool = True) -> str | None:
+def resolve_profile(
+    symbol: str, markets: dict[str, Any], *, allow_backtest_excluded: bool = True
+) -> str | None:
     """Resolve a symbol to one market profile.
 
     Backtest fixtures may intentionally use production-excluded instruments such as index/futures
