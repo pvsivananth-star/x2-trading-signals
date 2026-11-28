@@ -188,6 +188,7 @@ class Trade:
     fill_status: str = "filled"
     cost_status: str = "gross"
     portfolio_status: str = "unprocessed"
+    market_phase: str = "UNKNOWN"
 
 
 @dataclass
@@ -204,6 +205,35 @@ class Position:
     entry_regime: str = "UNKNOWN"
     entry_fill_status: str = "filled"
     cost_status: str = "gross"
+    entry_market_phase: str = "UNKNOWN"
+
+
+
+def classify_market_phase(
+    regime: Regime,
+    snapshot: FeatureSnapshot,
+    prior_snapshots: list[FeatureSnapshot],
+) -> str:
+    """Create a reporting bucket; it does not alter strategy entry eligibility.
+
+    Trend direction separates bull/bear trend days. Within non-trend sessions, a 5m ATR
+    at least 1.5x the mean of up to 20 earlier ATR observations is high-volatility/choppy.
+    Remaining non-trend sessions are split into sideways and normal directional conditions.
+    """
+    if regime is Regime.TREND_DAY:
+        if snapshot.trend == "up":
+            return "BULL_TREND"
+        if snapshot.trend == "down":
+            return "BEAR_TREND"
+        return "NORMAL"
+    if regime is Regime.CHOP_DAY:
+        prior_atrs = [item.atr for item in prior_snapshots[-20:] if item.atr is not None]
+        if snapshot.atr is not None and len(prior_atrs) >= 5:
+            baseline = sum(prior_atrs, Decimal(0)) / Decimal(len(prior_atrs))
+            if baseline > 0 and snapshot.atr >= baseline * Decimal("1.5"):
+                return "HIGH_VOL_CHOP"
+        return "SIDEWAYS" if snapshot.trend == "sideways" else "NORMAL"
+    return "UNKNOWN"
 
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
@@ -368,7 +398,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         ))
     trades: list[Trade] = []
     pos: Position | None = None
-    pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal, str] | None = None
+    pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal, str, str] | None = None
     exit_cfg = getattr(engine, "strategy", {}).get("exit", {})
     max_holding_minutes = int(exit_cfg.get("max_holding_minutes", 240))
     stagnation_minutes = int(exit_cfg.get("stagnation_minutes", 60))
@@ -424,7 +454,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         pos = None
                         exited_this_bar = True
         if pos is None and pending is not None:
-            side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close, entry_regime = pending
+            side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close, entry_regime, entry_market_phase = pending
             # Structural targets remain fixed market levels. ATR targets preserve their
             # signal-time distance from the actual simulated fill.
             risk_budget = start_equity * entry_risk_pct
@@ -461,7 +491,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             stop = entry_px - side * stop_dist
             pos = Position(side, filled_qty, bar.bar_start, entry_px, stop, target,
                            actual_risk_amount, ecost, entry_regime=entry_regime,
-                           entry_fill_status=fill.status, cost_status=coverage_status)
+                           entry_fill_status=fill.status, cost_status=coverage_status,
+                           entry_market_phase=entry_market_phase)
             # The entry bar is part of the position lifecycle; never skip its stop/target range.
             hit = _intrabar_exit(pos, bar)
             if hit is not None:
@@ -516,8 +547,9 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     raise ValueError(f"invalid reaction-zone size_weight for {symbol}: {size_weight}")
                 effective_risk_pct *= size_weight
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
+                market_phase = classify_market_phase(regime, snaps[i], snaps[:i])
                 pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct,
-                           target_source, signal_close, regime.value)
+                           target_source, signal_close, regime.value, market_phase)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
@@ -544,7 +576,7 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
     holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
                  exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes,
-                 pos.entry_regime, pos.entry_fill_status, pos.cost_status)
+                 pos.entry_regime, pos.entry_fill_status, pos.cost_status, "unprocessed", pos.entry_market_phase)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
@@ -582,6 +614,18 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
                       for side in {t.side for t in trades}}
     out["fill_status_counts"] = {status: sum(1 for trade in trades if trade.fill_status == status)
                                  for status in ("filled", "partial")}
+    out["by_market_phase"] = {
+        phase: stats([t.gross_pnl for t in trades if t.market_phase == phase])
+        for phase in sorted({t.market_phase for t in trades})
+    }
+    out["by_market_phase_side"] = {
+        phase: {
+            side: stats([t.gross_pnl for t in trades if t.market_phase == phase and t.side == side])
+            for side in ("long", "short")
+            if any(t.market_phase == phase and t.side == side for t in trades)
+        }
+        for phase in sorted({t.market_phase for t in trades})
+    }
     out["by_regime"] = {
         regime: stats([t.gross_pnl for t in trades if t.regime == regime])
         for regime in sorted({t.regime for t in trades})
