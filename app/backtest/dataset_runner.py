@@ -286,9 +286,16 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     bars_15m = aggregate_bars(bars, 15 * 60, source_interval_seconds) if source_interval_seconds else []
     bars_30m = aggregate_bars(bars, 30 * 60, source_interval_seconds) if source_interval_seconds else []
     swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
+    volume_cfg = getattr(engine, "strategy", {}).get("volume", {})
+    slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
+    slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
     snaps: list[FeatureSnapshot] = []
     for i, bar in enumerate(bars):
-        base = feature_snapshot(bars[: i + 1], bar.bar_end, **session)
+        base = feature_snapshot(
+            bars[: i + 1], bar.bar_end, **session,
+            slot_rvol_lookback_sessions=slot_lookback,
+            slot_rvol_min_sessions=slot_min_sessions,
+        )
         complete_15m = [item for item in bars_15m if item.bar_end <= bar.bar_end]
         complete_30m = [item for item in bars_30m if item.bar_end <= bar.bar_end]
         context_time = complete_30m[-1].bar_end if complete_30m else None
