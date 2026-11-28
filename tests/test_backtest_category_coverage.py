@@ -171,7 +171,7 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
         self.assertEqual(_context_30m_missing_reason([]), "insufficient_completed_30m_buckets")
         self.assertIsNone(_context_30m_missing_reason([bars[0]] * 6))
 
-    def test_five_supplied_days_get_ten_synthetic_warmup_sessions(self) -> None:
+    def test_synthetic_warmup_runs_until_strategy_ready(self) -> None:
         bars = []
         first = datetime(2026, 11, 23, 14, 30, tzinfo=UTC)
         for day in range(5):
@@ -184,13 +184,15 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
                     price - Decimal("0.20"), price, Decimal("1000"), 10
                 ))
 
-        warmed, simulation_start = _synthetic_warmup_bars(
-            bars, "US_EQUITIES", sessions=10
+        from app.backtest.dataset_runner import _synthetic_warmup_until_ready
+
+        warmed, simulation_start, sessions = _synthetic_warmup_until_ready(
+            bars, "US_EQUITIES", self.strategy
         )
 
         self.assertEqual(simulation_start, bars[0].bar_start)
         self.assertEqual(warmed[-len(bars):], bars)
-        self.assertEqual(len(warmed) - len(bars), 10 * 78)
+        self.assertGreater(sessions, 0)
         self.assertLess(warmed[0].bar_start, bars[0].bar_start)
 
     def test_runner_can_create_a_trade_for_each_category(self) -> None:
