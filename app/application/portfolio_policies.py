@@ -4,13 +4,18 @@ from decimal import Decimal
 from enum import StrEnum
 
 class PositionAction(StrEnum):
-    HOLD="HOLD"; DE_RISK="DE_RISK"; EXIT="EXIT"; FLATTEN="FLATTEN"
+    HOLD="HOLD"
+    DE_RISK="DE_RISK"
+    EXIT="EXIT"
+    FLATTEN="FLATTEN"
 
 @dataclass(frozen=True, slots=True)
 class LongTermExitPolicy:
     def evaluate(self, *, weekly_trend:str, weekly_structure:str, thesis_valid:bool=True, liquidity_ok:bool=True, risk_breach:bool=False)->PositionAction:
-        if risk_breach or not liquidity_ok or not thesis_valid: return PositionAction.EXIT
-        if weekly_trend=="down" or weekly_structure=="lower-highs-lower-lows": return PositionAction.DE_RISK
+        if risk_breach or not liquidity_ok or not thesis_valid:
+            return PositionAction.EXIT
+        if weekly_trend=="down" or weekly_structure=="lower-highs-lower-lows":
+            return PositionAction.DE_RISK
         return PositionAction.HOLD
 
 @dataclass(frozen=True, slots=True)
