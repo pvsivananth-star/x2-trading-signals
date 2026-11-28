@@ -6,11 +6,11 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 1. Create canonical domain package boundaries.
 - [x] 2. Model Long-Term and Daily Trading portfolios with isolated capital/risk contexts.
 - [x] 3. Define immutable domain entities and stable reason codes.
-- [ ] 4. Define canonical event envelope: event_id, timestamp, correlation_id, causation_id, version, provenance.
-- [ ] 5. Define ports for market data, execution, account, history, clock, calendar, event bus, event store and notifications.
-- [ ] 6. Define runtime modes: backtest, paper/demo and live-disabled.
-- [ ] 7. Add clock/calendar abstractions and causal replay semantics.
-- [ ] 8. Add domain invariants and unit/property tests.
+- [x] 4. Define canonical event envelope: event_id, timestamp, correlation_id, causation_id, version, provenance.
+- [x] 5. Define ports for market data, execution, account, history, clock, calendar, event bus, event store and notifications.
+- [x] 6. Define runtime modes: backtest, paper/demo and live-disabled.
+- [x] 7. Add clock/calendar abstractions and causal replay semantics.
+- [x] 8. Add domain invariants and unit/property tests.
 
 ## Phase 2 — Market data and analysis
 - [ ] 9. Put existing feed/feature code behind MarketDataPort.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: 1 → 2 → 3. Do not tune strategy thresholds until the domain boundaries are stable.**
+**Current work: Phase 2 (#9 onward). Do not tune strategy thresholds until market-data and analyzer boundaries are stable.**
