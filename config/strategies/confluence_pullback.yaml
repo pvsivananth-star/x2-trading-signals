@@ -19,6 +19,13 @@ strategy:
   execution:
     # Cancel unfilled quantity; the shared cost model applies fees, spread and slippage.
     partial_fill_ratio: 1.0
+  playbooks:
+    TREND_DAY:
+      allowed_reaction_zones: [CORE_382_618, SHALLOW_VWAP_236_382, DEEP_RECLAIM_618_786, MOMENTUM_VWAP_12_236]
+      require_directional_close_confirmation: true
+    CHOP_DAY:
+      # Range-edge rejection only; do not run trend-continuation entries in chop.
+      allowed_reaction_zones: [DEEP_RECLAIM_618_786]
   reaction_zones:
     core_fib: { min: 0.382, max: 0.618, weight: 1.00 }
     shallow_vwap: { min: 0.236, max: 0.382, weight: 0.68, require_vwap_hold: true }
