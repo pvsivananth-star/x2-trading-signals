@@ -362,18 +362,19 @@ class ConfluenceV1:
                 gates.append("bullish_close_confirmation_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
-            elif snapshot.impulse_rvol is not None:
-                # Upgrade 1: volume pump on the impulse, dry-up on the pullback bar.
+            else:
+                # The pullback bar must always satisfy the market's baseline RVOL floor.
+                # A prior impulse is an additional qualification, never a bypass of that floor.
                 if snapshot.rvol is None:
                     gates.append("rvol_unavailable")
-                elif snapshot.impulse_rvol < IMPULSE_RVOL_MIN:
-                    gates.append("impulse_volume_not_met")
-                elif snapshot.rvol > DRY_UP_RVOL_MAX:
-                    gates.append("dry_up_not_met")
-            elif snapshot.rvol is None:
-                gates.append("rvol_unavailable")
-            elif snapshot.rvol < slot_rvol:
-                gates.append("rvol_below_threshold")
+                else:
+                    if snapshot.rvol < slot_rvol:
+                        gates.append("rvol_below_threshold")
+                    if snapshot.impulse_rvol is not None:
+                        if snapshot.impulse_rvol < IMPULSE_RVOL_MIN:
+                            gates.append("impulse_volume_not_met")
+                        if snapshot.rvol > DRY_UP_RVOL_MAX:
+                            gates.append("dry_up_not_met")
             if market is not None and "stop_mult" in market:
                 stop_mult_used = Decimal(str(market["stop_mult"]))
             if market is not None and "target_mult" in market:
