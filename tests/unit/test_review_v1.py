@@ -99,6 +99,36 @@ class ReactionZoneTests(unittest.TestCase):
         self.assertNotEqual(card.action, "enter_long")
         self.assertIn("dry_up_not_met", card.rejected_gates)
 
+    def test_chop_playbook_rejects_trend_continuation_core_zone(self):
+        engine = _engine()
+        engine.strategy["playbooks"] = {
+            "CHOP_DAY": {"allowed_reaction_zones": ["DEEP_RECLAIM_618_786"]}
+        }
+        card = _eval(engine, _snap(context_regime="CHOP_DAY", pullback_depth=Decimal("0.50")),
+                     regime=Regime.CHOP_DAY)
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("regime_playbook_zone_not_allowed", card.rejected_gates)
+
+    def test_chop_playbook_allows_range_edge_reclaim(self):
+        engine = _engine()
+        engine.strategy["playbooks"] = {
+            "CHOP_DAY": {"allowed_reaction_zones": ["DEEP_RECLAIM_618_786"]}
+        }
+        card = _eval(engine, _snap(context_regime="CHOP_DAY", pullback_depth=Decimal("0.70"),
+                                  last_close=Decimal("100.5"), vwap=Decimal(100)),
+                     regime=Regime.CHOP_DAY)
+        self.assertEqual(card.action, "enter_long")
+        self.assertEqual(card.parameters["zone"], "DEEP_RECLAIM_618_786")
+
+    def test_trend_day_short_requires_bearish_close_confirmation(self):
+        snap = _snap(trend="down", structure="lower-highs-lower-lows",
+                     context_regime="TREND_DAY", pullback_depth_short=Decimal("0.50"),
+                     last_close=Decimal(99), vwap=Decimal(100),
+                     swing_15m_direction="down")
+        card = _eval(_engine(), snap, regime=Regime.TREND_DAY)
+        self.assertNotEqual(card.action, "enter_short")
+        self.assertIn("directional_close_confirmation_not_met", card.rejected_gates)
+
     def test_entry_requires_confirmed_aligned_15m_swing(self):
         card = _eval(_engine(), _snap(swing_15m_direction="down"))
         self.assertNotEqual(card.action, "enter_long")
