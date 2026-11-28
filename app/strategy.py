@@ -426,6 +426,8 @@ class ConfluenceV1:
                     gates.append(f"{requirement}_not_met")
                     zone = None
             if (zone is not None and sufficient_room and not any(g in gates for g in VOLUME_GATES)
+                    and "30m_context_unavailable_or_stale" not in gates
+                    and "15m_swing_unconfirmed_or_misaligned" not in gates
                     and vwap_aligned and bullish_close_confirmed):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
