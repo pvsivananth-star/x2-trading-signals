@@ -1,0 +1,13 @@
+{
+  "family": "x2-trading",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "containerDefinitions": [{
+    "name": "x2",
+    "image": "ACCOUNT.dkr.ecr.REGION.amazonaws.com/x2-trading:TAG",
+    "essential": true,
+    "readonlyRootFilesystem": true,
+    "environment": [{"name":"TRADING_MODE","value":"demo"}],
+    "secrets": [{"name":"X2_API_TOKEN","valueFrom":"SECRET_ARN:x2-api-token"}]
+  }]
+}
