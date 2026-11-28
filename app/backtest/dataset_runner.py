@@ -690,6 +690,7 @@ def _apply_portfolio_constraints(
     accepted: list[Trade] = []
     rejected: list[dict[str, Any]] = []
     scaled_count = 0
+    rejection_counts: dict[str, int] = {}
     for trade in candidates:
         profile = profiles[trade.symbol]
         config = market_config[profile]
@@ -707,6 +708,7 @@ def _apply_portfolio_constraints(
             whole_shares=profile not in _FRACTIONAL_QTY_PROFILES,
         )
         if not decision.accepted:
+            rejection_counts[decision.reason or "unknown"] = rejection_counts.get(decision.reason or "unknown", 0) + 1
             rejected.append({
                 "symbol": trade.symbol,
                 "entry_time": trade.entry_time.isoformat(),
@@ -749,6 +751,8 @@ def _apply_portfolio_constraints(
         "accepted_trades": len(accepted),
         "scaled_trades": scaled_count,
         "rejected_trades": len(rejected),
+        "rejection_counts": rejection_counts,
+        "simultaneous_priority": "entry_time_then_symbol_then_exit_time",
     }
 
 
@@ -832,12 +836,18 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         "risk_pct_per_trade": float(risk_pct),
         "allow_estimates": allow_estimates,
         "baseline_scope": baseline_scope,
+        "evidence_class": _dataset_evidence_class(directory),
         "per_symbol": {
             item["symbol"]: {
                 "bars": item["bars"], "profile": item["profile"],
                 "net_costs_available": item["net_available"], "cost_status": item["cost_status"],
                 "cost_fields_excluded": item["excluded_cost_fields"],
                 "estimated_cost_fields": item["estimated_cost_fields"], "execution": item["execution"],
+                "trade_status": "traded" if accepted_by_symbol[item["symbol"]] else "no_trades",
+                "no_trade_interpretation": (
+                    None if accepted_by_symbol[item["symbol"]] else
+                    "No eligible trades were produced; this is not evidence of profitability or unprofitability."
+                ),
                 "summary": summarize(accepted_by_symbol[item["symbol"]], start_equity),
             } for item in results
         },
@@ -846,6 +856,20 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         "combined": summarize(all_trades, start_equity),
         "_trades": all_trades,
     }
+
+
+def _dataset_evidence_class(directory: Path) -> str:
+    """Read explicit fixture metadata; never treat synthetic tests as market evidence."""
+    manifest = directory / "manifest.json"
+    if not manifest.exists():
+        return "unverified_historical_dataset"
+    try:
+        metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "unverified_dataset_manifest"
+    if metadata.get("contains_real_market_data") is False or metadata.get("performance_claims_allowed") is False:
+        return "synthetic_software_fixture_only"
+    return "source_declared_dataset"
 
 
 def _instrument_symbols(directory: Path) -> dict[int, str]:
