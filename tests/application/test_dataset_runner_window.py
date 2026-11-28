@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from app.backtest.bars import Bar
 from app.backtest.dataset_runner import causal_regime
-from app.features import DEFAULT_SESSION_CLOSE, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_TZ, feature_snapshot
+from app.features import DEFAULT_SESSION_CLOSE, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_TZ, _local_dt, feature_snapshot
 
 
 def _bars() -> list[Bar]:
@@ -35,7 +35,6 @@ class DatasetRunnerWindowTests(unittest.TestCase):
         bars = _bars()
         window: list[Bar] = []
         window_session = None
-        previous_date = None
         session = {
             "session_timezone": DEFAULT_SESSION_TZ,
             "session_open": DEFAULT_SESSION_OPEN,
@@ -43,9 +42,7 @@ class DatasetRunnerWindowTests(unittest.TestCase):
         }
 
         for index, bar in enumerate(bars):
-            current_date = bar.bar_end.astimezone().date()
             # The fixture timestamps are UTC; the strategy session date is New York local.
-            from app.features import _local_dt
             current_date = _local_dt(bar.bar_end, DEFAULT_SESSION_TZ).date()
             if window_session != current_date:
                 if window_session is not None:
