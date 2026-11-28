@@ -180,8 +180,8 @@ class CostRuleTests(unittest.TestCase):
                 "exit_price": Decimal(101), "exit_reason": "TARGET_HIT", "risk_amount": Decimal(1),
                 "gross_pnl": Decimal(1), "cost": None, "r_multiple": Decimal(1),
                 "holding_minutes": Decimal(5)}
-        gross = Trade(**base, net_pnl=None)
-        net = Trade(**{**base, "cost": Decimal("0.1")}, net_pnl=Decimal("0.9"))
+        gross = Trade(**base, net_pnl=None, cost_status="gross")
+        net = Trade(**{**base, "cost": Decimal("0.1")}, net_pnl=Decimal("0.9"), cost_status="fully_net")
         self.assertEqual(summarize([gross], Decimal(100))["cost_status"], "gross")
         self.assertEqual(summarize([net], Decimal(100))["cost_status"], "fully_net")
         self.assertEqual(summarize([gross, net], Decimal(100))["cost_status"], "partial_net")
@@ -202,6 +202,7 @@ class CostRuleTests(unittest.TestCase):
         result = run_symbol("GLD", [], "US_COMMODITIES", None, None, self.costs,
                             Decimal(25000), Decimal("0.0025"), False)
         self.assertFalse(result["net_available"])
+        self.assertEqual(result["cost_status"], "partial_net")
         self.assertTrue(result["excluded_cost_fields"])
 
     def test_whole_share_profiles_floor_but_crypto_remains_fractional(self):
