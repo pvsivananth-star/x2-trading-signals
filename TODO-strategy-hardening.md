@@ -108,7 +108,7 @@ flowchart TD
 - [x] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason/holding-duration accounting are covered.
 - [x] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills/rejections, and cost coverage.
 - [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
-- [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 234 tests passed, 3 skipped on each version (CI run 46140493871). `python -m compileall -q app tests` and `ruff check app tests` also passed.
+- [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 237 tests passed, 3 skipped on each version (CI run 46144542361). `python -m compileall -q app tests` and `ruff check app tests` also passed.
 - [ ] Re-run bull, bear, normal, sideways, high-volatility-chop, and combined datasets with identical assumptions; compare gross and net results separately. Requires licensed historical datasets for the approved US equity/ETF, GLD, and USO universe.
 - [ ] Extend the synthetic CI fixture or add a dedicated multi-session strategy fixture with at least six prior sessions; the existing five-date fixture cannot satisfy the five-prior-session slot-RVOL warmup and is software-only.
 - [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period. Requires sufficiently long, licensed market data with a distinct warmup, training, validation, and untouched test window.
@@ -123,7 +123,7 @@ flowchart TD
 3. [x] True 30m/15m/5m causal timeframe pipeline, swing confirmation, fail-closed event-risk gate, and slot-normalized RVOL.
 4. [x] Slot-normalized RVOL, higher-timeframe diagnostics, and reaction-zone sizing are implemented and covered by focused regression tests.
 5. [x] Instrument-specific ETF proxy spread profiles and truthful gross/partial-net/fully-net reporting; MoveRoom cost parity remains open under section 4.
-6. [x] Shared portfolio capital, concurrency, and exposure constraints are applied chronologically after symbol replay; portfolio feedback into candidate generation remains open under section 5. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback remains open.
+6. [x] Shared portfolio capital, concurrency, and exposure constraints are applied chronologically after symbol replay; portfolio feedback into candidate generation remains open under section 5. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback and re-evaluation of deferred signals remain open. This is an architectural task, not a reporting-only change.
 7. [ ] Full regression suite, chronological out-of-sample, and walk-forward report.
 
 ## Safety boundary
