@@ -49,6 +49,13 @@ def _eval(engine, snap, **kwargs):
         self.assertEqual(card.parameters["roundtrip_cost_estimate_pct"], "0.0025")
         self.assertEqual(card.parameters["slippage_buffer_pct"], "0.0005")
 
+    def test_move_room_keeps_strategy_cost_floor_when_market_estimate_is_lower(self):
+        markets = deepcopy(MARKETS)
+        markets["markets"]["US_EQUITIES"]["est_roundtrip_cost_pct"] = 0.0006
+        engine = ConfluenceV1(deepcopy(STRATEGY), TradingPolicy(markets, "market-cost-floor-test"))
+        card = _eval(engine, _snap())
+        self.assertEqual(card.parameters["roundtrip_cost_estimate_pct"], "0.001")
+
 class ReactionZoneTests(unittest.TestCase):
     def test_zone_boundaries(self):
         self.assertEqual(classify_reaction_zone(Decimal("0.382")), "CORE_382_618")
