@@ -928,10 +928,10 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 costs_path: str | Path = "config/costs.yaml",
                 strategy_path: str | Path = "config/strategies/confluence_pullback.yaml",
                 event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None,
-                baseline_scope: bool = True) -> dict[str, Any]:
+                baseline_scope: bool = False) -> dict[str, Any]:
     directory = Path(directory)
-    # An explicit caller-supplied profile_map keeps the strict baseline rejection; the default
-    # (CLI) path excludes out-of-scope instruments and reports them instead.
+    # Backtests exercise the full configured fixture universe by default. Set baseline_scope=True
+    # only for the narrower Phase-2 production-baseline audit.
     explicit_profile_map = profile_map is not None
     preloaded: PreloadedDataset | None = None
     excluded_scope: list[dict[str, str]] = []
