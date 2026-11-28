@@ -755,6 +755,17 @@ class EndToEndSyntheticTests(unittest.TestCase):
     def test_synthetic_fixture_is_never_market_performance_evidence(self):
         self.assertEqual(self.result["evidence_class"], "synthetic_software_fixture_only")
 
+    def test_synthetic_fixture_reports_zero_trade_diagnostics_and_slot_warmup(self):
+        self.assertEqual(self.result["evidence_class"], "synthetic_software_fixture_only")
+        for symbol, report in self.result["per_symbol"].items():
+            diagnostics = report["decision_diagnostics"]
+            self.assertGreater(diagnostics["bars_evaluated"], 0)
+            self.assertIn("rejection_gate_counts", diagnostics)
+            self.assertIn("slot_rvol_sample_count_distribution", diagnostics)
+            self.assertLess(diagnostics["max_slot_rvol_samples"], 5)
+            self.assertEqual(report["trade_status"], "no_strategy_entries")
+
+
     def test_disabled_market_is_excluded_before_capital_preallocation(self):
         result = run_dataset(
             FIXTURE,
