@@ -65,7 +65,7 @@ flowchart TD
 
 - [x] Check the entry bar for stop/target touches after a pending entry fills; do not skip its high/low.
 - [x] Model adverse opening gaps through stops with gap-aware fills at the bar open rather than always filling exactly at the stop price.
-- [ ] Anchor stop/target calculations to actual fill price, not only signal-bar close.
+- [x] Anchor stops to the actual fill; re-anchor ATR-extension targets to the fill and reject structural-target gaps that invalidate reward/risk. Structural market levels remain fixed rather than moving with the fill.
 - [x] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity through distinct exit reasons.
 - [ ] Model spread, slippage, fees, and partial/rejected fills consistently between signal qualification, simulated execution, and realized P&L.
 - [x] Add deterministic tests for next-bar gaps, entry-bar stop-outs/targets, gap-through-stop, both-levels-touched bars, and session flattening (session flatten also has a strategy-level contract test).
@@ -115,7 +115,7 @@ flowchart TD
 1. [x] Four-hour hard time limit and stagnation exit.
 2. [x] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk and gap-entry rejection).
 3. [x] True 30m/15m/5m causal timeframe pipeline and swing confirmation. Event/news gating and slot-normalized RVOL remain open under item 1.
-4. [ ] Slot-normalized RVOL, direction/regime diagnostics, and reaction-zone sizing.
+4. [ ] Slot-normalized RVOL (pending); higher-timeframe diagnostics and reaction-zone sizing are implemented.
 5. [ ] Instrument-specific costs and truthful gross/partial-net/fully-net reporting.
 6. [ ] Shared portfolio capital, concurrency, and exposure constraints.
 7. [ ] Full regression suite, chronological out-of-sample, and walk-forward report.
