@@ -67,7 +67,8 @@ flowchart TD
 - [x] Model adverse opening gaps through stops with gap-aware fills at the bar open rather than always filling exactly at the stop price.
 - [x] Anchor stops to the actual fill; re-anchor ATR-extension targets to the fill and reject structural-target gaps that invalidate reward/risk. Structural market levels remain fixed rather than moving with the fill.
 - [x] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity through distinct exit reasons.
-- [ ] Model spread, slippage, fees, and partial/rejected fills consistently between signal qualification, simulated execution, and realized P&L.
+- [x] Route next-bar market entries through `OrderSimulator`; preserve filled/partial/rejected status and scale position risk to actual filled quantity.
+- [ ] Unify spread, slippage, fees, and partial/rejected fills consistently between signal qualification, simulated execution, and realized P&L. Execution fill integration is in place, but the cost ledger remains separate and MoveRoom-vs-realized cost parity is still open.
 - [x] Add deterministic tests for next-bar gaps, entry-bar stop-outs/targets, gap-through-stop, both-levels-touched bars, and session flattening (session flatten also has a strategy-level contract test).
 
 ## 4. Trading costs and reporting integrity
