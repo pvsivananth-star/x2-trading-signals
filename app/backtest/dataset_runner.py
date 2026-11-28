@@ -285,7 +285,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     ]
     trades: list[Trade] = []
     pos: Position | None = None
-    pending: tuple[int, Decimal, Decimal, Decimal] | None = None
+    pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal] | None = None
     exit_cfg = getattr(engine, "strategy", {}).get("exit", {})
     max_holding_minutes = int(exit_cfg.get("max_holding_minutes", 240))
     stagnation_minutes = int(exit_cfg.get("stagnation_minutes", 60))
@@ -328,8 +328,20 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         pos = None
                         exited_this_bar = True
         if pos is None and pending is not None:
-            side, stop_dist, target, entry_risk_pct = pending
+            side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close = pending
             entry_px = bar.open
+            # Structural targets remain fixed market levels. ATR open-space targets preserve
+            # their signal-time distance from the actual fill. Reject gap entries that destroy RR.
+            target = (
+                entry_px + side * abs(signal_target - signal_close)
+                if target_source == "ATR_OPEN_SPACE" else signal_target
+            )
+            actual_rr = (Decimal(side) * (target - entry_px) / stop_dist) if stop_dist > 0 else Decimal(0)
+            minimum_rr = Decimal(str(getattr(engine, "min_rr", "1.5")))
+            if actual_rr <= 0 or actual_rr < minimum_rr:
+                pending = None
+                exited_this_bar = True
+                continue
             qty = (risk_amount := start_equity * entry_risk_pct) / stop_dist
             if profile not in _FRACTIONAL_QTY_PROFILES:
                 qty = Decimal(math.floor(qty))
@@ -370,6 +382,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
                 target = Decimal(sig.parameters["target"])
+                target_source = str(sig.parameters.get("target_source", "STRUCTURE"))
+                signal_close = snaps[i].last_close or bar.close
                 policy_decision = policy.evaluate(
                     timestamp=bar.bar_end,
                     symbol=symbol,
@@ -388,7 +402,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     raise ValueError(f"invalid reaction-zone size_weight for {symbol}: {size_weight}")
                 effective_risk_pct *= size_weight
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
-                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct)
+                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct, target_source, signal_close)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
