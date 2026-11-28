@@ -443,6 +443,11 @@ class ConfluenceV1:
             "move_room": str(snapshot.move_room),
             "regime": regime.value,
             "stale_feed_seconds": stale_feed_seconds,
+            "context_regime": snapshot.context_regime,
+            "context_timestamp": snapshot.context_timestamp.isoformat() if snapshot.context_timestamp else None,
+            "swing_15m_direction": snapshot.swing_15m_direction,
+            "swing_15m_size_atr": str(snapshot.swing_15m_size_atr),
+            "swing_15m_confirmed": snapshot.swing_15m_confirmed,
         }
         parameters = {
             "side": side_used or "none",
@@ -464,6 +469,10 @@ class ConfluenceV1:
             "max_risk_pct": "N/A" if policy.max_risk_pct is None else str(policy.max_risk_pct),
             "stale_seconds": _decimal_text(Decimal(str(stale_feed_seconds))),
             "stale_limit": _decimal_text(Decimal(str(stale_threshold_seconds))),
+            "context_regime": snapshot.context_regime or "N/A",
+            "swing_15m_direction": snapshot.swing_15m_direction or "N/A",
+            "swing_15m_size_atr": _decimal_text(snapshot.swing_15m_size_atr),
+            "swing_15m_confirmed": str(snapshot.swing_15m_confirmed),
         }
         display = {
             "enter_long": "BUY", "enter_short": "SHORT",
