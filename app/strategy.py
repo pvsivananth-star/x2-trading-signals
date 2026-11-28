@@ -450,6 +450,8 @@ class ConfluenceV1:
             if (zone is not None and sufficient_room and not any(g in gates for g in VOLUME_GATES)
                     and "30m_context_unavailable_or_stale" not in gates
                     and "15m_swing_unconfirmed_or_misaligned" not in gates
+                    and "event_risk_unavailable_or_stale" not in gates
+                    and "event_risk_blocked" not in gates
                     and vwap_aligned and directional_close_confirmed):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
