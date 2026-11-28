@@ -795,7 +795,7 @@ def _apply_portfolio_constraints(
     cluster_caps = {
         str(config["cluster"]): Decimal(str(config["cluster_risk_cap"]))
         for config in market_config.values()
-        if config.get("cluster") and config.get("cluster_risk_cap") is not None
+        if config.get("enabled") is True and config.get("cluster") and config.get("cluster_risk_cap") is not None
     }
     engine_config = markets.get("engine", {})
     max_concurrent = int(engine_config.get("max_concurrent_positions", 10))
