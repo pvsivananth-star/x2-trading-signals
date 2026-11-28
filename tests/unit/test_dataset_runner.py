@@ -373,6 +373,7 @@ class CostRuleTests(unittest.TestCase):
 
     def test_initial_instrument_specs_match_runner_sessions(self):
         import yaml
+
         from app.backtest.dataset_runner import MARKET_SESSIONS
         config = yaml.safe_load(Path("config/markets_17.yaml").read_text(encoding="utf-8"))["markets"]
         for profile in ("US_EQUITIES", "US_COMMODITIES"):
