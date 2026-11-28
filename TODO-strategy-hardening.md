@@ -51,6 +51,7 @@ flowchart TD
 - [x] Keep trend and chop playbooks distinct: TREND_DAY retains directional pullback zones and mirrored close confirmation for long/short; CHOP_DAY is restricted to deep range-edge reclaim setups. Trend-continuation core/shallow/momentum entries are blocked in chop.
 - [x] Record gross performance by entry regime and long/short side in `by_regime` and `by_regime_side` summaries. Do not globally disable shorts based on aggregate results.
 - [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, 5-minute slot/rolling RVOL inputs, and event-risk state/timestamp/reason.
+- [x] Expose per-symbol decision action counts, rejection-gate counts, slot-RVOL sample coverage, and explicit warmup sufficiency in dataset reports so zero-trade runs can be diagnosed rather than silently labelled.
 
 ## 2. Position lifecycle and time exits
 
@@ -108,11 +109,12 @@ flowchart TD
 - [x] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills/rejections, and cost coverage.
 - [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
 - [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 234 tests passed, 3 skipped on each version (CI run 46140493871). `python -m compileall -q app tests` and `ruff check app tests` also passed.
-- [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
-- [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period.
+- [ ] Re-run bull, bear, normal, sideways, high-volatility-chop, and combined datasets with identical assumptions; compare gross and net results separately. Requires licensed historical datasets for the approved US equity/ETF, GLD, and USO universe.
+- [ ] Extend the synthetic CI fixture or add a dedicated multi-session strategy fixture with at least six prior sessions; the existing five-date fixture cannot satisfy the five-prior-session slot-RVOL warmup and is software-only.
+- [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period. Requires sufficiently long, licensed market data with a distinct warmup, training, validation, and untouched test window.
 - [x] Report trade count, win rate, gross PF, net PF (only where cost coverage permits), expectancy, drawdown, average/median/maximum holding time, exit-reason distribution, and per-symbol/per-market-phase/per-regime/per-direction breakdown.
 - [x] Unit/integration tests verify the four-hour cap, completed-bar causality, higher-timeframe finality, and exclusion of future bars from slot RVOL. A full historical-dataset audit remains pending.
-- [ ] Do not accept a change solely because it improves bull-market performance. Assess normal, sideways, and choppy performance while checking that bull/bear behavior has not been destroyed.
+- [ ] Do not accept a change solely because it improves bull-market performance. Assess normal, sideways, and choppy performance while checking that bull/bear behavior has not been destroyed. No performance acceptance decision is possible from the current synthetic CI fixture.
 
 ## 8. Implementation order
 
