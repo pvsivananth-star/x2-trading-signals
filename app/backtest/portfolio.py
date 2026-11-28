@@ -16,6 +16,7 @@ class PortfolioReservation:
     exit_time: datetime
     notional: Decimal
     risk_amount: Decimal
+    cash_reserved: Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +72,7 @@ class PortfolioLedger:
         stop_distance: Decimal,
         max_risk_amount: Decimal,
         whole_shares: bool = True,
+        entry_cost_estimate: Decimal = Decimal(0),
     ) -> PortfolioDecision:
         self._release_expired(timestamp)
         if requested_quantity <= 0 or entry_price <= 0 or stop_distance <= 0 or max_risk_amount <= 0:
@@ -85,20 +87,22 @@ class PortfolioLedger:
             return PortfolioDecision(False, Decimal(0), Decimal(0), Decimal(0), "rejected", "cluster_risk_cap_missing")
 
         open_notional = sum((item.notional for item in self.active), Decimal(0))
+        open_cash = sum((item.cash_reserved for item in self.active), Decimal(0))
         market_notional = sum((item.notional for item in self.active if item.market == market), Decimal(0))
         cluster_risk = sum((item.risk_amount for item in self.active if item.cluster == cluster), Decimal(0))
         total_risk = sum((item.risk_amount for item in self.active), Decimal(0))
-        cash_available = max(Decimal(0), self.capital - open_notional)
+        cash_available = max(Decimal(0), self.capital - open_cash)
         market_available = max(Decimal(0), self.capital * market_pct - market_notional)
         cluster_risk_available = max(Decimal(0), self.capital * cluster_pct - cluster_risk)
         total_risk_available = max(
             Decimal(0), self.capital * self.max_total_open_risk_pct - total_risk
         )
         risk_budget = min(max_risk_amount, cluster_risk_available, total_risk_available)
+        cost_per_share = max(Decimal(0), entry_cost_estimate) / requested_quantity
         quantity = min(
             requested_quantity,
             risk_budget / stop_distance,
-            cash_available / entry_price,
+            cash_available / (entry_price + cost_per_share),
             market_available / entry_price,
         )
         if whole_shares:
@@ -115,7 +119,8 @@ class PortfolioLedger:
         notional = quantity * entry_price
         risk_amount = quantity * stop_distance
         status = "accepted" if quantity == requested_quantity else "scaled"
+        cash_reserved = notional + cost_per_share * quantity
         self.active.append(
-            PortfolioReservation(symbol, market, cluster, exit_time, notional, risk_amount)
+            PortfolioReservation(symbol, market, cluster, exit_time, notional, risk_amount, cash_reserved)
         )
         return PortfolioDecision(True, quantity, risk_amount, notional, status)
