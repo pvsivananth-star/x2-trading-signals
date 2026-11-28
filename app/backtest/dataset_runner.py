@@ -303,14 +303,16 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool, order_simulator: OrderSimulator | None = None) -> dict[str, Any]:
-    cost_values, excluded = _cost_model(costs, profile, allow_estimates)
+    cost_values, excluded = _cost_model(costs, profile, allow_estimates, symbol)
     execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
     simulator = order_simulator or OrderSimulator(SimulationConfig(
         partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
     ))
     partial_fills = 0
     rejected_entries = 0
-    net_available = not excluded and profile in _EQUITY_COST_PROFILES
+    costs_applicable = profile in _EQUITY_COST_PROFILES
+    net_available = costs_applicable and not excluded and not cost_values.get("_estimated")
+    coverage_status = "fully_net" if net_available else "partial_net" if costs_applicable else "gross"
     session_timezone, session_open, session_close = MARKET_SESSIONS.get(
         profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
     )
@@ -450,11 +452,11 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             actual_risk_amount = filled_qty * stop_dist
             if actual_risk_amount > risk_budget:
                 raise ValueError("simulated fill exceeds the configured risk budget")
-            ecost = entry_costs(cost_values, filled_qty, entry_px) if net_available else None
+            ecost = entry_costs(cost_values, filled_qty, entry_px) if costs_applicable else None
             stop = entry_px - side * stop_dist
             pos = Position(side, filled_qty, bar.bar_start, entry_px, stop, target,
                            actual_risk_amount, ecost, entry_regime=entry_regime,
-                           entry_fill_status=fill.status)
+                           entry_fill_status=fill.status, cost_status=coverage_status)
             # The entry bar is part of the position lifecycle; never skip its stop/target range.
             hit = _intrabar_exit(pos, bar)
             if hit is not None:
@@ -516,7 +518,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         trades.append(_close(symbol, pos, last.bar_end, last.close, "END_OF_DATA", cost_values, net_available))
 
     return {"symbol": symbol, "profile": profile, "trades": trades,
-            "net_available": net_available, "excluded_cost_fields": excluded,
+            "net_available": net_available, "cost_status": coverage_status,
+            "excluded_cost_fields": excluded, "estimated_cost_fields": cost_values.get("_estimated", []),
             "execution": {"partial_fills": partial_fills, "rejected_entries": rejected_entries},
             "start_equity": start_equity, "bars": len(bars)}
 
@@ -524,7 +527,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reason: str,
            v: dict[str, Any], net_available: bool) -> Trade:
     gross = (price - pos.entry_price) * pos.qty * pos.side
-    if net_available and pos.entry_cost is not None:
+    if pos.entry_cost is not None:
         cost = pos.entry_cost + exit_costs(v, pos.qty, price)
         net = gross - cost
         r = net / pos.risk_amount if pos.risk_amount else None
@@ -534,15 +537,16 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
         r = gross / pos.risk_amount if pos.risk_amount else None
     holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
-                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime, pos.entry_fill_status)
+                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime, pos.entry_fill_status, pos.cost_status)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     if not trades:
         return {"trades": 0, "cost_status": "no_trades"}
+    statuses = {trade.cost_status for trade in trades}
+    cost_status = ("fully_net" if statuses == {"fully_net"} else
+                   "partial_net" if statuses.intersection({"fully_net", "partial_net"}) else "gross")
     net_trade_count = sum(1 for trade in trades if trade.net_pnl is not None)
-    cost_status = ("fully_net" if net_trade_count == len(trades) else
-                   "partial_net" if net_trade_count else "gross")
     def stats(values: list[Decimal]) -> dict[str, Any]:
         wins = [v for v in values if v > 0]
         losses = [v for v in values if v <= 0]
@@ -644,8 +648,9 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         "allow_estimates": allow_estimates,
         "per_symbol": {
             r["symbol"]: {
-                "bars": r["bars"], "profile": r["profile"], "net_costs_available": r["net_available"],
-                "cost_fields_excluded": r["excluded_cost_fields"], "execution": r["execution"],
+                "bars": r["bars"], "profile": r["profile"], "net_costs_available": r["net_available"], "cost_status": r["cost_status"],
+                "cost_fields_excluded": r["excluded_cost_fields"],
+                "estimated_cost_fields": r["estimated_cost_fields"], "execution": r["execution"],
                 "summary": summarize(r["trades"], r["start_equity"]),
             } for r in results
         },
