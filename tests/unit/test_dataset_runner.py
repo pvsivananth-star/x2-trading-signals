@@ -511,6 +511,20 @@ class SummaryTests(unittest.TestCase):
     def test_empty_summary(self):
         self.assertEqual(summarize([], Decimal(1000)), {"trades": 0, "cost_status": "no_trades"})
 
+    def test_summary_breaks_down_long_short_by_entry_regime(self):
+        def trade(side, regime, pnl):
+            return Trade("SPY", side, Decimal(1), datetime(2026, 11, 2, 14, 30, tzinfo=UTC),
+                         Decimal(100), datetime(2026, 11, 2, 14, 35, tzinfo=UTC), Decimal(101),
+                         "TARGET_HIT", Decimal(1), Decimal(pnl), None, None, None,
+                         Decimal(5), regime)
+        out = summarize([trade("long", "TREND_DAY", "1"),
+                         trade("short", "TREND_DAY", "-1"),
+                         trade("long", "CHOP_DAY", "-2")], Decimal(1000))
+        self.assertEqual(out["by_regime"]["TREND_DAY"]["trades"], 2)
+        self.assertEqual(out["by_regime_side"]["TREND_DAY"]["long"]["total_pnl"], 1.0)
+        self.assertEqual(out["by_regime_side"]["TREND_DAY"]["short"]["total_pnl"], -1.0)
+        self.assertEqual(out["by_regime_side"]["CHOP_DAY"]["long"]["total_pnl"], -2.0)
+
     def test_profit_factor_and_drawdown(self):
         t = lambda pnl: Trade("X", "long", Decimal(1), datetime(2026, 1, 1, tzinfo=UTC), Decimal(1),
                               datetime(2026, 1, 1, tzinfo=UTC), Decimal(1), "T", Decimal(1), pnl, None, None, None)
