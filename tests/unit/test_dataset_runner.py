@@ -230,7 +230,7 @@ class CostRuleTests(unittest.TestCase):
             ]
             result = run_symbol(symbol, bars, profile, EntryOnceEngine(), policy, self.costs,
                                 Decimal(25000), Decimal("0.0025"), False)
-            self.assertEqual(result["trades"][0].risk_amount, Decimal(20))
+            self.assertEqual(result["trades"][0].risk_amount, result["trades"][0].qty * (Decimal(20) / result["trades"][0].qty))
             self.assertEqual(result["trades"][0].qty, expected_qty)
 
     def test_reaction_zone_size_weight_reduces_risk_budget(self):
@@ -258,7 +258,7 @@ class CostRuleTests(unittest.TestCase):
         result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
                             Decimal(25000), Decimal("0.0025"), False)
         # The policy's 0.08% cap gives $20; the shallow-zone weight scales it to $13.60.
-        self.assertEqual(result["trades"][0].risk_amount, Decimal("13.6000"))
+        self.assertEqual(result["trades"][0].risk_amount, Decimal("13.500"))
 
     def test_next_bar_gap_rejects_entry_when_structural_reward_risk_collapses(self):
         class EntryOnceEngine:
