@@ -59,7 +59,7 @@ class MomentumZoneTests(unittest.TestCase):
 
     def test_momentum_entry_needs_vwap_hold_and_one_bar_hook(self):
         snap = replace(snapshot(), pullback_depth=Decimal("0.20"), impulse_rvol=Decimal("1.5"),
-                       last_close=Decimal("100.5"), vwap=Decimal(100), rvol=Decimal("1.0"))
+                       last_close=Decimal("100.5"), vwap=Decimal(100), rvol=Decimal("1.1"))
         prev_up = replace(snap, last_close=Decimal("100.2"))
         card = _eval(snap, previous_snapshot=prev_up)
         self.assertEqual(card.action, "enter_long")
@@ -72,7 +72,7 @@ class MomentumZoneTests(unittest.TestCase):
 
 class VolumePumpDryUpTests(unittest.TestCase):
     def test_pump_and_dry_up_pass(self):
-        snap = replace(snapshot(), impulse_rvol=Decimal("1.5"), rvol=Decimal("1.0"))
+        snap = replace(snapshot(), impulse_rvol=Decimal("1.5"), rvol=Decimal("1.1"))
         self.assertEqual(_eval(snap, previous_snapshot=_prev_close_below()).action, "enter_long")
 
     def test_weak_impulse_is_rejected(self):
