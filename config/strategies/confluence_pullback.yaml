@@ -19,6 +19,11 @@ strategy:
     exit_on_confirmed_trendline_break: true
     pre_close_entry_cutoff_mins: 60
     mandatory_flat_before_close_mins: 15
+    # Hard cap measured from the actual next-bar entry fill, not signal time.
+    max_holding_minutes: 240
+    # Close after 60 minutes if the trade has not reached +0.25R favourable excursion.
+    stagnation_minutes: 60
+    stagnation_min_favorable_r: 0.25
   # Net MoveRoom (review v3). Target is structural-primary:
   #  - structural level above entry (swing high / prior session high / session high) is the target,
   #    capped at max_target_atr_mult * ATR_14 (signal timeframe);
