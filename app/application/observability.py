@@ -1,6 +1,9 @@
 """Provider-neutral observability primitives."""
 from __future__ import annotations
-import json, logging, os, time
+import json
+import logging
+import os
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Iterator, Mapping
