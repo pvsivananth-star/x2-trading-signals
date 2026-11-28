@@ -273,7 +273,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
-    net_available = "commission_per_share" not in excluded and profile in _EQUITY_COST_PROFILES
+    net_available = not excluded and profile in _EQUITY_COST_PROFILES
     session_timezone, session_open, session_close = MARKET_SESSIONS.get(
         profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
     )
