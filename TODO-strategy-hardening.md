@@ -117,8 +117,8 @@ flowchart TD
 2. [x] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk and gap-entry rejection).
 3. [x] True 30m/15m/5m causal timeframe pipeline, swing confirmation, fail-closed event-risk gate, and slot-normalized RVOL.
 4. [ ] Slot-normalized RVOL (pending); higher-timeframe diagnostics and reaction-zone sizing are implemented.
-5. [ ] Instrument-specific costs and truthful gross/partial-net/fully-net reporting.
-6. [ ] Shared portfolio capital, concurrency, and exposure constraints. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback remains open.
+5. [x] Instrument-specific ETF proxy spread profiles and truthful gross/partial-net/fully-net reporting; MoveRoom cost parity remains open under section 4.
+6. [x] Shared portfolio capital, concurrency, and exposure constraints are applied chronologically after symbol replay; portfolio feedback into candidate generation remains open under section 5. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback remains open.
 7. [ ] Full regression suite, chronological out-of-sample, and walk-forward report.
 
 ## Safety boundary
