@@ -182,6 +182,7 @@ class Trade:
     r_multiple: Decimal | None
     holding_minutes: Decimal = Decimal(0)
     regime: str = "UNKNOWN"
+    fill_status: str = "filled"
 
 
 @dataclass
