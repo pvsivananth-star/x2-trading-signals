@@ -101,15 +101,15 @@ flowchart TD
 
 ## 7. Acceptance tests and validation
 
-- [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, ~~event/news fail-closed behavior~~ (missing/stale/future/blocked event states covered), direction/regime filters, and size weights.
-- [ ] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason accounting.
+- [x] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, slot RVOL (same-slot prior-session ratio, insufficient-history fail-closed, future-bar exclusion), impulse-RVOL branch, event-risk fail-closed states, direction/regime filters, and size weights are covered.
+- [x] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason/holding-duration accounting are covered.
 - [x] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills/rejections, and cost coverage.
 - [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
-- [ ] Run the full existing unit test suite and record the exact command and result.
+- [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 233 tests passed, 3 skipped on each version. `python -m compileall -q app tests` and `ruff check app tests` also passed (CI run 46140308684).
 - [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
 - [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period.
 - [x] Report trade count, win rate, gross PF, net PF (only where cost coverage permits), expectancy, drawdown, average/median/maximum holding time, exit-reason distribution, and per-symbol/per-market-phase/per-regime/per-direction breakdown.
-- [ ] Confirm no trade exceeds four hours and no feature reads data after its decision timestamp.
+- [x] Unit/integration tests verify the four-hour cap, completed-bar causality, higher-timeframe finality, and exclusion of future bars from slot RVOL. A full historical-dataset audit remains pending.
 - [ ] Do not accept a change solely because it improves bull-market performance. Assess normal, sideways, and choppy performance while checking that bull/bear behavior has not been destroyed.
 
 ## 8. Implementation order
