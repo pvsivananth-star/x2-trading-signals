@@ -149,7 +149,6 @@ def download_free_dataset(
     bars_path = output / "bars.csv"
     instruments_path = output / "instruments.csv"
     manifest_path = output / "manifest.json"
-    required_paths = (bars_path, instruments_path, manifest_path)
     directory_has_content = any(output.iterdir())
 
     existing_instruments: list[dict[str, str]] = []
