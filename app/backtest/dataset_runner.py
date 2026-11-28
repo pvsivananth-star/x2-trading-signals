@@ -602,7 +602,8 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
                 "profit_factor": float(gross_win / gross_loss) if gross_loss else None,
                 "total_pnl": float(sum(values, Decimal(0))),
                 "return_pct": float(sum(values, Decimal(0)) / start_equity * 100),
-                "max_drawdown_pct": float(max_dd * 100)}
+                "max_drawdown_pct": float(max_dd * 100),
+                "expectancy": float(sum(values, Decimal(0)) / Decimal(len(values)))}
     net_vals = [t.net_pnl for t in trades if t.net_pnl is not None]
     gross_vals = [t.gross_pnl for t in trades]
     out = {"cost_status": cost_status, "gross": stats(gross_vals)}
@@ -610,6 +611,10 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
         out["net"] = stats(net_vals)
     else:
         out["net"] = None
+    out["by_exit_reason"] = {
+        reason: stats([t.gross_pnl for t in trades if t.exit_reason == reason])
+        for reason in sorted({t.exit_reason for t in trades})
+    }
     out["by_side"] = {side: stats([t.gross_pnl for t in trades if t.side == side])
                       for side in {t.side for t in trades}}
     out["fill_status_counts"] = {status: sum(1 for trade in trades if trade.fill_status == status)
