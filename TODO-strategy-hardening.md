@@ -74,7 +74,7 @@ flowchart TD
 
 - [ ] Distinguish `gross`, `partial_net`, and `fully_net` results in every report and persisted run.
 - [ ] Mark a run `fully_net` only when every required cost component for every traded instrument is present and applied (commission, applicable exchange/regulatory fees, spread, and slippage).
-- [ ] Correct `net_available` so excluded cost fields cannot still produce a fully-net label.
+- [x] Correct `net_available` so any excluded required cost field prevents a fully-net label; the runner now requires an empty exclusion list for US equity/ETF fully-net eligibility. Reports still need explicit gross/partial_net/fully_net labels.
 - [ ] Do not map commodity futures to generic US ETF cost assumptions. Use instrument/venue-specific cost profiles.
 - [ ] Keep ETF proxy assumptions separate from futures assumptions, including session calendars, tick sizes, contract multipliers, and fees.
 - [ ] Ensure MoveRoom thresholds and backtest P&L use compatible cost assumptions; avoid double-counting or omitting costs.
