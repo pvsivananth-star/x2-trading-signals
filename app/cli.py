@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     dataset.add_argument("--synthetic-warmup-sessions", type=int, default=0,
                          help="exclude the first N local sessions from scored decisions while retaining them for indicator warmup")
     dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
-                         help="write rows marked is_warmup=true to this CSV path")
+                         help="materialize the first N derived warmup sessions into this directory")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
@@ -149,9 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "backtest-dataset":
             from decimal import Decimal
 
-            from app.backtest.dataset_runner import run_dataset, write_outputs
+            from app.backtest.dataset_runner import DEFAULT_PROFILE, dump_synthetic_warmup, run_dataset, write_outputs
             from app.backtest.validation import validate_dataset
-            from app.backtest.dataset_runner import DEFAULT_PROFILE
 
             if args.synthetic_warmup_sessions < 0:
                 raise SystemExit("--synthetic-warmup-sessions cannot be negative")
@@ -180,18 +179,17 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 0
 
+            warmup_dump = None
             if args.dump_synthetic_warmup is not None:
-                import csv
-                source = args.dir / "bars.csv"
-                with source.open(newline="", encoding="utf-8") as src:
-                    reader = csv.DictReader(src)
-                    rows = [row for row in reader if row.get("is_warmup", "").strip().lower() in {"true", "1", "yes"}]
-                args.dump_synthetic_warmup.parent.mkdir(parents=True, exist_ok=True)
-                with args.dump_synthetic_warmup.open("w", newline="", encoding="utf-8") as dst:
-                    writer = csv.DictWriter(dst, fieldnames=reader.fieldnames or [])
-                    if reader.fieldnames:
-                        writer.writeheader()
-                        writer.writerows(rows)
+                if args.synthetic_warmup_sessions <= 0:
+                    raise SystemExit("--dump-synthetic-warmup requires --synthetic-warmup-sessions > 0")
+                warmup_dump = dump_synthetic_warmup(
+                    args.dir,
+                    args.dump_synthetic_warmup,
+                    interval_seconds=args.interval,
+                    warmup_sessions=args.synthetic_warmup_sessions,
+                    profile_map=DEFAULT_PROFILE,
+                )
 
             result = run_dataset(
                 args.dir,
@@ -202,6 +200,17 @@ def main(argv: list[str] | None = None) -> int:
                 warmup_sessions=args.synthetic_warmup_sessions,
             )
             result["dataset_validation"] = validation_payload
+            result["warmup_sessions_requested"] = args.synthetic_warmup_sessions
+            result["warmup_dump"] = warmup_dump
+            result["warmup_sessions_applied"] = max(
+                (len(v.get("warmup_dates", [])) for v in result.get("per_symbol", {}).values()),
+                default=0,
+            )
+            if args.synthetic_warmup_sessions:
+                result["warmup_dates"] = sorted({
+                    d for value in result.get("per_symbol", {}).values()
+                    for d in value.get("warmup_dates", [])
+                })
             write_outputs(result, args.out)
             printable = {k: v for k, v in result.items() if k != "_trades"}
             print(json.dumps(printable, indent=2, default=str))
