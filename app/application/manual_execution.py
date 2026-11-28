@@ -1,10 +1,7 @@
-"""Explicitly authorized manual execution boundary.
-
-Manual execution never bypasses portfolio/risk controls and is disabled outside
-paper/demo modes. Live broker routing remains impossible through this boundary.
-"""
+"""Explicitly authorized manual execution boundary."""
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -14,6 +11,7 @@ from app.application.risk_manager import RiskManager, RiskSnapshot
 from app.application.trades import TradeManager
 from app.domain.runtime import RuntimeMode
 from app.domain.risk.model import RiskDecisionStatus
+from app.domain.trades.model import TradeIntent
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,29 +34,18 @@ class ManualExecutionRequest:
 
 
 class ManualExecutionGate:
-    def __init__(
-        self,
-        portfolio: PortfolioController,
-        risk: RiskManager,
-        trade_manager: TradeManager,
-        *,
-        runtime_mode: RuntimeMode,
-    ) -> None:
+    """Authorizes a manual intent; it never submits an order itself."""
+
+    def __init__(self, portfolio: PortfolioController, risk: RiskManager,
+                 trade_manager: TradeManager, *, runtime_mode: RuntimeMode) -> None:
         self.portfolio = portfolio
         self.risk = risk
         self.trade_manager = trade_manager
         self.runtime_mode = runtime_mode
 
-    def authorize(
-        self,
-        operator: Operator,
-        request: ManualExecutionRequest,
-        *,
-        timestamp: datetime,
-        snapshot: PortfolioSnapshot,
-        risk_snapshot: RiskSnapshot,
-        reference_price: Decimal,
-    ) -> tuple[bool, tuple[str, ...]]:
+    def authorize(self, operator: Operator, request: ManualExecutionRequest, *,
+                  timestamp: datetime, snapshot: PortfolioSnapshot,
+                  risk_snapshot: RiskSnapshot, reference_price: Decimal) -> tuple[bool, tuple[str, ...]]:
         if self.runtime_mode not in {RuntimeMode.PAPER, RuntimeMode.DEMO}:
             return False, ("MANUAL_EXECUTION_MODE_NOT_ALLOWED",)
         if not operator.can_execute():
@@ -73,15 +60,28 @@ class ManualExecutionGate:
             return False, ("RISK_CONTROL_BLOCKED",)
 
         expected = request.quantity * reference_price
-        # Manual execution is still a portfolio/risk decision. No broker is reachable here.
-        if abs(request.quantity) <= 0:
-            return False, ("INVALID_MANUAL_ORDER",)
-        return self._evaluate(operator, request, timestamp, snapshot, risk_snapshot, expected)
-
-    def _evaluate(self, operator, request, timestamp, snapshot, risk_snapshot, expected):
-        # The concrete TradeIntent construction remains owned by TradeManager; this
-        # boundary intentionally returns an authorization decision rather than placing an order.
-        portfolio_ok = snapshot.available_capital() >= expected
-        if not portfolio_ok:
-            return False, ("INSUFFICIENT_AVAILABLE_CAPITAL",)
+        intent_id = hashlib.sha256(
+            f"manual:{request.symbol}:{request.side}:{request.quantity}:{timestamp.isoformat()}".encode()
+        ).hexdigest()[:32]
+        intent = TradeIntent(
+            intent_id=intent_id, symbol=request.symbol, side=request.side,
+            quantity=request.quantity, portfolio_id=request.portfolio_id,
+            strategy_id=request.strategy_id, strategy_version="manual-v1",
+            signal_id=f"manual:{intent_id}", created_at=timestamp,
+            limit_price=reference_price, reason_codes=("MANUAL_OPERATOR_AUTHORIZED",),
+        )
+        risk_amount = expected * Decimal("0.01")
+        portfolio_decision = self.portfolio.evaluate(
+            intent, snapshot, risk_amount=risk_amount,
+            expected_notional=expected, reservation_id=intent.intent_id,
+        )
+        if not portfolio_decision.approved:
+            return False, portfolio_decision.reason_codes
+        risk_decision = self.risk.evaluate(
+            intent, risk_amount=risk_amount, snapshot=risk_snapshot,
+            now=timestamp, decision_id=f"manual-risk:{intent.intent_id}",
+        )
+        self.portfolio.release(intent.intent_id)
+        if risk_decision.status is not RiskDecisionStatus.APPROVED:
+            return False, risk_decision.reason_codes
         return True, ("MANUAL_AUTHORIZED",)
