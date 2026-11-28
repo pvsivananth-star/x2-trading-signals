@@ -203,14 +203,26 @@ def main(argv: list[str] | None = None) -> int:
             result["warmup_sessions_requested"] = args.synthetic_warmup_sessions
             result["warmup_dump"] = warmup_dump
             result["warmup_sessions_applied"] = max(
-                (len(v.get("warmup_dates", [])) for v in result.get("per_symbol", {}).values()),
+                (v.get("warmup_sessions", 0) for v in result.get("per_symbol", {}).values()),
                 default=0,
+            )
+            result["warmup_rows"] = (
+                warmup_dump["warmup_rows"] if warmup_dump is not None
+                else validation_payload.get("warmup_rows", 0)
             )
             if args.synthetic_warmup_sessions:
                 result["warmup_dates"] = sorted({
                     d for value in result.get("per_symbol", {}).values()
                     for d in value.get("warmup_dates", [])
                 })
+                result["first_scored_session"] = min(
+                    (
+                        value["first_scored_session"]
+                        for value in result.get("per_symbol", {}).values()
+                        if value.get("first_scored_session") is not None
+                    ),
+                    default=None,
+                )
             write_outputs(result, args.out)
             printable = {k: v for k, v in result.items() if k != "_trades"}
             print(json.dumps(printable, indent=2, default=str))
