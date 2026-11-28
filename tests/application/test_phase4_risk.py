@@ -5,7 +5,6 @@ from app.application.portfolio_controller import PortfolioController,PortfolioLi
 from app.application.risk_manager import RiskManager,RiskLimits,RiskSnapshot
 from app.application.circuit_breakers import CircuitBreaker
 from app.domain.risk.model import KillSwitchState
-from app.domain.signals import *
 from app.application.signals import Signal,SignalSide,SignalStage
 from app.application.strategy_manager import StrategyDecision
 
@@ -30,6 +29,6 @@ def test_breaker_release_fails_closed():
  b.activate(reason="test",operator="x")
  try:
      b.release(operator="x")
-      assert False
+     assert False
  except RuntimeError:
      pass
