@@ -179,6 +179,7 @@ class Trade:
     cost: Decimal | None
     net_pnl: Decimal | None
     r_multiple: Decimal | None
+    holding_minutes: Decimal = Decimal(0)
 
 
 @dataclass
@@ -250,21 +251,21 @@ def exit_costs(v: dict[str, Any], qty: Decimal, price: Decimal) -> Decimal:
 
 
 def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
-    """Resolve OHLC exits conservatively; stop is first if both levels are touched."""
+    """Resolve OHLC exits conservatively and label bars where path ordering is ambiguous."""
     if pos.side > 0:
-        if bar.open <= pos.stop:
-            return bar.open, "HARD_STOP_GAP"
-        if bar.low <= pos.stop:
-            return pos.stop, "HARD_STOP"
-        if bar.high >= pos.target:
-            return pos.target, "TARGET_HIT"
+        stop_gap = bar.open <= pos.stop
+        stop_touch = bar.low <= pos.stop
+        target_touch = bar.high >= pos.target
     else:
-        if bar.open >= pos.stop:
-            return bar.open, "HARD_STOP_GAP"
-        if bar.high >= pos.stop:
-            return pos.stop, "HARD_STOP"
-        if bar.low <= pos.target:
-            return pos.target, "TARGET_HIT"
+        stop_gap = bar.open >= pos.stop
+        stop_touch = bar.high >= pos.stop
+        target_touch = bar.low <= pos.target
+    if stop_gap:
+        return bar.open, "HARD_STOP_GAP_BOTH_TOUCHED" if target_touch else "HARD_STOP_GAP"
+    if stop_touch:
+        return pos.stop, "HARD_STOP_BOTH_TOUCHED" if target_touch else "HARD_STOP"
+    if target_touch:
+        return pos.target, "TARGET_HIT"
     return None
 
 
@@ -463,8 +464,9 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
         cost = None
         net = None
         r = gross / pos.risk_amount if pos.risk_amount else None
+    holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
-                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r)
+                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
@@ -563,10 +565,10 @@ def write_outputs(result: dict[str, Any], out_dir: str | Path) -> Path:
     with ledger.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["symbol", "side", "qty", "entry_time", "entry_price", "exit_time", "exit_price",
-                         "exit_reason", "risk_amount", "gross_pnl", "cost", "net_pnl", "r_multiple"])
+                         "exit_reason", "holding_minutes", "risk_amount", "gross_pnl", "cost", "net_pnl", "r_multiple"])
         for t in trades:
             writer.writerow([t.symbol, t.side, t.qty, t.entry_time.isoformat(), t.entry_price,
-                             t.exit_time.isoformat(), t.exit_price, t.exit_reason, t.risk_amount,
+                             t.exit_time.isoformat(), t.exit_price, t.exit_reason, t.holding_minutes, t.risk_amount,
                              t.gross_pnl, "" if t.cost is None else t.cost,
                              "" if t.net_pnl is None else t.net_pnl, "" if t.r_multiple is None else t.r_multiple])
     summary = out / "summary.json"
