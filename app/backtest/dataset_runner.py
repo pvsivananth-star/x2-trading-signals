@@ -290,6 +290,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             seen_sessions.add(local_date)
             session_dates.append(local_date)
     warmup_dates = set(session_dates[:max(0, warmup_sessions)])
+    scored_session_dates = session_dates[max(0, warmup_sessions):]
+    first_scored_session = str(scored_session_dates[0]) if scored_session_dates else None
 
     for i in range(len(bars)):
         bar = bars[i]
@@ -358,7 +360,9 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     return {"symbol": symbol, "profile": profile, "trades": trades,
             "net_available": net_available, "excluded_cost_fields": excluded,
             "start_equity": start_equity, "bars": len(bars),
-            "warmup_sessions": warmup_sessions, "warmup_dates": [str(x) for x in sorted(warmup_dates)]}
+            "warmup_sessions": min(warmup_sessions, len(session_dates)),
+            "warmup_dates": [str(x) for x in sorted(warmup_dates)],
+            "first_scored_session": first_scored_session}
 
 
 def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reason: str,
@@ -537,6 +541,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             r["symbol"]: {
                 "bars": r["bars"], "profile": r["profile"], "net_costs_available": r["net_available"],
                 "cost_fields_excluded": r["excluded_cost_fields"], "summary": summarize(r["trades"], r["start_equity"]),
+                "warmup_sessions": r["warmup_sessions"], "warmup_dates": r["warmup_dates"],
+                "first_scored_session": r["first_scored_session"],
             } for r in results
         },
         "combined": summarize(all_trades, start_equity * len(results)) if results else {"trades": 0},
