@@ -78,6 +78,17 @@ def build_parser() -> argparse.ArgumentParser:
                          help="materialize the first N derived warmup sessions into this directory")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
+    free_data = subparsers.add_parser(
+        "download-free-data",
+        help="download recent real 5-minute OHLCV into a backtest dataset (Yahoo Finance)",
+    )
+    free_data.add_argument("--symbols", default=None,
+                           help="comma-separated symbols; defaults to the configured 16-market universe")
+    free_data.add_argument("--days", type=int, default=60,
+                           help="calendar days of 5-minute history (provider maximum: 60)")
+    free_data.add_argument("--out", type=Path, default=Path("../back-test-copyright/free-market-data"),
+                           help="output directory outside the repository")
+
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
     start_api.add_argument("--host", default="127.0.0.1")
     start_api.add_argument("--port", type=int, default=8080)
@@ -147,6 +158,20 @@ def main(argv: list[str] | None = None) -> int:
                               "fills": len(broker.fills), "orders": len(broker.orders)},
             }, indent=2))
             return 0
+
+        if args.command == "download-free-data":
+            from app.backtest.dataset_runner import DEFAULT_PROFILE
+            from app.backtest.free_data import DEFAULT_SYMBOLS, download_free_dataset
+
+            symbols = tuple(
+                value.strip().upper() for value in args.symbols.split(",") if value.strip()
+            ) if args.symbols else DEFAULT_SYMBOLS
+            result = download_free_dataset(
+                args.out, symbols=symbols, days=args.days, profile_map=DEFAULT_PROFILE,
+            )
+            result["status"] = "completed" if result["symbols_failed"] == 0 else "partial"
+            print(json.dumps(result, indent=2))
+            return 0 if result["symbols_failed"] == 0 else 2
 
         if args.command == "backtest-dataset":
             from decimal import Decimal
