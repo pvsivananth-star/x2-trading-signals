@@ -341,7 +341,12 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, exit_time, exit_price, reason, cost_values, net_available))
                 pos = None
                 exited_this_bar = True
-            elif bar.bar_end >= deadline:
+            elif bar.bar_end == deadline:
+                # This bar closes exactly at the deadline, so its close is a valid time-stop fill.
+                trades.append(_close(symbol, pos, deadline, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                pos = None
+                exited_this_bar = True
+            elif bar.bar_end > deadline:
                 # The deadline falls inside this OHLC bar. Do not use its high/low/close,
                 # which may include post-deadline prices; exit at the last completed close.
                 prior = bars[i - 1] if i > 0 else bar
