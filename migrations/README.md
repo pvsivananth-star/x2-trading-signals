@@ -39,3 +39,7 @@ The initial migration creates default partitions for `trades` and `quotes` so in
 ## Schema snapshot
 
 `schemas/market_data.sql` is a readable schema snapshot for tooling and review. `migrations/001_initial_market_data.sql` is the installation entry point. When the schema changes, add a new migration and update the snapshot in the same change.
+
+## Phase 8 operations
+
+Before migration: create a database backup. Apply migrations forward-only and record operator identity in deployment audit logs. After migration: verify health and broker reconciliation. Periodically restore backups in a non-production environment to verify recoverability. Database credentials are always injected externally.
