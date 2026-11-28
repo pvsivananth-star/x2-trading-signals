@@ -1006,6 +1006,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         symbol: [trade for trade in all_trades if trade.symbol == symbol]
         for symbol in (item["symbol"] for item in results)
     }
+    rejected_by_symbol = Counter(item["symbol"] for item in portfolio_rejections)
     return {
         "net_definition": (
             "gross is before costs; partial_net applies available cost components but has excluded "
@@ -1026,10 +1027,19 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 "net_costs_available": item["net_available"], "cost_status": item["cost_status"],
                 "cost_fields_excluded": item["excluded_cost_fields"],
                 "estimated_cost_fields": item["estimated_cost_fields"], "execution": item["execution"],
-                "trade_status": "traded" if accepted_by_symbol[item["symbol"]] else "no_trades",
+                "decision_diagnostics": item["decision_diagnostics"],
+                "generated_trade_candidates": len(item["trades"]),
+                "portfolio_rejected_candidates": rejected_by_symbol[item["symbol"]],
+                "trade_status": (
+                    "traded" if accepted_by_symbol[item["symbol"]] else
+                    "portfolio_rejected" if item["trades"] else "no_strategy_entries"
+                ),
                 "no_trade_interpretation": (
                     None if accepted_by_symbol[item["symbol"]] else
-                    "No eligible trades were produced; this is not evidence of profitability or unprofitability."
+                    "All generated candidates were rejected by shared portfolio constraints."
+                    if item["trades"] else
+                    "The strategy generated no entries. Inspect decision_diagnostics.rejection_gate_counts "
+                    "and slot-RVOL sample coverage; zero trades is not a performance result."
                 ),
                 "summary": summarize(accepted_by_symbol[item["symbol"]], item["start_equity"]),
             } for item in results
