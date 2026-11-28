@@ -162,35 +162,6 @@ Persist all significant events and decision snapshots:
 market snapshot references, signals, approvals/rejections, orders, fills, portfolio/risk decisions, configuration versions and kill-switch actions.
 
 
-## 4A. Portfolio and Strategy Allocation
-
-The platform initially defines two logically independent portfolios:
-
-### Long-Term Portfolio
-- Timeframe: 1W primary, 1D confirmation.
-- Objective: capture major trends and protect long-term capital.
-- Strategies: Weekly Trend Following; Weekly Breakout/Pullback Accumulation.
-- Exit behavior: position-specific de-risking on weekly structural deterioration; full liquidation only for validated thesis/trend failure, liquidity failure or portfolio risk breach.
-- Intraday signals must not force liquidation of long-term positions.
-
-### Daily Trading Portfolio
-- Timeframes: 30m trend, 15m structure, 5m setup/trigger.
-- Objective: selective intraday expectancy with low drawdown and high-quality trade frequency. A 2% daily return is an aspiration, not a quota.
-- Strategies: MTF Trend Pullback Continuation; VWAP/Relative-Strength Continuation; Opening-Range Breakout with Trend Filter.
-- Positions are normally flattened according to the configured session policy and may not be carried into the long-term portfolio without an explicit portfolio transfer decision.
-
-Each strategy is independently managed by one Strategy Manager instance. Portfolio membership is explicit configuration, not inferred from strategy names.
-
-Portfolio isolation requirements:
-- separate capital/risk budgets;
-- separate exposure and concentration limits;
-- separate strategy enablement;
-- separate performance attribution;
-- separate holding-period and exit policies;
-- central Portfolio Controller still enforces account-wide hard limits across both portfolios.
-
-No strategy may borrow another portfolio's risk budget without an explicit portfolio-level allocation decision.
-
 ## 3A. Architectural Boundaries That Must Not Be Blurred
 
 **Signal Manager vs Strategy Manager**
@@ -271,6 +242,37 @@ On startup or recovery:
 - block new risk-increasing actions when reconciliation is incomplete.
 
 If broker state and local state disagree, the system enters a scoped reconciliation/failsafe state rather than guessing.
+
+
+
+## 4A. Portfolio and Strategy Allocation
+
+The platform initially defines two logically independent portfolios:
+
+### Long-Term Portfolio
+- Timeframe: 1W primary, 1D confirmation.
+- Objective: capture major trends and protect long-term capital.
+- Strategies: Weekly Trend Following; Weekly Breakout/Pullback Accumulation.
+- Exit behavior: position-specific de-risking on weekly structural deterioration; full liquidation only for validated thesis/trend failure, liquidity failure or portfolio risk breach.
+- Intraday signals must not force liquidation of long-term positions.
+
+### Daily Trading Portfolio
+- Timeframes: 30m trend, 15m structure, 5m setup/trigger.
+- Objective: selective intraday expectancy with low drawdown and high-quality trade frequency. A 2% daily return is an aspiration, not a quota.
+- Strategies: MTF Trend Pullback Continuation; VWAP/Relative-Strength Continuation; Opening-Range Breakout with Trend Filter.
+- Positions are normally flattened according to the configured session policy and may not be carried into the long-term portfolio without an explicit portfolio transfer decision.
+
+Each strategy is independently managed by one Strategy Manager instance. Portfolio membership is explicit configuration, not inferred from strategy names.
+
+Portfolio isolation requirements:
+- separate capital/risk budgets;
+- separate exposure and concentration limits;
+- separate strategy enablement;
+- separate performance attribution;
+- separate holding-period and exit policies;
+- central Portfolio Controller still enforces account-wide hard limits across both portfolios.
+
+No strategy may borrow another portfolio's risk budget without an explicit portfolio-level allocation decision.
 
 ## 4. Domain Model
 
