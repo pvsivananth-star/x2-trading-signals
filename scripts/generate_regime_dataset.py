@@ -1,6 +1,7 @@
 """Generate deterministic synthetic regime datasets on exchange-local sessions.
 
-Output: one zip with layout  ten-day-regimes/<regime>/<interval>/<SYMBOL>.csv
+Output: one zip with layout  ten-day-regimes/<regime>/<interval>/market_bars_<interval>.csv
+  Each file is a single combined CSV: symbol,timestamp,open,high,low,close,volume
   intervals: 1m, 5m, 15m, 30m    regimes: bull-week, normal-week, side-week, great-choppy-week
   10 sessions per regime. Timestamps are UTC bar starts; bars are aligned to each market's open
   (crypto is 24x7 UTC). Bars are built only from full session buckets.
@@ -116,6 +117,7 @@ def main() -> None:
     with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as zf:
         for regime, cfg in REGIMES.items():
             days = pd.bdate_range(cfg["start"], periods=SESSIONS_PER_REGIME)
+            per_interval: dict[str, list[pd.DataFrame]] = {tf: [] for tf in INTERVALS}
             for sym, profile, base_px, base_vol in SYMBOLS:
                 frame = build_1m(profile, days)
                 path = price_path(base_px, base_vol, cfg, len(frame), rng)
@@ -123,6 +125,7 @@ def main() -> None:
                 for tf, minutes in INTERVALS.items():
                     bars = aggregate(frame, minutes)
                     out = pd.DataFrame({
+                        "symbol": sym,
                         "timestamp": pd.DatetimeIndex(bars["ts"]).strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "open": np.round(bars["open"], 4),
                         "high": np.round(bars["high"], 4),
@@ -130,11 +133,15 @@ def main() -> None:
                         "close": np.round(bars["close"], 4),
                         "volume": bars["volume"].astype(int),
                     })
-                    local = os.path.join(OUT_DIR, f"{regime}_{tf}_{sym}.csv")
-                    out.to_csv(local, index=False)
-                    zf.write(local, arcname=f"ten-day-regimes/{regime}/{tf}/{sym}.csv")
-                    count += 1
-    print(f"wrote {ZIP_NAME} with {count} CSV entries ({len(REGIMES)} regimes x {len(INTERVALS)} intervals x {len(SYMBOLS)} symbols)")
+                    per_interval[tf].append(out)
+            # One combined file per regime and interval: every symbol, every bar, one header.
+            for tf in INTERVALS:
+                combined = pd.concat(per_interval[tf], ignore_index=True)
+                local = os.path.join(OUT_DIR, f"{regime}_{tf}_market_bars.csv")
+                combined.to_csv(local, index=False)
+                zf.write(local, arcname=f"ten-day-regimes/{regime}/{tf}/market_bars_{tf}.csv")
+                count += 1
+    print(f"wrote {ZIP_NAME} with {count} combined files ({len(REGIMES)} regimes x {len(INTERVALS)} intervals, {len(SYMBOLS)} symbols each)")
 
 
 if __name__ == "__main__":
