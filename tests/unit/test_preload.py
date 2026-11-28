@@ -75,6 +75,12 @@ class PreloadTests(unittest.TestCase):
         reasons = {e["symbol"]: e["reason"] for e in result["excluded_instruments"]}
         self.assertEqual(reasons.get("BTC-USD"), "outside_baseline_scope")
 
+    def test_default_run_on_bars_csv_folder_excludes_instead_of_raising(self):
+        fixture = Path(__file__).resolve().parents[2] / "data" / "fixtures" / "synthetic_ci"
+        result = run_dataset(fixture, interval_seconds=300, markets_path=MARKETS)
+        reasons = {e["symbol"]: e["reason"] for e in result["excluded_instruments"]}
+        self.assertEqual(reasons.get("SIM-COIN"), "outside_baseline_scope")
+
 
 if __name__ == "__main__":
     unittest.main()

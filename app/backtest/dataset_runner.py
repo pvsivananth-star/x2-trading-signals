@@ -30,7 +30,7 @@ from typing import Any
 
 from app.backtest.bars import Bar, aggregate_bars
 from app.backtest.portfolio import PortfolioLedger
-from app.backtest.preload import PreloadedDataset, preload_directory
+from app.backtest.preload import PreloadedDataset, preload_directory, resolve_profile
 from app.backtest.simulator import OrderSimulator, SimulationConfig
 from app.costs import CostBlockedError, _field, load_costs
 from app.event_risk import EventRiskAssessment
@@ -923,6 +923,9 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None,
                 baseline_scope: bool = True) -> dict[str, Any]:
     directory = Path(directory)
+    # An explicit caller-supplied profile_map keeps the strict baseline rejection; the default
+    # (CLI) path excludes out-of-scope instruments and reports them instead.
+    explicit_profile_map = profile_map is not None
     preloaded: PreloadedDataset | None = None
     excluded_scope: list[dict[str, str]] = []
     if (directory / "bars.csv").exists():
@@ -966,13 +969,16 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         raise ValueError("portfolio capital must be positive")
     if baseline_scope and start_equity > Decimal(100000):
         raise ValueError("Phase 2 portfolio capital cannot exceed USD 100,000")
-    if preloaded is not None and baseline_scope:
+    if baseline_scope and not explicit_profile_map:
+        # Out-of-scope instruments are excluded and reported, identically for bars.csv and per-symbol folders.
         kept: dict[int, str] = {}
         for iid, symbol in sorted(instrument_symbols.items()):
             if symbol in profile_map:
                 kept[iid] = symbol
             else:
-                excluded_scope.append({"symbol": symbol, "profile": preloaded.profiles[symbol],
+                profile = (preloaded.profiles[symbol] if preloaded is not None
+                           else resolve_profile(symbol, markets) or "UNKNOWN")
+                excluded_scope.append({"symbol": symbol, "profile": profile,
                                        "reason": "outside_baseline_scope"})
         instrument_symbols = kept
     if baseline_scope:
