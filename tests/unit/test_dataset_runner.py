@@ -218,7 +218,10 @@ class CostRuleTests(unittest.TestCase):
             self.assertEqual(result["trades"][0].qty, expected_qty)
 
     def test_run_dataset_does_not_duplicate_configured_core_symbols(self):
-        with patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory:
+        with (
+            patch("app.backtest.dataset_runner.inspect_scored_data", return_value={}),
+            patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory,
+        ):
             run_dataset(
                 FIXTURE,
                 profile_map={"SPY": "US_EQUITIES"},
@@ -289,7 +292,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.out_dir = tempfile.mkdtemp()
-        cls.result = run_dataset(FIXTURE, interval_seconds=300)
+        cls.result = run_dataset(FIXTURE, interval_seconds=300, min_scored_sessions=1)
         cls.trades = cls.result.pop("_trades")
 
     def test_both_symbols_run_and_crypto_net_is_blocked(self):
@@ -317,7 +320,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
                 self.assertEqual(t.qty, t.qty.to_integral_value())
 
     def test_deterministic_rerun(self):
-        again = run_dataset(FIXTURE, interval_seconds=300)
+        again = run_dataset(FIXTURE, interval_seconds=300, min_scored_sessions=1)
         again.pop("_trades")
         self.result.pop("net_definition", None)
         again.pop("net_definition", None)
