@@ -13,16 +13,16 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 8. Add domain invariants and unit/property tests.
 
 ## Phase 2 — Market data and analysis
-- [ ] 9. Put existing feed/feature code behind MarketDataPort.
-- [ ] 10. Implement Instrument/Universe Actor and liquidity/quality gates.
-- [ ] 11. Implement Regime Actor.
-- [ ] 12. Implement Trend Analyzer for 1W/1D and 30m/15m/5m.
-- [ ] 13. Implement Volume/RVOL Analyzer.
-- [ ] 14. Implement Relative Strength Analyzer.
-- [ ] 15. Implement Structure/Fibonacci Analyzer.
-- [ ] 16. Implement DMA Analyzer.
-- [ ] 17. Implement Momentum Analyzer.
-- [ ] 18. Enforce causal cutoff and stale-data/feed-health gates.
+- [x] 9. Put existing feed/feature code behind MarketDataPort.
+- [x] 10. Implement Instrument/Universe Actor and liquidity/quality gates.
+- [x] 11. Implement Regime Actor.
+- [x] 12. Implement Trend Analyzer for 1W/1D and 30m/15m/5m.
+- [x] 13. Implement Volume/RVOL Analyzer.
+- [x] 14. Implement Relative Strength Analyzer.
+- [x] 15. Implement Structure/Fibonacci Analyzer.
+- [x] 16. Implement DMA Analyzer.
+- [x] 17. Implement Momentum Analyzer.
+- [x] 18. Enforce causal cutoff and stale-data/feed-health gates.
 
 ## Phase 3 — Signal and strategy
 - [ ] 19. Implement Signal Manager with SETUP versus TRIGGER.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 2 (#9 onward). Do not tune strategy thresholds until market-data and analyzer boundaries are stable.**
+**Current work: Phase 3 (#19 onward). Strategy thresholds remain subordinate to portfolio/risk controls.**
