@@ -82,7 +82,7 @@ def _requirement_met(
     # Long: close back at or above VWAP. Short: close back at or below VWAP (mirror).
     if side == "long":
         return snapshot.last_close >= snapshot.vwap - vwap_tolerance
-    return snapshot.last_close <= snapshot.vwap
+    return snapshot.last_close <= snapshot.vwap + vwap_tolerance
 
 
 def _volume_climax(
@@ -420,7 +420,7 @@ class ConfluenceV1:
                 _lo, _hi, size_weight, requirement = REACTION_ZONES[zone]
                 vwap_tolerance = (
                     Decimal("0.25") * snapshot.atr
-                    if trend_day_long and snapshot.atr is not None
+                    if trend_day_directional and snapshot.atr is not None
                     else Decimal(0)
                 )
                 if requirement == "momentum_vwap_hold":
