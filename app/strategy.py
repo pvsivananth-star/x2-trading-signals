@@ -340,26 +340,31 @@ class ConfluenceV1:
                         or snapshot.swing_15m_size_atr < required_swing):
                     gates.append("15m_swing_unconfirmed_or_misaligned")
             trend_day_long = side_used == "long" and regime is Regime.TREND_DAY
+            trend_day_short = side_used == "short" and regime is Regime.TREND_DAY
+            trend_day_directional = trend_day_long or trend_day_short
             vwap_aligned = False
             if trend_day_long and last is not None and snapshot.vwap is not None and snapshot.atr is not None:
                 vwap_aligned = last >= snapshot.vwap - Decimal("0.25") * snapshot.atr
+            elif trend_day_short and last is not None and snapshot.vwap is not None and snapshot.atr is not None:
+                vwap_aligned = last <= snapshot.vwap + Decimal("0.25") * snapshot.atr
             elif last is not None and snapshot.vwap is not None:
                 vwap_aligned = last > snapshot.vwap if side_used == "long" else last < snapshot.vwap
-            if snapshot.vwap is None or last is None or (trend_day_long and snapshot.atr is None):
+            if snapshot.vwap is None or last is None or (trend_day_directional and snapshot.atr is None):
                 gates.append("vwap_alignment_unavailable")
             elif not vwap_aligned:
                 gates.append("vwap_alignment_not_met")
-            bullish_close_confirmed = (
-                not trend_day_long
+            directional_close_confirmed = (
+                not trend_day_directional
                 or (
                     previous_snapshot is not None
                     and last is not None
                     and previous_snapshot.last_close is not None
-                    and last > previous_snapshot.last_close
+                    and (last > previous_snapshot.last_close if side_used == "long"
+                         else last < previous_snapshot.last_close)
                 )
             )
-            if not bullish_close_confirmed:
-                gates.append("bullish_close_confirmation_not_met")
+            if not directional_close_confirmed:
+                gates.append("directional_close_confirmation_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
             else:
@@ -406,6 +411,12 @@ class ConfluenceV1:
             if zone is None:
                 gates.append("outside_reaction_zone")
             else:
+                playbook = self.strategy.get("playbooks", {}).get(regime.value, {})
+                allowed_zones = playbook.get("allowed_reaction_zones")
+                if allowed_zones is not None and zone not in allowed_zones:
+                    gates.append("regime_playbook_zone_not_allowed")
+                    zone = None
+            if zone is not None:
                 _lo, _hi, size_weight, requirement = REACTION_ZONES[zone]
                 vwap_tolerance = (
                     Decimal("0.25") * snapshot.atr
@@ -429,7 +440,7 @@ class ConfluenceV1:
             if (zone is not None and sufficient_room and not any(g in gates for g in VOLUME_GATES)
                     and "30m_context_unavailable_or_stale" not in gates
                     and "15m_swing_unconfirmed_or_misaligned" not in gates
-                    and vwap_aligned and bullish_close_confirmed):
+                    and vwap_aligned and directional_close_confirmed):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
         inputs = {
