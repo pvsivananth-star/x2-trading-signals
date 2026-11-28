@@ -48,12 +48,12 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 37. Add circuit breakers and emergency kill switch invariants.
 
 ## Phase 5 — Execution
-- [ ] 38. Implement Execution Manager and order state machine.
-- [ ] 39. Add idempotency and duplicate-order protection.
-- [ ] 40. Add partial fills, cancel/replace, rejects and reconciliation.
-- [ ] 41. Keep Mock Broker behind ExecutionPort.
-- [ ] 42. Keep IBKR/Binance adapters isolated and live-disabled.
-- [ ] 43. Test disconnect/retry/recovery.
+- [x] 38. Implement Execution Manager and order state machine.
+- [x] 39. Add idempotency and duplicate-order protection.
+- [x] 40. Add partial fills, cancel/replace, rejects and reconciliation.
+- [x] 41. Keep Mock Broker behind ExecutionPort.
+- [x] 42. Keep IBKR/Binance adapters isolated and live-disabled.
+- [x] 43. Test disconnect/retry/recovery.
 
 ## Phase 6 — Backtest and paper
 - [ ] 44. Route replay through the same strategy/portfolio/risk pipeline.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 4 complete. Execution remains gated by portfolio/risk approvals and live routing remains disabled.**
+**Current work: Phase 5 complete. Execution is fail-closed, mock/paper only, reconciliation-gated, and live routing remains disabled.**
