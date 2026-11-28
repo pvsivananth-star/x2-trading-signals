@@ -27,6 +27,7 @@ from app.backtest.dataset_runner import (
     run_dataset,
     run_symbol,
     summarize,
+    write_outputs,
 )
 from app.backtest.simulator import Fill, OrderSimulator, SimulationConfig
 from app.costs import load_costs
@@ -684,6 +685,22 @@ class IntrabarExitTests(unittest.TestCase):
 
 
 class SummaryTests(unittest.TestCase):
+    def test_cost_status_is_persisted_to_csv_and_json(self):
+        trade = Trade(
+            "SPY", "long", Decimal(1), datetime(2026, 11, 2, 14, 30, tzinfo=UTC),
+            Decimal(100), datetime(2026, 11, 2, 14, 35, tzinfo=UTC), Decimal(101),
+            "TARGET_HIT", Decimal(1), Decimal(1), Decimal("0.2"), Decimal("0.8"),
+            Decimal("0.8"), Decimal(5), "TREND_DAY", "partial", "partial_net", "accepted", "BULL_TREND",
+        )
+        result = {"combined": {"cost_status": "partial_net"}, "_trades": [trade]}
+        with tempfile.TemporaryDirectory() as out_dir:
+            summary_path = write_outputs(result, out_dir)
+            csv_text = (Path(out_dir) / "trades.csv").read_text(encoding="utf-8")
+            json_text = summary_path.read_text(encoding="utf-8")
+        self.assertIn("cost_status", csv_text.splitlines()[0])
+        self.assertIn("partial_net", csv_text)
+        self.assertIn('"cost_status": "partial_net"', json_text)
+
     def test_empty_summary(self):
         self.assertEqual(summarize([], Decimal(1000)), {"trades": 0, "cost_status": "no_trades"})
 
