@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import tempfile
 import unittest
@@ -67,7 +68,7 @@ class FreeHistoricalDataTests(unittest.TestCase):
             )
         self.assertEqual(result["symbols_downloaded"], 1)
         with (output / "instruments.csv").open(newline="", encoding="utf-8") as handle:
-            instruments = list(__import__("csv").DictReader(handle))
+            instruments = list(csv.DictReader(handle))
         self.assertEqual(
             {row["canonical_symbol"] for row in instruments},
             {"SPY", "NVDA"},
