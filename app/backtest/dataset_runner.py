@@ -18,9 +18,9 @@ summary; estimates are applied only when allow_estimates is enabled.
 from __future__ import annotations
 
 import csv
-from collections import Counter
 import json
 import math
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
