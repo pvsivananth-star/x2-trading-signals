@@ -17,6 +17,7 @@ from app.backtest.dataset_runner import (
     _commission,
     _cost_model,
     _intrabar_exit,
+    _safe_event_risk,
     causal_regime,
     classify_market_phase,
     entry_costs,
@@ -213,6 +214,21 @@ class CostRuleTests(unittest.TestCase):
         self.assertFalse(result["net_available"])
         self.assertEqual(result["cost_status"], "partial_net")
         self.assertIn("slippage_pct_per_side", result["estimated_cost_fields"])
+
+    def test_event_provider_failure_becomes_unknown_assessment(self):
+        timestamp = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        def failing_provider(_timestamp, _symbol):
+            raise RuntimeError("calendar unavailable")
+        assessment = _safe_event_risk(failing_provider, timestamp, "SPY")
+        self.assertEqual(assessment.state, "unknown")
+        self.assertIn("provider_error:RuntimeError", assessment.reason)
+
+    def test_runner_rejects_double_counted_simulator_friction(self):
+        engine = SimpleNamespace(strategy={}, evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
+        simulator = OrderSimulator(SimulationConfig(spread_bps=Decimal("1")))
+        with self.assertRaisesRegex(ValueError, "owned by the shared cost ledger"):
+            run_symbol("SPY", [_bar(0, "100", "101", "99", "100")], "US_EQUITIES",
+                       engine, None, self.costs, Decimal(25000), Decimal("0.0025"), False, simulator)
 
     def test_unknown_profile_runs_with_default_session(self):
         engine = SimpleNamespace(evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
