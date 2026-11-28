@@ -10,15 +10,15 @@ Phases 1–8 are implemented. The current branch is **compilable and test-clean*
 - Live broker routing remains disabled
 
 ## Phase 9 — Backtest correctness and dataset validation
-- [ ] 59. Reconcile `backtest-dataset` CLI options with the documented backtest workflow, including warmup/session options.
-- [ ] 60. Add preflight dataset validator for OHLCV integrity, timestamp ordering, duplicates and missing candles.
-- [ ] 61. Validate timeframe/session/calendar consistency for every input dataset.
-- [ ] 62. Validate instrument metadata, symbol eligibility, liquidity and tradability before replay.
-- [ ] 63. Detect corporate-action/split-adjustment inconsistencies where applicable.
-- [ ] 64. Add explicit look-ahead/leakage checks across all features, signals and strategy decisions.
-- [ ] 65. Validate synthetic warmup boundaries and ensure warmup data cannot contribute to scored performance.
-- [ ] 66. Produce a machine-readable dataset validation report and fail closed on critical violations.
-- [ ] 67. Add deterministic end-to-end backtest smoke fixtures and verify repeatability.
+- [x] 59. Reconcile `backtest-dataset` CLI options with the documented backtest workflow, including warmup/session options.
+- [x] 60. Add preflight dataset validator for OHLCV integrity, timestamp ordering, duplicates and missing candles.
+- [x] 61. Validate timeframe/session/calendar consistency for every input dataset.
+- [x] 62. Validate instrument metadata, symbol eligibility, liquidity and tradability before replay.
+- [x] 63. Detect corporate-action/split-adjustment inconsistencies where applicable.
+- [x] 64. Add explicit look-ahead/leakage checks across all features, signals and strategy decisions.
+- [x] 65. Validate synthetic warmup boundaries and ensure warmup data cannot contribute to scored performance.
+- [x] 66. Produce a machine-readable dataset validation report and fail closed on critical violations.
+- [x] 67. Add deterministic end-to-end backtest smoke fixtures and verify repeatability.
 
 ## Phase 10 — Strategy implementation and profitability validation
 - [ ] 68. Replace first-pass analyzer/strategy heuristics with production-quality implementations backed by explicit requirements.
@@ -113,4 +113,4 @@ Phases 1–8 are implemented. The current branch is **compilable and test-clean*
 14. Recovery and reconciliation are tested, not merely documented.
 15. No daily profit target may force a trade or increase risk.
 
-**Current work: Phase 9 — validate the backtest interface and datasets before making profitability claims.**
+**Current work: Phase 10 — strategy implementation and profitability validation.**
