@@ -88,6 +88,8 @@ def build_parser() -> argparse.ArgumentParser:
                            help="download exactly one ticker (use a dedicated output directory)")
     free_data.add_argument("--days", type=int, default=59,
                            help="calendar days of 5-minute history (safe default: 59; provider limit: 60)")
+    free_data.add_argument("--append", action="store_true",
+                           help="append a new symbol to an existing dataset without duplicating prior symbols")
     free_data.add_argument("--out", type=Path, default=Path("../back-test-copyright/free-market-data"),
                            help="output directory outside the repository")
 
@@ -174,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = download_free_dataset(
                 args.out, symbols=symbols, days=args.days, profile_map=DEFAULT_PROFILE,
+                append=args.append,
             )
             result["status"] = "completed" if result["symbols_failed"] == 0 else "partial"
             print(json.dumps(result, indent=2))
