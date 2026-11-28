@@ -77,7 +77,7 @@ flowchart TD
 - [x] Mark trades/summaries `fully_net` only when all required cost components are present, verified, and applied; excluded or estimated fields force `partial_net` when known costs are applied.
 - [x] Correct full-net eligibility: any excluded or estimated required cost field prevents a `fully_net` label. Per-symbol reports expose `cost_status`, excluded fields, and estimated fields.
 - [x] Do not map commodity futures to generic US ETF cost assumptions. GC=F/CL=F remain outside the baseline; GLD and USO use separate symbol-specific spread fields. Their spread values are still unavailable, so those instruments remain `partial_net` until measured.
-- [ ] Keep ETF proxy assumptions separate from futures assumptions, including session calendars, tick sizes, contract multipliers, and fees.
+- [x] Keep GLD/USO ETF proxy metadata and cost-spread fields separate from futures. Their US regular-session calendar, USD/share units, 0.01 tick, and 1x share multiplier are explicit; instrument-specific spreads remain not-found until measured. Futures remain excluded pending distinct calendars, multipliers, margin, and fee profiles.
 - [ ] Ensure MoveRoom thresholds and backtest P&L use compatible cost assumptions; avoid double-counting or omitting costs.
 - [x] If slippage is estimated or unavailable, disclose it in `estimated_cost_fields` / `cost_fields_excluded` and downgrade the result to `partial_net`; known cost components are still applied.
 
@@ -85,18 +85,18 @@ flowchart TD
 
 - [x] Apply a deterministic shared portfolio ledger to combined-run trade candidates in chronological entry order (entry timestamp, symbol, exit time tie-break).
 - [x] Enforce total capital, per-trade risk, per-market allocation, correlated-cluster exposure, maximum concurrent positions, and available-cash constraints; initial baseline capital defaults to USD 100,000 and rejects higher values.
-- [ ] Resolve simultaneous signals deterministically and prevent multiple symbols from spending the same cash.
+- [x] Resolve simultaneous candidate trades deterministically by entry time, symbol, then exit time; shared reservations prevent multiple symbols spending the same cash.
 - [ ] Refactor candidate generation so setup weights and portfolio constraints determine quantity before the simulated position lifecycle. Current implementation conservatively rescales/rejects completed per-symbol candidates afterward; it does not yet feed portfolio reservations back into each symbol's signal-generation loop.
 - [x] Report portfolio-rejected trades with symbol, timestamp, requested size/notional, and exact blocking constraint.
 - [x] Keep the initial portfolio capital ceiling at the approved **USD 100,000**, unless explicitly changed by the user.
 
 ## 6. Regime and instrument scope
 
-- [ ] Validate the initial universe explicitly: selected US equity/ETF instruments, one gold instrument, and one oil instrument.
+- [x] Default baseline scope accepts only configured US equity/ETF symbols plus GLD (gold ETF proxy) and USO (oil ETF proxy). SPX/^GSPC and futures symbols are excluded; broader profiles require explicit baseline_scope=False for software tests only.
 - [x] Verify baseline instrument assumptions: US-listed shares/ETFs use USD, 1-share units, 1x multiplier, $0.01 tick, and the New York regular session. Futures are excluded pending their own sessions/multipliers/margin/cost profiles. Per-symbol spread evidence remains an explicit open item.
-- [ ] Do not interpret zero trades in an instrument as evidence of profitability or unprofitability.
+- [x] Label zero-trade instruments explicitly and state that zero trades are not evidence of profitability or unprofitability.
 - [x] Add gross performance reporting for `BULL_TREND`, `BEAR_TREND`, `NORMAL`, `SIDEWAYS`, and `HIGH_VOL_CHOP`, including long/short cross-tabs. The reporting classifier is diagnostic only and does not change entry eligibility; high-vol chop uses current 5m ATR versus the prior 20 observations.
-- [ ] Treat synthetic fixtures as software tests only, never as evidence of real-market profitability.
+- [x] Detect explicit synthetic-fixture manifests and label results synthetic_software_fixture_only; do not treat them as market-performance evidence.
 
 ## 7. Acceptance tests and validation
 
