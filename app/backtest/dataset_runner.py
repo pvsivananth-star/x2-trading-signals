@@ -4,8 +4,9 @@ Execution model (conservative, documented):
 - Signals are evaluated on the close of each bar using only bars that have closed.
 - Entries fill at the OPEN of the next bar, with a stop placed 1 ATR from the fill and the
   structural target from the signal card.
-- Stops and targets are checked intrabar on each later bar; when both are hit in one bar the
-  stop is assumed to fill first.
+- Stops and targets are checked on the fill bar and every later bar; stop wins ambiguous bars.
+- Gap-through stops fill at the bar open. A hard holding-time exit is measured from the fill.
+- A configurable stagnation exit closes positions that fail to reach a minimum favourable R.
 - Strategy exits (trend break, mandatory pre-close flat) fill at the close of the bar that
   produced them.
 - Each symbol trades its own equity allocation; results are reported per symbol and combined.
@@ -189,6 +190,7 @@ class Position:
     target: Decimal
     risk_amount: Decimal
     entry_cost: Decimal | None
+    best_favorable_r: Decimal = Decimal(0)
 
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
@@ -247,12 +249,17 @@ def exit_costs(v: dict[str, Any], qty: Decimal, price: Decimal) -> Decimal:
 
 
 def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
+    """Resolve OHLC exits conservatively; stop is first if both levels are touched."""
     if pos.side > 0:
+        if bar.open <= pos.stop:
+            return bar.open, "HARD_STOP_GAP"
         if bar.low <= pos.stop:
             return pos.stop, "HARD_STOP"
         if bar.high >= pos.target:
             return pos.target, "TARGET_HIT"
     else:
+        if bar.open >= pos.stop:
+            return bar.open, "HARD_STOP_GAP"
         if bar.high >= pos.stop:
             return pos.stop, "HARD_STOP"
         if bar.low <= pos.target:
@@ -279,15 +286,34 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     trades: list[Trade] = []
     pos: Position | None = None
     pending: tuple[int, Decimal, Decimal, Decimal] | None = None
+    exit_cfg = engine.strategy.get("exit", {})
+    max_holding_minutes = int(exit_cfg.get("max_holding_minutes", 240))
+    stagnation_minutes = int(exit_cfg.get("stagnation_minutes", 60))
+    stagnation_min_favorable_r = Decimal(str(exit_cfg.get("stagnation_min_favorable_r", "0.25")))
+    if max_holding_minutes <= 0 or stagnation_minutes < 0 or stagnation_min_favorable_r < 0:
+        raise ValueError("invalid holding-time or stagnation exit configuration")
 
     for i in range(len(bars)):
         bar = bars[i]
         if pos is not None:
+            stop_distance = abs(pos.entry_price - pos.stop)
+            favourable = (bar.high - pos.entry_price) if pos.side > 0 else (pos.entry_price - bar.low)
+            if stop_distance > 0:
+                pos.best_favorable_r = max(pos.best_favorable_r, favourable / stop_distance)
             hit = _intrabar_exit(pos, bar)
             if hit is not None:
                 price, reason = hit
                 trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                 pos = None
+            else:
+                held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
+                if held_minutes >= max_holding_minutes:
+                    trades.append(_close(symbol, pos, bar.bar_end, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                    pos = None
+                elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
+                      and pos.best_favorable_r < stagnation_min_favorable_r):
+                    trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
+                    pos = None
         if pos is None and pending is not None:
             side, stop_dist, target, entry_risk_pct = pending
             entry_px = bar.open
@@ -298,6 +324,12 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 ecost = entry_costs(cost_values, qty, entry_px) if net_available else None
                 stop = entry_px - side * stop_dist
                 pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
+                # The entry bar is part of the position lifecycle; never skip its stop/target range.
+                hit = _intrabar_exit(pos, bar)
+                if hit is not None:
+                    price, reason = hit
+                    trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
+                    pos = None
             pending = None
         if pos is not None:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
