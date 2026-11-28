@@ -71,7 +71,6 @@ def _fetch_symbol(symbol: str, start: datetime, end: datetime, timeout: float) -
     timestamps = result.get("timestamp") or []
     quote_data = (result.get("indicators", {}).get("quote") or [{}])[0]
     rows: list[dict[str, str]] = []
-    missing = 0
     now = datetime.now(UTC)
     for index, stamp in enumerate(timestamps):
         try:
@@ -84,8 +83,8 @@ def _fetch_symbol(symbol: str, start: datetime, end: datetime, timeout: float) -
                 continue
             open_, high, low, close = (float(value) for value in values[:4])
             volume = values[4]
-            if volume is None:
-                missing += 1
+            volume_missing = volume is None
+            if volume_missing:
                 volume = 0
             if min(open_, high, low, close) <= 0 or high < max(open_, close) or low > min(open_, close):
                 continue
@@ -100,7 +99,7 @@ def _fetch_symbol(symbol: str, start: datetime, end: datetime, timeout: float) -
                 "close_price": format(close, ".12g"),
                 "volume": str(int(volume)),
                 "trade_count": "0",
-                "quality_status": "ok" if not missing else "volume_missing_from_source",
+                "quality_status": "volume_missing_from_source" if volume_missing else "ok",
             })
         except (IndexError, KeyError, TypeError, ValueError, OverflowError):
             continue
