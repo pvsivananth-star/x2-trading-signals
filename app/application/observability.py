@@ -18,22 +18,27 @@ class Metrics:
     @contextmanager
     def timing(self,name:str)->Iterator[None]:
         start=time.perf_counter()
-        try: yield
-        finally:self.timings_ms.setdefault(name,[]).append((time.perf_counter()-start)*1000)
+        try:
+            yield
+        finally:
+            self.timings_ms.setdefault(name,[]).append((time.perf_counter()-start)*1000)
     def snapshot(self)->dict[str,object]:return {"counters":dict(self.counters),"gauges":dict(self.gauges),"timings_ms":{k:list(v) for k,v in self.timings_ms.items()}}
 
 class JsonFormatter(logging.Formatter):
     def format(self,record:logging.LogRecord)->str:
         payload={"timestamp":self.formatTime(record,"%Y-%m-%dT%H:%M:%S%z"),"level":record.levelname,"logger":record.name,"message":record.getMessage()}
         for key in ("correlation_id","causation_id","event_id","strategy_id","portfolio_id"): 
-            if hasattr(record,key): payload[key]=getattr(record,key)
+            if hasattr(record,key):
+                payload[key]=getattr(record,key)
         return json.dumps(payload,sort_keys=True)
 
 def configure_logging(level:str|None=None)->None:
     handler=logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
     root=logging.getLogger()
-    root.handlers.clear(); root.addHandler(handler); root.setLevel((level or os.getenv("LOG_LEVEL","INFO")).upper())
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel((level or os.getenv("LOG_LEVEL","INFO")).upper())
 
 @dataclass(frozen=True,slots=True)
 class HealthStatus:
