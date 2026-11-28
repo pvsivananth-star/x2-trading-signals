@@ -24,6 +24,9 @@ def _engine(markets=MARKETS):
 
 
 def _eval(snap, symbol="AAPL", engine=None, **kw):
+    snap = replace(snap, context_timestamp=NOW)
+    if kw.get("previous_snapshot") is not None:
+        kw["previous_snapshot"] = replace(kw["previous_snapshot"], context_timestamp=NOW)
     args = {"timestamp": NOW, "symbol": symbol, "snapshot": snap, "regime": Regime.TREND_DAY,
             "stale_feed_seconds": 1, "stale_threshold_seconds": 10, "minutes_to_close": 120}
     args.update(kw)
