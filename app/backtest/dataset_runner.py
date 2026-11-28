@@ -619,7 +619,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         "per_symbol": {
             r["symbol"]: {
                 "bars": r["bars"], "profile": r["profile"], "net_costs_available": r["net_available"],
-                "cost_fields_excluded": r["excluded_cost_fields"], "summary": summarize(r["trades"], r["start_equity"]),
+                "cost_fields_excluded": r["excluded_cost_fields"], "execution": r["execution"],
+                "summary": summarize(r["trades"], r["start_equity"]),
             } for r in results
         },
         "combined": summarize(all_trades, start_equity * len(results)) if results else {"trades": 0},
