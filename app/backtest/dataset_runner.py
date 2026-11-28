@@ -823,6 +823,8 @@ def _apply_portfolio_constraints(
         "capital": str(capital),
         "max_concurrent_positions": max_concurrent,
         "max_total_open_risk_pct": str(total_risk_cap),
+        "market_allocation_pct": {key: str(value) for key, value in allocations.items()},
+        "cluster_risk_cap_pct": {key: str(value) for key, value in cluster_caps.items()},
         "candidate_trades": len(candidates),
         "accepted_trades": len(accepted),
         "scaled_trades": scaled_count,
