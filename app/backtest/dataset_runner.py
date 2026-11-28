@@ -334,6 +334,21 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
     return None
 
 
+def _safe_event_risk(
+    provider: Callable[[datetime, str], EventRiskAssessment | None] | None,
+    timestamp: datetime,
+    symbol: str,
+) -> EventRiskAssessment | None:
+    if provider is None:
+        return None
+    try:
+        return provider(timestamp, symbol)
+    except Exception as exc:  # provider failure is a fail-closed unknown state
+        return EventRiskAssessment(
+            "unknown", timestamp, f"provider_error:{type(exc).__name__}", "event-risk-provider"
+        )
+
+
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool, order_simulator: OrderSimulator | None = None,
@@ -343,6 +358,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     simulator = order_simulator or OrderSimulator(SimulationConfig(
         partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
     ))
+    if (simulator.config.spread_bps or simulator.config.slippage_bps or simulator.config.fee_rate):
+        raise ValueError("spread, slippage, and fees are owned by the shared cost ledger; simulator friction must be zero")
     partial_fills = 0
     rejected_entries = 0
     costs_applicable = profile in _EQUITY_COST_PROFILES
@@ -522,7 +539,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 previous_snapshot=snaps[i - 1] if i > 0 else None,
-                event_risk=event_risk_provider(bar.bar_end, symbol) if event_risk_provider else None,
+                event_risk=_safe_event_risk(event_risk_provider, bar.bar_end, symbol),
             )
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
