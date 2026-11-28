@@ -278,7 +278,10 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool, order_simulator: OrderSimulator | None = None) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
-    simulator = order_simulator or OrderSimulator()
+    execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
+    simulator = order_simulator or OrderSimulator(SimulationConfig(
+        partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
+    ))
     partial_fills = 0
     rejected_entries = 0
     net_available = not excluded and profile in _EQUITY_COST_PROFILES
@@ -294,10 +297,6 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     bars_15m = aggregate_bars(bars, 15 * 60, source_interval_seconds) if source_interval_seconds else []
     bars_30m = aggregate_bars(bars, 30 * 60, source_interval_seconds) if source_interval_seconds else []
     swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
-    execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
-    order_simulator = OrderSimulator(SimulationConfig(
-        partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
-    ))
     volume_cfg = getattr(engine, "strategy", {}).get("volume", {})
     slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
     slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
@@ -508,7 +507,7 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
         r = gross / pos.risk_amount if pos.risk_amount else None
     holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
-                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime)
+                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime, pos.entry_fill_status)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
@@ -605,7 +604,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             continue
         profile = profile_map[symbol]
         results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity,
-                                  risk_pct, allow_estimates, order_simulator))
+                                  risk_pct, allow_estimates))
 
     all_trades = [t for r in results for t in r["trades"]]
     return {
