@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.application.signals import SignalManager, SignalSide, SignalStage
+from app.application.signals import SignalManager, SignalSide
 from app.application.strategy_manager import (
-    MTFTrendPullbackContinuation, StrategyContext, StrategyManager, StrategySpec,
+    MTFTrendPullbackContinuation, StrategyContext, StrategySpec,
     WeeklyTrendFollowing,
 )
 from app.application.strategy_registry import default_registry
