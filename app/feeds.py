@@ -36,7 +36,7 @@ class FeedSpec:
     category: str
     provider: str
     refresh_seconds: int = 60
-    timeframes: tuple[str, ...] = ("1m", "5m", "15m", "30m", "1d")
+    timeframes: tuple[str, ...] = ("1m", "5m", "15m", "30m", "1d", "1W")
     enabled: bool = True
     license_status: str = "unknown"
 
@@ -58,7 +58,7 @@ def load_feed_config(path: str | Path) -> FeedConfig:
         raise TypeError("feed config must contain feeds")
     feeds = raw["feeds"]
     specs: list[FeedSpec] = []
-    allowed_tf = {"1m", "5m", "15m", "30m", "1d"}
+    allowed_tf = {"1m", "5m", "15m", "30m", "1d", "1W"}
     for item in feeds.get("symbols", []):
         if not isinstance(item, Mapping):
             raise TypeError("feed symbol entry must be a mapping")
