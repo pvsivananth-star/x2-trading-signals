@@ -18,6 +18,7 @@ summary; estimates are applied only when allow_estimates is enabled.
 from __future__ import annotations
 
 import csv
+from collections import Counter
 import json
 import math
 from collections.abc import Callable
@@ -429,6 +430,14 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             swing_15m_confirmed=swing_confirmed,
         ))
     trades: list[Trade] = []
+    decision_action_counts: Counter[str] = Counter()
+    rejection_gate_counts: Counter[str] = Counter()
+
+    def record_decision(card: Any) -> None:
+        decision_action_counts[str(getattr(card, "action", "unknown"))] += 1
+        for gate in getattr(card, "rejected_gates", ()):
+            rejection_gate_counts[str(gate)] += 1
+
     pos: Position | None = None
     pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal, str, str] | None = None
     exit_cfg = getattr(engine, "strategy", {}).get("exit", {})
@@ -573,6 +582,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 previous_snapshot=snaps[i - 1] if i > 0 else None,
                 position_stop=pos.stop, position_target=pos.target,
             )
+            record_decision(sig)
             if sig.action.startswith("exit_"):
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, costs_applicable))
                 pos = None
@@ -620,6 +630,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 event_risk=_safe_event_risk(event_risk_provider, bar.bar_end, symbol),
                 known_roundtrip_cost_pct=known_roundtrip_cost_pct,
             )
+            record_decision(sig)
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
                 target = Decimal(sig.parameters["target"])
@@ -656,6 +667,20 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             "excluded_cost_fields": excluded, "estimated_cost_fields": cost_values.get("_estimated", []),
             "execution": {"partial_fills": partial_fills, "rejected_entries": rejected_entries,
                          "cost_gate_rejections": cost_gate_rejections},
+            "decision_diagnostics": {
+                "bars_evaluated": len(bars),
+                "slot_rvol_unavailable_bars": sum(1 for item in snaps if item.rvol is None),
+                "slot_rvol_sample_count_distribution": {
+                    str(count): total for count, total in sorted(
+                        Counter(item.slot_rvol_samples for item in snaps).items()
+                    )
+                },
+                "max_slot_rvol_samples": max((item.slot_rvol_samples for item in snaps), default=0),
+                "missing_30m_context_bars": sum(1 for item in snaps if item.context_regime is None),
+                "unconfirmed_15m_swing_bars": sum(1 for item in snaps if not item.swing_15m_confirmed),
+                "action_counts": dict(sorted(decision_action_counts.items())),
+                "rejection_gate_counts": dict(sorted(rejection_gate_counts.items())),
+            },
             "start_equity": start_equity, "bars": len(bars)}
 
 
