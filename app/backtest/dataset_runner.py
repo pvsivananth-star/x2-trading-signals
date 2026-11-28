@@ -451,12 +451,10 @@ def _synthetic_warmup_bars(
 
             open_px = previous_close * open_factor * session_price_scale
             close_px = open_px * close_factor
-            high_px = max(open_px, close_px) * max(
-                Decimal("1"), high_factor / max(Decimal("1"), close_factor)
-            )
-            low_px = min(open_px, close_px) * min(
-                Decimal("1"), low_factor / min(Decimal("1"), close_factor)
-            )
+            high_px = open_px * high_factor
+            low_px = open_px * low_factor
+            high_px = max(high_px, open_px, close_px)
+            low_px = min(low_px, open_px, close_px)
 
             # Preserve the actual volume curve and scale the whole synthetic session modestly.
             volume = max(Decimal(1), source_volume * session_volume_scale)
