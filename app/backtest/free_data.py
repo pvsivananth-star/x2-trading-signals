@@ -194,7 +194,6 @@ def download_free_dataset(
         "coverage": coverage,
         "total_rows": total_rows,
         "failed_symbols": failures,
-        "data_is_synthetic": False,
         "limitations": [
             "Intraday history is limited to the provider's recent retention window (maximum 60 calendar days).",
             "OHLCV does not provide consolidated volume, bid/ask quotes, or trade counts.",
