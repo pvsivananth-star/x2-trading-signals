@@ -19,7 +19,7 @@ def _short(**kw):
     base = replace(snapshot(), trend="down", structure="lower-highs-lower-lows",
                    pullback_depth=None, vwap=Decimal(101), last_close=Decimal(100), atr=Decimal(2),
                    pullback_depth_short=Decimal("0.5"), structure_target_short=Decimal(95),
-                   structure_source_short="SWING_LOW", rvol=Decimal("1.2"))
+                   structure_source_short="SWING_LOW", rvol=Decimal("1.2"),\n                   swing_15m_direction="down")
     return replace(base, **kw)
 
 
