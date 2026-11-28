@@ -409,6 +409,89 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     return out
 
 
+def dump_synthetic_warmup(
+    directory: str | Path,
+    output_dir: str | Path,
+    *,
+    interval_seconds: int = 300,
+    warmup_sessions: int,
+    profile_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Materialize the first N local sessions per instrument as a synthetic warmup dataset."""
+    if warmup_sessions < 0:
+        raise ValueError("warmup_sessions cannot be negative")
+    directory = Path(directory)
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    profile_map = profile_map or DEFAULT_PROFILE
+
+    source = directory / "bars.csv"
+    with source.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    if not fieldnames:
+        raise ValueError("bars.csv has no header")
+
+    symbols = _instrument_symbols(directory)
+    selected: list[dict[str, str]] = []
+    applied_by_symbol: dict[str, list[str]] = {}
+    for iid, symbol in sorted(symbols.items()):
+        symbol_rows = [
+            r for r in rows
+            if int(r["instrument_id"]) == iid and int(r["interval_seconds"]) == interval_seconds
+        ]
+        profile = profile_map.get(symbol)
+        if profile is None:
+            raise ValueError(f"no market profile configured for {symbol}")
+        timezone, _, _ = MARKET_SESSIONS.get(
+            profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+        )
+        session_dates: list[object] = []
+        seen: set[object] = set()
+        for row in symbol_rows:
+            dt = _local_dt(datetime.fromisoformat(row["bar_end"]), timezone).date()
+            if dt not in seen:
+                seen.add(dt)
+                session_dates.append(dt)
+        warm_dates = set(session_dates[:warmup_sessions])
+        applied_by_symbol[symbol] = [str(x) for x in session_dates[:warmup_sessions]]
+        for row in symbol_rows:
+            dt = _local_dt(datetime.fromisoformat(row["bar_end"]), timezone).date()
+            if dt in warm_dates:
+                copied = dict(row)
+                copied["is_warmup"] = "true"
+                selected.append(copied)
+
+    if "is_warmup" not in fieldnames:
+        fieldnames.append("is_warmup")
+    with (output / "bars.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(selected)
+
+    instruments = directory / "instruments.csv"
+    (output / "instruments.csv").write_text(instruments.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = {
+        "fixture": "synthetic_warmup",
+        "synthetic": True,
+        "source_dataset": str(directory.resolve()),
+        "source_bars": str(source.resolve()),
+        "interval_seconds": interval_seconds,
+        "warmup_sessions_requested": warmup_sessions,
+        "warmup_rows": len(selected),
+        "warmup_sessions_by_symbol": applied_by_symbol,
+        "redistribution_allowed": False,
+    }
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return {
+        "output_dir": str(output),
+        "warmup_sessions_requested": warmup_sessions,
+        "warmup_rows": len(selected),
+        "warmup_sessions_by_symbol": applied_by_symbol,
+    }
+
+
 def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(25000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
