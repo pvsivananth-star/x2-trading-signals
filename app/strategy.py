@@ -289,9 +289,15 @@ class ConfluenceV1:
         pre_close_flat = minutes_to_close is not None and minutes_to_close <= flatten_mins
         required_room = None
         slot_rvol = None
+        roundtrip_cost_used = self.roundtrip_cost
+        slippage_buffer_used = self.slippage_buffer
         if market is not None and "min_net_moveroom_pct" in market and "slot_rvol_min" in market:
             required_room = Decimal(str(market["min_net_moveroom_pct"]))
             slot_rvol = Decimal(str(market["slot_rvol_min"]))
+            # Market-specific estimate feeds the pre-trade MoveRoom gate; realised costs
+            # are calculated separately from config/costs.yaml and labelled by coverage.
+            roundtrip_cost_used = Decimal(str(market.get("est_roundtrip_cost_pct", self.roundtrip_cost)))
+            slippage_buffer_used = Decimal(str(market.get("slippage_buffer_pct", self.slippage_buffer)))
 
         zone: str | None = None
         size_weight: Decimal | None = None
@@ -397,7 +403,7 @@ class ConfluenceV1:
                 max_mult_used = max(self.max_target_mult, target_mult_used)
             levels = projected_levels(
                 snapshot, target_mult_used, max_mult_used, stop_mult_used,
-                self.roundtrip_cost, self.slippage_buffer, side_used, regime,
+                roundtrip_cost_used, slippage_buffer_used, side_used, regime,
             )
             sufficient_room = False
             if levels is None:
@@ -462,6 +468,8 @@ class ConfluenceV1:
             "slot_rvol": str(snapshot.rvol),
             "rolling_rvol": str(snapshot.rolling_rvol),
             "slot_rvol_samples": snapshot.slot_rvol_samples,
+            "roundtrip_cost_estimate_pct": str(roundtrip_cost_used),
+            "slippage_buffer_pct": str(slippage_buffer_used),
             "atr": str(snapshot.atr),
             "vwap": str(snapshot.vwap),
             "last_close": str(snapshot.last_close),
@@ -500,6 +508,8 @@ class ConfluenceV1:
             "net_move_room": _decimal_text(levels.net_move_room if levels else None),
             "move_room": _decimal_text(levels.net_move_room if levels else None),
             "move_room_threshold": _decimal_text(required_room),
+            "roundtrip_cost_estimate_pct": _decimal_text(roundtrip_cost_used),
+            "slippage_buffer_pct": _decimal_text(slippage_buffer_used),
             "reward_to_risk": _decimal_text(levels.reward_to_risk if levels else None),
             "max_risk_pct": "N/A" if policy.max_risk_pct is None else str(policy.max_risk_pct),
             "stale_seconds": _decimal_text(Decimal(str(stale_feed_seconds))),
