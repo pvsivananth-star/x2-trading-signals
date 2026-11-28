@@ -549,7 +549,6 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     statuses = {trade.cost_status for trade in trades}
     cost_status = ("fully_net" if statuses == {"fully_net"} else
                    "partial_net" if statuses.intersection({"fully_net", "partial_net"}) else "gross")
-    net_trade_count = sum(1 for trade in trades if trade.net_pnl is not None)
     def stats(values: list[Decimal]) -> dict[str, Any]:
         wins = [v for v in values if v > 0]
         losses = [v for v in values if v <= 0]
