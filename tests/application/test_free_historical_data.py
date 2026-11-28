@@ -77,6 +77,23 @@ class FreeHistoricalDataTests(unittest.TestCase):
         self.assertEqual(set(manifest["symbols_downloaded"]), {"SPY", "NVDA"})
         self.assertEqual(manifest["total_rows"], 2)
 
+    def test_append_rejects_a_symbol_already_in_the_dataset(self) -> None:
+        output = Path(tempfile.mkdtemp()) / "dataset"
+        profiles = {"SPY": "US_EQUITIES"}
+        with patch(
+            "app.backtest.free_data._fetch_symbol",
+            return_value=(self._rows(), "America/New_York"),
+        ):
+            download_free_dataset(
+                output, symbols=("SPY",), days=30, profile_map=profiles,
+            )
+            with self.assertRaisesRegex(ValueError, "already exist in dataset"):
+                download_free_dataset(
+                    output, symbols=("SPY",), days=30,
+                    profile_map=profiles, append=True,
+                )
+
+
     def test_provider_retention_limit_is_enforced(self) -> None:
         with self.assertRaisesRegex(ValueError, "limited to 60"):
             download_free_dataset(
