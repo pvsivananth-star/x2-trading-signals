@@ -525,13 +525,24 @@ def _synthetic_warmup_until_ready(
     """Generate complete synthetic sessions until the strategy declares itself warm."""
     if not bars:
         return bars, datetime.now(UTC), 0
+    volume_cfg = getattr(engine, "strategy", {}).get("volume", {})
+    slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
+    slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
+    # This is a derived safety bound, not a warmup setting: slot RVOL is the longest
+    # configured cross-session dependency. If readiness is still impossible beyond it,
+    # fail explicitly instead of looping forever on malformed/flat fixture data.
+    max_sessions = slot_lookback + slot_min_sessions + 2
     sessions = 0
-    while True:
+    while sessions < max_sessions:
         sessions += 1
         simulation_bars, simulation_start = _synthetic_warmup_bars(bars, profile, sessions)
         synthetic = simulation_bars[:-len(bars)] if bars else simulation_bars
         if synthetic and _synthetic_warmup_ready(synthetic, profile, engine):
             return simulation_bars, simulation_start, sessions
+    raise RuntimeError(
+        f"{profile}: strategy warmup did not reach READY after {max_sessions} derived sessions; "
+        "inspect the synthetic template and configured feature requirements"
+    )
 
 
 def _slot_rvol_unavailable_reason(
