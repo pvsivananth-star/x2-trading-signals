@@ -20,7 +20,7 @@ Phases 1–8 are implemented. Last confirmed local baseline before the latest Ph
 - [x] 65. Validate synthetic warmup boundaries and ensure warmup data cannot contribute to scored performance.
 - [x] 66. Produce a machine-readable dataset validation report and fail closed on critical violations.
 - [x] 67. Add deterministic end-to-end backtest smoke fixtures and verify repeatability.
-- [x] 67a. Block backtests when warmup consumes all history or scored sessions fall below the configured per-instrument minimum; never silently truncate requested warmup.
+- [x] 67a. Block backtests when warmup consumes all history or scored sessions fall below the configured per-instrument minimum; never silently truncate requested warmup.\n- [x] 67b. Add a no-cost historical OHLCV downloader with provider-retention limits, raw-source provenance, partial-failure reporting and backtest-compatible output.
 
 ## Phase 10 — Strategy implementation and profitability validation
 - [ ] 68. Replace first-pass analyzer/strategy heuristics with production-quality implementations backed by explicit requirements.
