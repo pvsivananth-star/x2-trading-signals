@@ -15,6 +15,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from app.event_risk import EventRiskAssessment
 from app.features import FeatureSnapshot
 from app.policy import TradingPolicy
 from app.regime import Regime
@@ -253,6 +254,7 @@ class ConfluenceV1:
         previous_snapshot: FeatureSnapshot | None = None,
         position_stop: Decimal | None = None,
         position_target: Decimal | None = None,
+        event_risk: EventRiskAssessment | None = None,
     ) -> DecisionCard:
         policy = self.policy.evaluate(
             timestamp=timestamp,
@@ -265,6 +267,14 @@ class ConfluenceV1:
             live_mode=live_mode,
         )
         gates = list(policy.rejected_gates)
+        event_cfg = self.strategy.get("event_risk", {})
+        event_required = bool(event_cfg.get("required", False))
+        event_max_age = int(event_cfg.get("max_age_seconds", 900))
+        event_fresh = event_risk is not None and event_risk.is_fresh_at(timestamp, event_max_age)
+        if event_required and not event_fresh:
+            gates.append("event_risk_unavailable_or_stale")
+        elif event_required and event_risk is not None and event_risk.state != "clear":
+            gates.append("event_risk_blocked")
         if regime.value not in self.strategy.get("allowed_regimes", []):
             gates.append("regime_not_allowed")
 
@@ -465,6 +475,9 @@ class ConfluenceV1:
             "swing_15m_direction": snapshot.swing_15m_direction,
             "swing_15m_size_atr": str(snapshot.swing_15m_size_atr),
             "swing_15m_confirmed": snapshot.swing_15m_confirmed,
+            "event_risk_state": event_risk.state if event_risk is not None else "unavailable",
+            "event_risk_as_of": event_risk.as_of.isoformat() if event_risk is not None else None,
+            "event_risk_reason": event_risk.reason if event_risk is not None else "no assessment supplied",
         }
         parameters = {
             "side": side_used or "none",
@@ -493,6 +506,7 @@ class ConfluenceV1:
             "swing_15m_direction": snapshot.swing_15m_direction or "N/A",
             "swing_15m_size_atr": _decimal_text(snapshot.swing_15m_size_atr),
             "swing_15m_confirmed": str(snapshot.swing_15m_confirmed),
+            "event_risk_state": event_risk.state if event_risk is not None else "unavailable",
         }
         display = {
             "enter_long": "BUY", "enter_short": "SHORT",
