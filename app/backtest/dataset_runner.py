@@ -333,7 +333,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 stop = entry_px - side * stop_dist
                 pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
             pending = None
-        assert_causal_window(bars[: i + 1], bar.bar_end)
+        assert_causal_window(feature_window, bar.bar_end)
         if pos is not None:
             regime = causal_regime(feature_window, bar.bar_end, **session)
             sig = engine.evaluate(
@@ -348,12 +348,12 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
         elif pos is None and pending is None and bar_session not in warmup_dates:
-            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
+            regime = causal_regime(feature_window, bar.bar_end, **session)
             sig = engine.evaluate(
-                timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
+                timestamp=bar.bar_end, symbol=symbol, snapshot=snapshot, regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
-                previous_snapshot=snaps[i - 1] if i > 0 else None,
+                previous_snapshot=previous_snapshot,
             )
             if sig.action in ("enter_long", "enter_short") and snapshot.atr:
                 side = 1 if sig.action == "enter_long" else -1
