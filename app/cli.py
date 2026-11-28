@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="apply unverified cost estimates (slippage); off by default")
     dataset.add_argument("--synthetic-warmup-sessions", type=int, default=10,
                          help="synthetic prior sessions used only for indicator warmup; supplied data remains the first tradable session")
+    dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
+                         help="materialize the exact generated warmup bars as per-symbol CSVs for inspection")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
@@ -156,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
                 synthetic_warmup_sessions=args.synthetic_warmup_sessions,
+                synthetic_warmup_dir=args.dump_synthetic_warmup,
             )
             write_outputs(result, args.out)
             printable = {k: v for k, v in result.items() if k != "_trades"}
