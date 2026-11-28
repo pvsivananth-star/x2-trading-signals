@@ -343,6 +343,9 @@ class CostRuleTests(unittest.TestCase):
 
 
 class IntrabarExitTests(unittest.TestCase):
+    def setUp(self):
+        self.costs = load_costs("config/costs.yaml")
+
     def _pos(self, side):
         return Position(side, Decimal(10), datetime(2026, 11, 2, tzinfo=UTC), Decimal(100),
                         Decimal(99) if side > 0 else Decimal(101),
