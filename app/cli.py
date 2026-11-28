@@ -69,8 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     dataset.add_argument("--risk-pct", type=str, default="0.0025", help="equity risk per trade (A-tier cap)")
     dataset.add_argument("--allow-estimates", action="store_true",
                          help="apply unverified cost estimates (slippage); off by default")
-    dataset.add_argument("--synthetic-warmup-sessions", type=int, default=10,
-                         help="synthetic prior sessions used only for indicator warmup; supplied data remains the first tradable session")
+    dataset.add_argument("--no-synthetic-warmup", action="store_true",
+                         help="disable automatic synthetic warmup; use only when the input already contains sufficient causal history")
     dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
                          help="materialize the exact generated warmup bars as per-symbol CSVs for inspection")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                 start_equity=Decimal(args.start_equity),
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
-                synthetic_warmup_sessions=args.synthetic_warmup_sessions,
+                synthetic_warmup=not args.no_synthetic_warmup,
                 synthetic_warmup_dir=args.dump_synthetic_warmup,
             )
             write_outputs(result, args.out)
