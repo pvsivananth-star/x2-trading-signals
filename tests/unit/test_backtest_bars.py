@@ -59,8 +59,8 @@ class BacktestBarTests(unittest.TestCase):
 
     def test_confirmed_swing_requires_two_closed_confirmation_bars(self) -> None:
         start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
-        highs_lows = [(101, 99), (102, 98), (105, 100), (103, 99),
-                      (102, 98), (101, 95), (102, 97), (103, 98)]
+        highs_lows = [(100, 99), (101, 99), (102, 98), (105, 100),
+                      (103, 99), (102, 98), (101, 95), (102, 97), (103, 98)]
         bars = [
             Bar(start + timedelta(minutes=15 * i), start + timedelta(minutes=15 * (i + 1)),
                 Decimal(100), Decimal(high), Decimal(low), Decimal(100), Decimal(10), 1)
