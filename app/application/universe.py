@@ -23,9 +23,12 @@ class InstrumentUniverse:
         bars=list(candles)
         reasons:list[str]=[]
         observable=bool(bars) and provider_healthy
-        if not observable: reasons.append("not_observable")
-        if not licensed: reasons.append("license_not_eligible")
+        if not observable:
+            reasons.append("not_observable")
+        if not licensed:
+            reasons.append("license_not_eligible")
         liquidity_ok, liquidity_reasons=self.liquidity_gate.evaluate(bars)
-        if not liquidity_ok: reasons.extend(liquidity_reasons)
+        if not liquidity_ok:
+            reasons.extend(liquidity_reasons)
         research=observable and licensed and liquidity_ok
         return InstrumentEligibility(symbol,observable,research,research,False,tuple(dict.fromkeys(reasons)))
