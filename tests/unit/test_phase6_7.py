@@ -75,6 +75,13 @@ def snapshot() -> FeatureSnapshot:
         Decimal(20),
         last_close=Decimal(100),
         pullback_depth=Decimal("0.5"),
+        context_regime="TREND_DAY",
+        context_timestamp=now,
+        swing_15m_high=Decimal(105),
+        swing_15m_low=Decimal(95),
+        swing_15m_direction="up",
+        swing_15m_size_atr=Decimal("5"),
+        swing_15m_confirmed=True,
     )
 
 
