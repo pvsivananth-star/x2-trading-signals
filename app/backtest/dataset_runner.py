@@ -358,7 +358,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     simulator = order_simulator or OrderSimulator(SimulationConfig(
         partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
     ))
-    if (simulator.config.spread_bps or simulator.config.slippage_bps or simulator.config.fee_rate):
+    simulator_config = getattr(simulator, "config", SimulationConfig())
+    if (simulator_config.spread_bps or simulator_config.slippage_bps or simulator_config.fee_rate):
         raise ValueError("spread, slippage, and fees are owned by the shared cost ledger; simulator friction must be zero")
     partial_fills = 0
     rejected_entries = 0
