@@ -12,6 +12,10 @@ strategy:
     min_candles: 3
     min_atr_mult: 0.60
     confirmation_bars: 2
+  volume:
+    # Compare each 5m bar with the same exchange-local wall-clock slot in prior sessions.
+    slot_rvol_lookback_sessions: 10
+    slot_rvol_min_sessions: 5
   reaction_zones:
     core_fib: { min: 0.382, max: 0.618, weight: 1.00 }
     shallow_vwap: { min: 0.236, max: 0.382, weight: 0.68, require_vwap_hold: true }
