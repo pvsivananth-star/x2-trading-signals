@@ -7,7 +7,9 @@ import unittest
 from pathlib import Path
 
 from app.backtest.validation import validate_dataset
-from app.backtest.dataset_runner import dump_synthetic_warmup
+from app.backtest.dataset_runner import (
+    InsufficientScoredDataError, dump_synthetic_warmup, inspect_scored_data, run_dataset,
+)
 from app.backtest.bars import Bar
 from app.backtest.causality import validate_causal_window, validate_next_bar_execution
 from datetime import UTC, datetime, timedelta
@@ -170,6 +172,48 @@ class Phase9DatasetValidationTests(unittest.TestCase):
         self.assertTrue(report.valid)
         self.assertTrue(report.synthetic)
         self.assertEqual(report.warmup_rows, 1)
+
+
+    def test_insufficient_scored_sessions_is_rejected_per_symbol(self) -> None:
+        root = self._dataset(rows=[
+            self._row("2026-11-20T14:30:00+00:00"),
+            self._row("2026-11-21T14:30:00+00:00", bar_end="2026-11-21T14:35:00+00:00"),
+            self._row("2026-11-22T14:30:00+00:00", bar_end="2026-11-22T14:35:00+00:00"),
+        ])
+        with self.assertRaisesRegex(InsufficientScoredDataError, "3 scored sessions remain"):
+            inspect_scored_data(
+                root, interval_seconds=300, warmup_sessions=0, min_scored_sessions=20,
+                profile_map={"SIM-EQ": "US_EQUITIES"},
+            )
+
+    def test_warmup_consuming_entire_dataset_is_rejected(self) -> None:
+        root = self._dataset(rows=[
+            self._row("2026-11-20T14:30:00+00:00"),
+            self._row("2026-11-21T14:30:00+00:00", bar_end="2026-11-21T14:35:00+00:00"),
+        ])
+        with self.assertRaisesRegex(InsufficientScoredDataError, "at least 3 required"):
+            inspect_scored_data(
+                root, interval_seconds=300, warmup_sessions=2, min_scored_sessions=1,
+                profile_map={"SIM-EQ": "US_EQUITIES"},
+            )
+
+    def test_run_dataset_fails_before_loading_strategy_for_short_history(self) -> None:
+        root = self._dataset(rows=[self._row()])
+        with self.assertRaises(InsufficientScoredDataError):
+            run_dataset(
+                root, interval_seconds=300, warmup_sessions=0, min_scored_sessions=20,
+                profile_map={"SIM-EQ": "US_EQUITIES"},
+            )
+
+    def test_warmup_dump_does_not_silently_truncate_requested_sessions(self) -> None:
+        root = self._dataset(rows=[self._row()])
+        output = Path(tempfile.mkdtemp()) / "warmup"
+        with self.assertRaisesRegex(InsufficientScoredDataError, "only 1 are available"):
+            dump_synthetic_warmup(
+                root, output, interval_seconds=300, warmup_sessions=15,
+                profile_map={"SIM-EQ": "US_EQUITIES"},
+            )
+        self.assertFalse(output.exists())
 
     def test_causal_window_rejects_future_bar(self) -> None:
         t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
