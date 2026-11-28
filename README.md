@@ -95,15 +95,24 @@ Do not create microservices prematurely. First establish strong module boundarie
 The repository includes a no-key downloader for recent 5-minute OHLCV data:
 
 ```bash
+# First symbol creates the dataset
 python -m app.cli download-free-data \
-  --days 60 \
+  --symbol SPY \
+  --days 59 \
+  --out ../back-test-copyright/free-market-data
+
+# Download further symbols one at a time into the same dataset
+python -m app.cli download-free-data \
+  --symbol NVDA \
+  --days 59 \
+  --append \
   --out ../back-test-copyright/free-market-data
 ```
 
 It downloads the configured 16-symbol multi-market universe into `bars.csv`,
 `instruments.csv`, `manifest.json` and `download_failures.csv`. The downloader
 refuses to overwrite a non-empty output directory and never fills missing bars.
-Yahoo Finance intraday history is limited to the most recent 60 calendar days.
+Yahoo Finance intraday history is limited to the most recent 60 calendar days. The downloader defaults to 59 days to avoid edge-of-window HTTP 422 responses, tries both Yahoo chart hosts, and supports one-symbol-at-a-time append runs.
 The public `yfinance` documentation describes this access as intended for
 personal use; check the provider's terms before use and do not redistribute
 downloaded data without permission.
