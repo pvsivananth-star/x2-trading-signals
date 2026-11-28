@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from app.backtest.validation import validate_dataset
+from app.backtest.dataset_runner import dump_synthetic_warmup
 from app.backtest.bars import Bar
 from app.backtest.causality import validate_causal_window, validate_next_bar_execution
 from datetime import UTC, datetime, timedelta
@@ -144,6 +145,31 @@ class Phase9DatasetValidationTests(unittest.TestCase):
         report = validate_dataset(self._dataset(rows=[first, second]), interval_seconds=300)
         self.assertFalse(report.valid)
         self.assertIn("WARMUP_AFTER_SCORED", {issue.code for issue in report.critical})
+
+    def test_synthetic_warmup_dump_creates_self_contained_dataset(self) -> None:
+        root = self._dataset(
+            rows=[
+                self._row("2026-11-20T14:30:00+00:00"),
+                self._row("2026-11-21T14:30:00+00:00", bar_end="2026-11-21T14:35:00+00:00"),
+            ]
+        )
+        output = Path(tempfile.mkdtemp()) / "warmup"
+        result = dump_synthetic_warmup(
+            root, output, interval_seconds=300, warmup_sessions=1,
+            profile_map={"SIM-EQ": "US_EQUITIES"},
+        )
+        self.assertEqual(result["warmup_rows"], 1)
+        self.assertTrue((output / "bars.csv").is_file())
+        self.assertTrue((output / "instruments.csv").is_file())
+        self.assertTrue((output / "manifest.json").is_file())
+        with (output / "bars.csv").open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["is_warmup"], "true")
+        report = validate_dataset(output, interval_seconds=300)
+        self.assertTrue(report.valid)
+        self.assertTrue(report.synthetic)
+        self.assertEqual(report.warmup_rows, 1)
 
     def test_causal_window_rejects_future_bar(self) -> None:
         t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
