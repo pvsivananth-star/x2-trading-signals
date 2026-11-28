@@ -392,23 +392,13 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         exited_this_bar = True
         if pos is None and pending is not None:
             side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close, entry_regime = pending
-            entry_px = bar.open
-            # Structural targets remain fixed market levels. ATR open-space targets preserve
-            # their signal-time distance from the actual fill. Reject gap entries that destroy RR.
-            target = (
-                entry_px + side * abs(signal_target - signal_close)
-                if target_source.startswith("ATR_") else signal_target
-            )
-            actual_rr = (Decimal(side) * (target - entry_px) / stop_dist) if stop_dist > 0 else Decimal(0)
-            minimum_rr = Decimal(str(getattr(engine, "min_rr", "1.5")))
-            if actual_rr <= 0 or actual_rr < minimum_rr:
-                pending = None
-                exited_this_bar = True
-                continue
-            qty = (risk_budget := start_equity * entry_risk_pct) / stop_dist
+            # Structural targets remain fixed market levels. ATR targets preserve their
+            # signal-time distance from the actual simulated fill.
+            risk_budget = start_equity * entry_risk_pct
+            requested_qty = risk_budget / stop_dist if stop_dist > 0 else Decimal(0)
             if profile not in _FRACTIONAL_QTY_PROFILES:
-                qty = Decimal(math.floor(qty))
-            fill = simulator.submit(bar, "buy" if side > 0 else "sell", "market", qty)
+                requested_qty = Decimal(math.floor(requested_qty))
+            fill = simulator.submit(bar, "buy" if side > 0 else "sell", "market", requested_qty)
             filled_qty = fill.quantity
             if profile not in _FRACTIONAL_QTY_PROFILES:
                 filled_qty = Decimal(math.floor(filled_qty))
@@ -420,6 +410,17 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if fill.status == "partial":
                 partial_fills += 1
             entry_px = fill.fill_price
+            target = (
+                entry_px + side * abs(signal_target - signal_close)
+                if target_source.startswith("ATR_") else signal_target
+            )
+            actual_rr = (Decimal(side) * (target - entry_px) / stop_dist) if stop_dist > 0 else Decimal(0)
+            minimum_rr = Decimal(str(getattr(engine, "min_rr", "1.5")))
+            if actual_rr <= 0 or actual_rr < minimum_rr:
+                rejected_entries += 1
+                pending = None
+                exited_this_bar = True
+                continue
             actual_risk_amount = filled_qty * stop_dist
             if actual_risk_amount > risk_budget:
                 raise ValueError("simulated fill exceeds the configured risk budget")
@@ -428,13 +429,13 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             pos = Position(side, filled_qty, bar.bar_start, entry_px, stop, target,
                            actual_risk_amount, ecost, entry_regime=entry_regime,
                            entry_fill_status=fill.status)
-                # The entry bar is part of the position lifecycle; never skip its stop/target range.
-                hit = _intrabar_exit(pos, bar)
-                if hit is not None:
-                    price, reason = hit
-                    trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
-                    pos = None
-                    exited_this_bar = True
+            # The entry bar is part of the position lifecycle; never skip its stop/target range.
+            hit = _intrabar_exit(pos, bar)
+            if hit is not None:
+                price, reason = hit
+                trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
+                pos = None
+                exited_this_bar = True
             pending = None
         if pos is not None:
             regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
