@@ -369,6 +369,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         raise ValueError("spread, slippage, and fees are owned by the shared cost ledger; simulator friction must be zero")
     partial_fills = 0
     rejected_entries = 0
+    cost_gate_rejections = 0
     costs_applicable = profile in _EQUITY_COST_PROFILES
     net_available = costs_applicable and not excluded and not cost_values.get("_estimated")
     coverage_status = "fully_net" if net_available else "partial_net" if costs_applicable else "gross"
@@ -508,6 +509,30 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 pending = None
                 exited_this_bar = True
                 continue
+            # Reconcile MoveRoom with the same cost ledger used by realized P&L.
+            # The strategy's configured budget remains a conservative floor; known
+            # instrument costs can only increase the required gross move.
+            try:
+                _market_name, market_config = policy.resolve_market(symbol)
+                required_net_room = Decimal(str(market_config["min_net_moveroom_pct"]))
+            except (AttributeError, KeyError, ValueError):
+                required_net_room = None
+            if required_net_room is not None:
+                notional = filled_qty * entry_px
+                known_roundtrip_cost = (
+                    entry_costs(cost_values, filled_qty, entry_px)
+                    + exit_costs(cost_values, filled_qty, target)
+                ) if costs_applicable else Decimal(0)
+                known_cost_pct = known_roundtrip_cost / notional if notional > 0 else Decimal(0)
+                configured_roundtrip = Decimal(str(getattr(engine, "roundtrip_cost", "0.0010")))
+                slippage_buffer = Decimal(str(getattr(engine, "slippage_buffer", "0.0005")))
+                effective_cost_budget = max(configured_roundtrip, known_cost_pct) + slippage_buffer
+                gross_room = Decimal(side) * (target - entry_px) / entry_px if entry_px > 0 else Decimal(0)
+                if gross_room - effective_cost_budget < required_net_room:
+                    cost_gate_rejections += 1
+                    pending = None
+                    exited_this_bar = True
+                    continue
             actual_risk_amount = filled_qty * stop_dist
             if actual_risk_amount > risk_budget:
                 raise ValueError("simulated fill exceeds the configured risk budget")
@@ -582,7 +607,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     return {"symbol": symbol, "profile": profile, "trades": trades,
             "net_available": net_available, "cost_status": coverage_status,
             "excluded_cost_fields": excluded, "estimated_cost_fields": cost_values.get("_estimated", []),
-            "execution": {"partial_fills": partial_fills, "rejected_entries": rejected_entries},
+            "execution": {"partial_fills": partial_fills, "rejected_entries": rejected_entries,
+                         "cost_gate_rejections": cost_gate_rejections},
             "start_equity": start_equity, "bars": len(bars)}
 
 
