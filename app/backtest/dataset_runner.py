@@ -885,14 +885,34 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 raise ValueError(f"instrument {symbol} is not approved in {profile}.core_symbols")
 
     costs = load_costs(costs_path)
-    results = []
+    active_instruments = []
     for iid, symbol in sorted(instrument_symbols.items()):
         bars = grouped.get((iid, interval_seconds), [])
-        if not bars:
-            continue
-        profile = profile_map[symbol]
-        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity,
-                                  risk_pct, allow_estimates, event_risk_provider=event_risk_provider))
+        if bars:
+            active_instruments.append((symbol, profile_map[symbol], bars))
+    active_counts: dict[str, int] = {}
+    for _symbol, profile, _bars in active_instruments:
+        active_counts[profile] = active_counts.get(profile, 0) + 1
+
+    # Allocate each market sleeve before any symbol enters its lifecycle simulation.
+    # The chronological shared ledger below still enforces concurrency and correlated risk.
+    symbol_budgets: dict[str, Decimal] = {}
+    for symbol, profile, _bars in active_instruments:
+        allocation_pct = Decimal(str(markets["markets"][profile].get("allocation_pct", 0)))
+        if allocation_pct <= 0:
+            raise ValueError(f"market {profile} has no capital allocation")
+        symbol_budgets[symbol] = (
+            start_equity * allocation_pct / Decimal(active_counts[profile])
+        )
+
+    results = []
+    for symbol, profile, bars in active_instruments:
+        symbol_equity = symbol_budgets[symbol]
+        result = run_symbol(symbol, bars, profile, engine, policy, costs, symbol_equity,
+                            risk_pct, allow_estimates, event_risk_provider=event_risk_provider)
+        result["start_equity"] = symbol_equity
+        result["capital_allocation"] = symbol_equity
+        results.append(result)
 
     all_trades, portfolio_rejections, portfolio_summary = _apply_portfolio_constraints(
         results, markets, costs, start_equity, risk_pct, allow_estimates
@@ -917,6 +937,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         "per_symbol": {
             item["symbol"]: {
                 "bars": item["bars"], "profile": item["profile"],
+                "capital_allocation": str(item["capital_allocation"]),
                 "net_costs_available": item["net_available"], "cost_status": item["cost_status"],
                 "cost_fields_excluded": item["excluded_cost_fields"],
                 "estimated_cost_fields": item["estimated_cost_fields"], "execution": item["execution"],
@@ -925,7 +946,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                     None if accepted_by_symbol[item["symbol"]] else
                     "No eligible trades were produced; this is not evidence of profitability or unprofitability."
                 ),
-                "summary": summarize(accepted_by_symbol[item["symbol"]], start_equity),
+                "summary": summarize(accepted_by_symbol[item["symbol"]], item["start_equity"]),
             } for item in results
         },
         "portfolio": portfolio_summary,
