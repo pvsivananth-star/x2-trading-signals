@@ -186,6 +186,19 @@ class Phase9DatasetValidationTests(unittest.TestCase):
                 profile_map={"SIM-EQ": "US_EQUITIES"},
             )
 
+    def test_scored_session_coverage_reports_warmup_and_scored_counts(self) -> None:
+        root = self._dataset(rows=[
+            self._row("2026-11-20T14:30:00+00:00"),
+            self._row("2026-11-21T14:30:00+00:00", bar_end="2026-11-21T14:35:00+00:00"),
+            self._row("2026-11-22T14:30:00+00:00", bar_end="2026-11-22T14:35:00+00:00"),
+        ])
+        coverage = inspect_scored_data(
+            root, interval_seconds=300, warmup_sessions=1, min_scored_sessions=2,
+            profile_map={"SIM-EQ": "US_EQUITIES"},
+        )
+        self.assertEqual(coverage["SIM-EQ"]["available_sessions"], 3)
+        self.assertEqual(coverage["SIM-EQ"]["scored_sessions"], 2)
+
     def test_warmup_consuming_entire_dataset_is_rejected(self) -> None:
         root = self._dataset(rows=[
             self._row("2026-11-20T14:30:00+00:00"),
