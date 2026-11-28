@@ -17,7 +17,9 @@ NOW = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)
 
 def _snap(**kw):
     # entry 100, ATR 2 -> 3.5 ATR = 107, 4 ATR = 108
-    return replace(snapshot(), atr=Decimal(2), last_close=Decimal(100), **kw)
+    values = {"context_timestamp": NOW, "atr": Decimal(2), "last_close": Decimal(100)}
+    values.update(kw)
+    return replace(snapshot(), **values)
 
 
 def _levels(snap):
