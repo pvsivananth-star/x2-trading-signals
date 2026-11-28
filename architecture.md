@@ -92,7 +92,10 @@ Calculates RSI/other configured momentum context without turning indicators into
 Compares instrument against market, sector and peer benchmarks.
 
 ### Signal Manager
-Combines analyzer outputs into immutable, explainable candidate signals. It must distinguish SETUP from TRIGGER.
+Combines analyzer outputs into immutable, explainable **candidate signals**, not orders. It must distinguish SETUP from TRIGGER, attach the causal cutoff and feature snapshot/version, and deduplicate equivalent candidates.
+
+### Feature/Decision Snapshot
+Captures the exact analyzer inputs, derived features, market-data references and configuration versions used for a decision. Snapshots make decisions reproducible without storing an unbounded copy of all market data.
 
 ### Strategy Registry / Portfolio Strategy Orchestrator
 Maintains the catalogue of enabled strategies and maps strategies to portfolios. It does not contain strategy logic.
@@ -115,10 +118,16 @@ Portfolio-level orchestration combines independent strategy outputs only after e
 Converts an approved signal into a trade intent and manages trade lifecycle.
 
 ### Portfolio Manager
-Maintains positions, cash, realized/unrealized P&L, exposure, correlation and portfolio state.
+Maintains the authoritative portfolio projection: positions, cash, realized/unrealized P&L, reserved/available capital, exposure, correlation and portfolio state. Position changes are driven by fills/account events, not strategy intent.
+
+### Portfolio Controller
+Evaluates proposed trade intents against portfolio allocation, capital reservations, cross-strategy netting and account-wide constraints. It resolves conflicts between strategy outputs and produces an explicit portfolio decision before Risk Manager approval.
 
 ### Risk Manager
-Provides independent pre-trade and ongoing risk approval. Strategy code cannot override it.
+Provides independent pre-trade and ongoing risk approval. It evaluates strategy/trade, portfolio and account-wide constraints and can impose scoped risk-off states. Strategy code cannot override it.
+
+### Reconciliation Manager
+Continuously compares local order/fill/position/account projections with broker/exchange state and owns mismatch detection, recovery workflow and scoped trading suspension.
 
 ### Execution Manager
 Owns order state machines, idempotency, retries, cancel/replace, partial fills and reconciliation.
@@ -148,8 +157,8 @@ Kill state must be fail-closed and auditable.
 ### Notification/Alert Manager
 Publishes operational, risk and trade alerts.
 
-### Audit/Event Store
-Persist all significant events:
+### Event Store / Audit Store
+Persist all significant events and decision snapshots:
 market snapshot references, signals, approvals/rejections, orders, fills, portfolio/risk decisions, configuration versions and kill-switch actions.
 
 
@@ -181,6 +190,87 @@ Portfolio isolation requirements:
 - central Portfolio Controller still enforces account-wide hard limits across both portfolios.
 
 No strategy may borrow another portfolio's risk budget without an explicit portfolio-level allocation decision.
+
+## 3A. Architectural Boundaries That Must Not Be Blurred
+
+**Signal Manager vs Strategy Manager**
+- Signal Manager creates normalized, explainable market/setup candidates from analyzer outputs.
+- Each Strategy Manager consumes candidates and strategy context, then makes an independent strategy decision.
+- Strategy Managers do not own shared analyzer state and do not directly create broker orders.
+- A strategy decision is not an approved trade.
+
+**Trade Manager vs Portfolio Controller**
+- Trade Manager owns the lifecycle of a trade intent.
+- Portfolio Controller owns portfolio/account exposure, capital reservation and conflict resolution.
+- Neither component is allowed to submit broker orders.
+
+**Portfolio Controller vs Portfolio State**
+- Portfolio state is derived from authoritative fills/account events.
+- Portfolio Controller evaluates proposed state transitions and enforces policy.
+- In-memory calculations are projections, not the durable source of truth.
+
+**Risk Manager vs Execution Manager**
+- Risk Manager answers whether a proposed risk-taking action is permitted.
+- Execution Manager answers how an approved order is safely submitted, tracked and reconciled.
+- Execution Manager cannot downgrade or bypass a risk decision.
+
+**Event Bus vs Event Store**
+- Event Bus transports events for processing.
+- Event Store durably records the audit/event history required for recovery and replay.
+- Delivery on the bus may be at-least-once; consumers must therefore be idempotent.
+
+## 3B. Capital Reservation and Exposure Netting
+
+Before an approved order reaches Execution Manager, the Portfolio Controller creates a deterministic reservation for:
+- capital/buying power;
+- trade risk;
+- gross/net exposure;
+- correlated/sector exposure;
+- portfolio allocation.
+
+Reservations have lifecycle states and unique IDs. They are released on cancellation/rejection/expiry and converted to actual consumed state from fills.
+
+When multiple strategies propose the same instrument, strategy attribution remains separate but economic exposure is consolidated before portfolio/account risk checks. Opposing recommendations are resolved by explicit policy rather than implicit last-writer-wins behavior.
+
+## 3C. Deterministic Event Semantics
+
+All domain events use a canonical envelope containing at minimum:
+- event_id;
+- event_type;
+- event_version;
+- occurred_at;
+- observed_at;
+- causal_cutoff;
+- correlation_id;
+- causation_id;
+- aggregate/entity ID;
+- producer/component version;
+- portfolio/strategy context where applicable;
+- provenance/data-source reference.
+
+Rules:
+- event IDs are immutable and globally unique;
+- consumers deduplicate by event ID;
+- causally related events preserve ordering;
+- timestamps are UTC internally;
+- replay uses the original occurred_at/causal_cutoff, never wall-clock time;
+- handlers are deterministic and idempotent;
+- schema evolution is backward-compatible or explicitly version-migrated.
+
+## 3D. State, Recovery and Reconciliation
+
+Authoritative state is divided into:
+1. durable business/audit events and persisted aggregates;
+2. broker/exchange state after order submission;
+3. derived caches/read models.
+
+On startup or recovery:
+- load durable state;
+- reconcile broker/account state;
+- rebuild derived projections;
+- block new risk-increasing actions when reconciliation is incomplete.
+
+If broker state and local state disagree, the system enters a scoped reconciliation/failsafe state rather than guessing.
 
 ## 4. Domain Model
 
@@ -223,7 +313,7 @@ All important decisions must carry:
 - reason codes;
 - relevant metrics.
 
-## 5. Event-Driven Contracts
+## 5. Canonical Event Envelope and Event-Driven Contracts
 
 Canonical events should include:
 
@@ -252,6 +342,40 @@ Canonical events should include:
 - BacktestCompleted
 
 Events should be versioned and correlation IDs propagated end-to-end.
+
+Delivery semantics are explicitly **at-least-once**. Every consumer must be idempotent. The event bus is not the source of truth; durable event/audit storage is required for recovery and replay.
+
+Event handlers must declare:
+- input event types/versions;
+- output events;
+- idempotency key;
+- ordering requirement;
+- retry/dead-letter behavior;
+- failure policy.
+
+A poison/unprocessable event must not silently disappear. It must be quarantined and surfaced operationally.
+
+## 5A. Command/Query Separation and Read Models
+
+State-changing operations are explicit commands:
+- create/cancel/replace order;
+- approve/reject trade intent;
+- allocate/release risk reservation;
+- activate/release kill switch;
+- transfer portfolio allocation.
+
+Queries/read models must not mutate trading state. UI/API clients consume versioned read models and issue authorized commands.
+
+## 5B. Configuration and Strategy Governance
+
+Every strategy, risk policy, universe definition and execution policy has:
+- immutable version;
+- effective timestamp;
+- validation status;
+- provenance/owner;
+- activation/deactivation audit record.
+
+A backtest references exact strategy/config/data versions. Historical results are immutable even when a newer configuration is published.
 
 ## 6. Ports and Adapters
 
@@ -326,6 +450,21 @@ Risk controls include:
 
 Risk must fail closed.
 
+## 8A. Failure and Recovery State Model
+
+The platform must explicitly model system states such as:
+- STARTING;
+- HEALTHY;
+- DEGRADED_DATA;
+- DEGRADED_BROKER;
+- RECONCILING;
+- RISK_OFF;
+- KILL_SWITCHED;
+- READ_ONLY;
+- STOPPED.
+
+State transitions are auditable and scoped where possible (strategy, portfolio, broker or account). A degraded dependency may block new risk-taking without unnecessarily liquidating unrelated long-term positions.
+
 ## 9. Portfolio Control
 
 A central Portfolio Controller must see every trade intent before execution.
@@ -372,6 +511,17 @@ Backtest engine uses the same:
 Historical data is replayed causally.
 
 Backtest-only behavior must be isolated in infrastructure adapters, never hidden inside strategy decisions.
+
+## 11A. Market Session and Clock Architecture
+
+All internal timestamps are UTC. Market/session logic uses a canonical exchange calendar and explicit timezone conversion.
+
+The ClockPort supports:
+- live monotonic/wall-clock time;
+- deterministic replay time;
+- clock-drift detection.
+
+CalendarPort must represent holidays, early closes, halts, auction/opening-range windows and instrument-specific sessions.
 
 ## 12. UI/API Architecture
 
@@ -422,6 +572,20 @@ Package services into containers so the same images can later run in AWS/Azure.
 
 Initial deployment may use Docker Compose. Later deployment can map components to managed container services, managed databases, queues/event buses and secret managers without changing domain logic.
 
+## 13A. Data Lineage and Retention
+
+Market-data lineage must identify provider, symbol mapping, venue, dataset/version and ingestion timestamp.
+
+Persistence must support retention classes for:
+- raw market data;
+- normalized market data;
+- feature/decision snapshots;
+- operational state;
+- audit events;
+- backtest artifacts.
+
+Backtest artifacts must be immutable and content-addressable or otherwise uniquely versioned.
+
 ## 14. Persistence
 
 Separate:
@@ -456,6 +620,19 @@ Never log secrets or credentials.
 - Explicit environment/mode declaration.
 - Kill switch independent of strategy.
 
+## 16A. Operational Security and Authorization
+
+Trading commands require authenticated, authorized principals. Authorization is separate from strategy logic.
+
+At minimum distinguish:
+- read-only;
+- operator;
+- trading operator;
+- risk administrator;
+- system administrator.
+
+Emergency controls must remain available when normal strategy services are degraded. Kill-switch release must require explicit authorization and a healthy reconciliation state.
+
 ## 17. Testing Strategy
 
 Required layers:
@@ -476,6 +653,18 @@ Critical invariants:
 - portfolio state reconciles with fills;
 - no future data enters a decision;
 - live and backtest strategy logic remain equivalent.
+
+## 17A. Performance and Backpressure
+
+The system must define bounded queues, event-processing latency budgets and overload behavior.
+
+When the system cannot process market data within the configured freshness/latency budget:
+- mark affected data stale;
+- block new risk-increasing decisions;
+- preserve existing state;
+- recover/replay from durable sources.
+
+No component may silently drop market or execution events.
 
 ## 18. Architecture Rule
 
