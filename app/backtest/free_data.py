@@ -195,7 +195,7 @@ def download_free_dataset(
         "failed_symbols": failures,
         "limitations": [
             "Intraday history is limited to the provider's recent retention window (maximum 60 calendar days).",
-            "OHLCV does not provide consolidated volume, bid/ask quotes, or trade counts.",
+            "OHLCV does not provide consolidated volume, bid/ask quotes, or trade counts; trade_count=0 is a schema placeholder.",
             "Missing source volume is recorded as zero and flagged; it is not inferred.",
             "Data is unadjusted raw OHLCV; review corporate actions before long-horizon use.",
             "Review Yahoo Finance terms; yfinance documents this access as intended for personal use.",
