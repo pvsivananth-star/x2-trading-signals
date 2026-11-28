@@ -171,6 +171,22 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
         self.assertEqual(_context_30m_missing_reason([]), "insufficient_completed_30m_buckets")
         self.assertIsNone(_context_30m_missing_reason([bars[0]] * 6))
 
+    def test_crypto_midnight_bar_stays_in_its_24x7_session(self) -> None:
+        from app.features import _session_context
+
+        start = datetime(2026, 11, 23, 23, 55, tzinfo=UTC)
+        bars = [
+            Bar(
+                start,
+                start + timedelta(minutes=5),
+                Decimal("100"), Decimal("101"), Decimal("99"), Decimal("100"),
+                Decimal("1000"), 10,
+            )
+        ]
+        context = _session_context(bars, bars[0].bar_end, "UTC", None, None)
+        self.assertEqual(len(context.current), 1)
+        self.assertEqual(context.session_date.isoformat(), "2026-11-23")
+
     def test_synthetic_warmup_runs_until_strategy_ready(self) -> None:
         bars = []
         first = datetime(2026, 11, 23, 14, 30, tzinfo=UTC)
