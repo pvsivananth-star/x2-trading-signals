@@ -443,7 +443,9 @@ class IntrabarExitTests(unittest.TestCase):
     def test_max_holding_gap_uses_last_pre_deadline_close(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
-            strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
+            def __init__(self):
+                self.strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
+                self.entered = False
 
             def __init__(self):
                 self.entered = False
