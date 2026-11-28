@@ -152,7 +152,11 @@ def main(argv: list[str] | None = None) -> int:
             from decimal import Decimal
 
             from app.backtest.dataset_runner import (
-                DEFAULT_PROFILE, dump_synthetic_warmup, inspect_scored_data, run_dataset, write_outputs,
+                DEFAULT_PROFILE,
+                dump_synthetic_warmup,
+                inspect_scored_data,
+                run_dataset,
+                write_outputs,
             )
             from app.backtest.validation import validate_dataset
 
