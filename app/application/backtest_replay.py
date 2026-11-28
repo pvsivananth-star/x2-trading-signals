@@ -149,7 +149,7 @@ def run_replay(
             if not pdecision.approved:
                 rejected+=1; continue
             rsnapshot=RiskSnapshot(Decimal(0),Decimal(0),0,notional,False,True,True)
-            rdecision=risk.evaluate(intent,risk_amount=equity*risk_per_trade,snapshot=rsnapshot,timestamp=as_of)
+            rdecision=risk.evaluate(intent,risk_amount=equity*risk_per_trade,snapshot=rsnapshot,now=as_of,decision_id=f"RD-{intent.intent_id}")
             result=execution.submit(intent,portfolio_approved=pdecision.approved,risk_status=rdecision.status,timestamp=as_of)
             if result.accepted:
                 open_trades[intent.intent_id]=_OpenTrade(manager.spec.strategy_id,manager.spec.portfolio_id,symbol,intent.side,as_of,price,Decimal("1"),decision.score,decision.reason_codes,equity*risk_per_trade)
