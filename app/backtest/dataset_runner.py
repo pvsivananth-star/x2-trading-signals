@@ -1107,7 +1107,8 @@ def run_dataset(directory: str | Path,
                 costs_path: str | Path = "config/costs.yaml",
                 strategy_path: str | Path = "config/strategies/confluence_pullback.yaml",
                 event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None,
-                baseline_scope: bool = False) -> dict[str, Any]:
+                baseline_scope: bool = False,
+                synthetic_warmup_dir: str | Path | None = None) -> dict[str, Any]:
     directory = Path(directory)
     # Backtests exercise the full configured fixture universe by default. Set baseline_scope=True
     # only for the narrower Phase-2 production-baseline audit.
@@ -1213,6 +1214,18 @@ def run_dataset(directory: str | Path,
         simulation_bars, simulation_start = _synthetic_warmup_bars(
             bars, profile, synthetic_warmup_sessions
         )
+        if synthetic_warmup_dir is not None and synthetic_warmup_sessions > 0:
+            warmup_path = Path(synthetic_warmup_dir) / symbol.replace("/", "_").replace("=", "_")
+            warmup_path.parent.mkdir(parents=True, exist_ok=True)
+            with warmup_path.with_suffix(".csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["bar_start", "bar_end", "open", "high", "low", "close", "volume", "synthetic"])
+                for warmup_bar in simulation_bars[:len(simulation_bars) - len(bars)]:
+                    writer.writerow([
+                        warmup_bar.bar_start.isoformat(), warmup_bar.bar_end.isoformat(),
+                        str(warmup_bar.open), str(warmup_bar.high), str(warmup_bar.low),
+                        str(warmup_bar.close), str(warmup_bar.volume), "true",
+                    ])
         result = run_symbol(
             symbol, simulation_bars, profile, engine, policy, costs, symbol_equity,
             risk_pct, allow_estimates, event_risk_provider=event_risk_provider,
@@ -1256,6 +1269,7 @@ def run_dataset(directory: str | Path,
             "sessions": synthetic_warmup_sessions,
             "purpose": "indicator history only; entries are disabled before the first supplied bar; synthetic sessions bootstrap the first supplied session shape",
             "per_symbol": warmup_summary,
+            "materialized_dir": str(synthetic_warmup_dir) if synthetic_warmup_dir is not None else None,
         },
         "portfolio_capital": str(start_equity),
         "risk_pct_per_trade": float(risk_pct),
