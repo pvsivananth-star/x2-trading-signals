@@ -552,6 +552,38 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             pending = None
         if pos is not None:
             regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
+            known_roundtrip_cost_pct = None
+            if costs_applicable and snaps[i].atr and snaps[i].last_close and snaps[i].last_close > 0:
+                try:
+                    _market_name, market_for_cost = policy.resolve_market(symbol)
+                    sizing_policy = policy.evaluate(
+                        timestamp=bar.bar_end, symbol=symbol, regime=regime,
+                        stale_feed_seconds=0, stale_threshold_seconds=10,
+                        minutes_to_close=minutes_to_close(bar.bar_end, profile),
+                    )
+                    sizing_risk_pct = (
+                        min(risk_pct, Decimal(str(sizing_policy.max_risk_pct)))
+                        if sizing_policy.max_risk_pct is not None else risk_pct
+                    )
+                    stop_multiple = Decimal(str(market_for_cost.get("stop_mult", engine.stop_mult)))
+                    # Use the smallest configured reaction-zone weight as a conservative
+                    # quantity estimate; known itemized costs are a lower bound when fields
+                    # are excluded and the market/strategy floor remains in force.
+                    estimated_qty = (
+                        start_equity * sizing_risk_pct * Decimal("0.68")
+                        / (snaps[i].atr * stop_multiple)
+                    )
+                    if profile not in _FRACTIONAL_QTY_PROFILES:
+                        estimated_qty = Decimal(math.floor(estimated_qty))
+                    if estimated_qty > 0:
+                        estimated_notional = estimated_qty * snaps[i].last_close
+                        known_cost = (
+                            entry_costs(cost_values, estimated_qty, snaps[i].last_close)
+                            + exit_costs(cost_values, estimated_qty, snaps[i].last_close)
+                        )
+                        known_roundtrip_cost_pct = known_cost / estimated_notional
+                except ValueError:
+                    known_roundtrip_cost_pct = None
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
@@ -572,6 +604,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 minutes_to_close=minutes_to_close(bar.bar_end, profile),
                 previous_snapshot=snaps[i - 1] if i > 0 else None,
                 event_risk=_safe_event_risk(event_risk_provider, bar.bar_end, symbol),
+                known_roundtrip_cost_pct=known_roundtrip_cost_pct,
             )
             if sig.action in ("enter_long", "enter_short") and snaps[i].atr:
                 side = 1 if sig.action == "enter_long" else -1
