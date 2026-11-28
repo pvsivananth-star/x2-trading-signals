@@ -16,6 +16,7 @@ from app.backtest.bars import Bar
 from app.backtest.dataset_runner import DEFAULT_PROFILE, run_symbol
 from app.backtest.preload import preload_directory
 from app.features import FeatureSnapshot, causal_slot_rvol
+from app.costs import load_costs
 from app.policy import TradingPolicy
 from app.regime import Regime
 from app.strategy import ConfluenceV1
@@ -75,6 +76,7 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
         cls.markets = yaml.safe_load(Path("config/markets_17.yaml").read_text())
         cls.policy = TradingPolicy(cls.markets, "dataset-run")
         cls.strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", cls.policy)
+        cls.costs = load_costs("config/costs.yaml")
 
     def test_all_categories_are_trade_eligible_in_backtest_mode(self) -> None:
         now = datetime(2026, 11, 24, 15, 0, tzinfo=UTC)
@@ -176,7 +178,7 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
                     DEFAULT_PROFILE[symbol],
                     TradeReadyEngine(),
                     self.policy,
-                    {},
+                    self.costs,
                     Decimal("10000"),
                     Decimal("0.0025"),
                     allow_estimates=True,
