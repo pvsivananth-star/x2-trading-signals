@@ -160,6 +160,19 @@ class SlotRvolTests(unittest.TestCase):
         self.assertEqual(causal_slot_rvol(bars + [future], cutoff), causal_slot_rvol(bars, cutoff))
 
 
+    def test_feature_snapshot_exposes_slot_and_rolling_rvol_separately(self):
+        from app.features import feature_snapshot
+        starts = [datetime(2026, 11, day, 14, 30, tzinfo=UTC) for day in (16, 17, 18, 19, 20, 23)]
+        volumes = [Decimal(100), Decimal(200), Decimal(100), Decimal(200), Decimal(100), Decimal(280)]
+        bars = [Bar(start, start + timedelta(minutes=5), Decimal(100), Decimal(101),
+                    Decimal(99), Decimal(100), volume, 1)
+                for start, volume in zip(starts, volumes)]
+        snap = feature_snapshot(bars, bars[-1].bar_end)
+        self.assertEqual(snap.rvol, Decimal(2))
+        self.assertEqual(snap.slot_rvol_samples, 5)
+        self.assertIsNotNone(snap.rolling_rvol)
+
+
 class PullbackDepthTests(unittest.TestCase):
     def test_depth_ignores_bars_after_timestamp(self):
         start = datetime(2026, 11, 20, 14, 30, tzinfo=UTC)
