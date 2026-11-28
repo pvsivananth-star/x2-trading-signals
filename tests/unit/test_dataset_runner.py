@@ -194,6 +194,18 @@ class CostRuleTests(unittest.TestCase):
         self.assertEqual(exit_costs(v, qty, price), shared + sell_only)
         self.assertEqual(entry_costs(v, qty, price), shared + v["spread_pct_full"] * notional)
 
+    def test_short_trade_charges_sell_side_regulatory_fees_on_entry(self):
+        v = self._values()
+        qty, price = Decimal(100), Decimal(100)
+        notional = qty * price
+        sell_only = v["sec_fee_sell_rate"] * notional + v["finra_taf_sell_per_share"] * qty
+        long_total = entry_costs(v, qty, price, "long") + exit_costs(v, qty, price, "long")
+        short_entry = entry_costs(v, qty, price, "short")
+        short_exit = exit_costs(v, qty, price, "short")
+        self.assertEqual(short_entry - entry_costs(v, qty, price, "long"), sell_only)
+        self.assertEqual(exit_costs(v, qty, price, "long") - short_exit, sell_only)
+        self.assertEqual(short_entry + short_exit, long_total)
+
     def test_unverified_slippage_excluded_by_default(self):
         from app.backtest.dataset_runner import _cost_model
         _values, excluded = _cost_model(self.costs, "US_EQUITIES", False)
