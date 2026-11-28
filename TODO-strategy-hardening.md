@@ -107,7 +107,7 @@ flowchart TD
 - [ ] Run the full existing unit test suite and record the exact command and result.
 - [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
 - [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period.
-- [ ] Report trade count, win rate, gross PF, net PF (only where cost coverage permits), expectancy, drawdown, average/median holding time, stop/target/time-exit distribution, and per-symbol/per-regime/per-direction breakdown.
+- [x] Report trade count, win rate, gross PF, net PF (only where cost coverage permits), expectancy, drawdown, average/median/maximum holding time, exit-reason distribution, and per-symbol/per-market-phase/per-regime/per-direction breakdown.
 - [ ] Confirm no trade exceeds four hours and no feature reads data after its decision timestamp.
 - [ ] Do not accept a change solely because it improves bull-market performance. Assess normal, sideways, and choppy performance while checking that bull/bear behavior has not been destroyed.
 
