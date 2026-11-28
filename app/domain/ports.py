@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Protocol, Sequence
+from collections.abc import Sequence
+from typing import Any, Protocol
 
 from .event_envelope import EventEnvelope
 from .orders.model import Order, OrderReplacement
