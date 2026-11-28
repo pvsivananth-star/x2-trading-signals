@@ -7,6 +7,10 @@ import unittest
 from pathlib import Path
 
 from app.backtest.validation import validate_dataset
+from app.backtest.bars import Bar
+from app.backtest.causality import validate_causal_window, validate_next_bar_execution
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 
 class Phase9DatasetValidationTests(unittest.TestCase):
@@ -105,3 +109,55 @@ class Phase9DatasetValidationTests(unittest.TestCase):
         )
         self.assertFalse(report.valid)
         self.assertIn("INTERVAL_MISMATCH", {issue.code for issue in report.critical})
+
+    def test_unprofiled_symbol_can_be_blocked(self) -> None:
+        report = validate_dataset(
+            self._dataset(rows=[self._row()]),
+            interval_seconds=300,
+            profile_map={"OTHER": "US_EQUITIES"},
+            require_profile=True,
+        )
+        self.assertFalse(report.valid)
+        self.assertIn("UNPROFILED_SYMBOL", {issue.code for issue in report.critical})
+
+    def test_disabled_instrument_is_blocked(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        (root / "instruments.csv").write_text(
+            "instrument_id,canonical_symbol,tradable\n1,SIM-EQ,false\n", encoding="utf-8"
+        )
+        row = self._row()
+        with (root / "bars.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=row.keys())
+            writer.writeheader()
+            writer.writerow(row)
+        report = validate_dataset(root, interval_seconds=300)
+        self.assertFalse(report.valid)
+        self.assertIn("INSTRUMENT_NOT_ELIGIBLE", {issue.code for issue in report.critical})
+
+    def test_warmup_must_precede_scored_bars(self) -> None:
+        first = self._row(is_warmup="false")
+        second = self._row(
+            "2026-11-20T14:35:00+00:00",
+            bar_end="2026-11-20T14:40:00+00:00",
+            is_warmup="true",
+        )
+        report = validate_dataset(self._dataset(rows=[first, second]), interval_seconds=300)
+        self.assertFalse(report.valid)
+        self.assertIn("WARMUP_AFTER_SCORED", {issue.code for issue in report.critical})
+
+    def test_causal_window_rejects_future_bar(self) -> None:
+        t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
+        bar = Bar(t, t + timedelta(minutes=5), Decimal("100"), Decimal("101"),
+                  Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        self.assertEqual(len(validate_causal_window([bar], t)), 1)
+
+    def test_next_bar_execution_is_strictly_after_decision_close(self) -> None:
+        t = datetime(2026, 11, 20, 14, 35, tzinfo=UTC)
+        decision = Bar(t - timedelta(minutes=5), t, Decimal("100"), Decimal("101"),
+                       Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        same = Bar(t - timedelta(minutes=5), t, Decimal("100"), Decimal("101"),
+                   Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        next_bar = Bar(t, t + timedelta(minutes=5), Decimal("100"), Decimal("101"),
+                       Decimal("99"), Decimal("100"), Decimal("1000"), 10)
+        self.assertEqual(len(validate_next_bar_execution(decision, same)), 1)
+        self.assertEqual(validate_next_bar_execution(decision, next_bar), ())
