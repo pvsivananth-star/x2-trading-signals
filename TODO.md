@@ -70,11 +70,11 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 53. Keep manual execution behind explicit authorization and risk controls.
 
 ## Phase 8 — Observability, security and deployment
-- [ ] 54. Add structured logs, correlation IDs, health/readiness and metrics.
-- [ ] 55. Enforce external secrets and least privilege.
-- [ ] 56. Containerize the validated modular monolith.
-- [ ] 57. Add AWS deployment configuration without cloud logic in the domain.
-- [ ] 58. Add backup, restore, retention and migration procedures.
+- [x] 54. Add structured logs, correlation IDs, health/readiness and metrics.
+- [x] 55. Enforce external secrets and least privilege.
+- [x] 56. Containerize the validated modular monolith.
+- [x] 57. Add AWS deployment configuration without cloud logic in the domain.
+- [x] 58. Add backup, restore, retention and migration procedures.
 
 ## Completion gates
 1. No future data enters a decision.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 7 complete. Persistence boundaries, lineage, versioned read models, dashboard/read views, and explicitly authorized manual execution are in place; live routing remains disabled.**
+**Current work: Phase 8 complete. Observability, security boundaries, container hardening, AWS deployment boundaries, and backup/restore/retention procedures are in place; live routing remains disabled.**
