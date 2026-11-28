@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import yaml
 
@@ -72,7 +71,6 @@ def trade_ready_snapshot(timestamp: datetime, close: Decimal = Decimal("100")) -
 class BacktestCategoryCoverageTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.repo = "pvsivananth-star/x2-trading-signals"
         cls.markets = yaml.safe_load(Path("config/markets_17.yaml").read_text())
         cls.policy = TradingPolicy(cls.markets, "dataset-run")
         cls.strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", cls.policy)
