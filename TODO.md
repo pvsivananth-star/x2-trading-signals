@@ -1,144 +1,91 @@
-# X2 Trading System — Implementation Roadmap
+# X2 Trading System — Action TODO
 
-This checklist follows `requirements.md` and `architecture.md`. Those files are the source of truth; this file tracks implementation work only.
+Source of truth: `requirements.md` and `architecture.md`.
 
-Legend: [ ] not started · [~] in progress · [x] complete
+## Phase 1 — Domain foundation
+- [ ] 1. Create canonical domain package boundaries.
+- [ ] 2. Model Long-Term and Daily Trading portfolios with isolated capital/risk contexts.
+- [ ] 3. Define immutable domain entities and stable reason codes.
+- [ ] 4. Define canonical event envelope: event_id, timestamp, correlation_id, causation_id, version, provenance.
+- [ ] 5. Define ports for market data, execution, account, history, clock, calendar, event bus, event store and notifications.
+- [ ] 6. Define runtime modes: backtest, paper/demo and live-disabled.
+- [ ] 7. Add clock/calendar abstractions and causal replay semantics.
+- [ ] 8. Add domain invariants and unit/property tests.
 
-## 0. Repository cleanup and baseline
+## Phase 2 — Market data and analysis
+- [ ] 9. Put existing feed/feature code behind MarketDataPort.
+- [ ] 10. Implement Instrument/Universe Actor and liquidity/quality gates.
+- [ ] 11. Implement Regime Actor.
+- [ ] 12. Implement Trend Analyzer for 1W/1D and 30m/15m/5m.
+- [ ] 13. Implement Volume/RVOL Analyzer.
+- [ ] 14. Implement Relative Strength Analyzer.
+- [ ] 15. Implement Structure/Fibonacci Analyzer.
+- [ ] 16. Implement DMA Analyzer.
+- [ ] 17. Implement Momentum Analyzer.
+- [ ] 18. Enforce causal cutoff and stale-data/feed-health gates.
 
-- [x] Keep `requirements.md` as the functional specification.
-- [x] Keep `architecture.md` as the target architecture.
-- [x] Identify stale planning/status documents that contradict the current repository.
-- [x] Update README and roadmap to describe the actual baseline.
-- [ ] Consolidate or remove obsolete planning material under `docs/`.
-- [ ] Remove dead/duplicate code only after tests establish behavior that must be preserved.
-- [ ] Establish one canonical configuration path for strategy, markets, risk and runtime mode.
+## Phase 3 — Signal and strategy
+- [ ] 19. Implement Signal Manager with SETUP versus TRIGGER.
+- [ ] 20. Make signals immutable, explainable, deterministic and deduplicated.
+- [ ] 21. Implement one isolated Strategy Manager per strategy.
+- [ ] 22. Implement Strategy Registry / Portfolio Strategy Orchestrator.
+- [ ] 23. Implement Long-Term: Weekly Trend Following.
+- [ ] 24. Implement Long-Term: Weekly Breakout/Pullback.
+- [ ] 25. Implement Daily: MTF Trend Pullback Continuation.
+- [ ] 26. Implement Daily: VWAP/Relative-Strength Continuation.
+- [ ] 27. Implement Daily: Opening-Range Breakout with Trend Filter.
+- [ ] 28. Add explicit strategy-to-portfolio assignments and versioning.
+- [ ] 29. Prevent strategy-to-strategy state mutation and risk-budget borrowing.
+- [ ] 30. Keep NO_TRADE first-class; no single indicator may create a trade.
 
-## 1. Domain foundation
+## Phase 4 — Trade, portfolio and risk
+- [ ] 31. Implement Trade Manager / TradeIntent lifecycle.
+- [ ] 32. Implement central Portfolio Controller.
+- [ ] 33. Implement independent Risk Manager.
+- [ ] 34. Enforce per-strategy, per-portfolio and account-wide limits.
+- [ ] 35. Implement long-term trend-change/partial-liquidation policy.
+- [ ] 36. Implement daily session/flattening policy.
+- [ ] 37. Add circuit breakers and emergency kill switch invariants.
 
-- [ ] Create explicit domain packages for instruments, market data, regimes, signals, trades, portfolio, risk, orders, fills and audit events.
-- [ ] Model Long-Term and Daily Trading portfolios as separate risk/accounting contexts with an account-wide hard-risk layer.
-- [ ] Define immutable domain entities/value objects and reason codes.
-- [ ] Define canonical event envelope with event ID, timestamp, correlation ID, causation ID, version and provenance.
-- [ ] Define domain/application ports independent of vendor SDKs and persistence.
-- [ ] Define explicit runtime modes: backtest, demo/paper and live-disabled.
-- [ ] Add clock and calendar abstractions so replay and live processing use identical semantics.
+## Phase 5 — Execution
+- [ ] 38. Implement Execution Manager and order state machine.
+- [ ] 39. Add idempotency and duplicate-order protection.
+- [ ] 40. Add partial fills, cancel/replace, rejects and reconciliation.
+- [ ] 41. Keep Mock Broker behind ExecutionPort.
+- [ ] 42. Keep IBKR/Binance adapters isolated and live-disabled.
+- [ ] 43. Test disconnect/retry/recovery.
 
-## 2. Market-data and analysis actors
+## Phase 6 — Backtest and paper
+- [ ] 44. Route replay through the same strategy/portfolio/risk pipeline.
+- [ ] 45. Model fees, spread, slippage, latency, partial fills and rejects.
+- [ ] 46. Add walk-forward and out-of-sample evaluation.
+- [ ] 47. Report performance by portfolio, strategy, symbol, regime, setup and score.
+- [ ] 48. Add deterministic regression fixtures.
 
-- [ ] Refactor existing feed/feature code behind MarketDataPort and event contracts.
-- [ ] Implement Instrument/Universe Actor.
-- [ ] Implement Regime Actor.
-- [ ] Implement Trend Analyzer for 30m/15m/5m.
-- [ ] Implement Volume/RVOL Analyzer.
-- [ ] Implement Relative Strength Analyzer.
-- [ ] Implement Structure/Fibonacci Analyzer.
-- [ ] Implement DMA Analyzer.
-- [ ] Implement Momentum Analyzer.
-- [ ] Enforce causal cutoff semantics across every analyzer.
-- [ ] Add feed-health and stale-data gates.
+## Phase 7 — Persistence, API and UI
+- [ ] 49. Separate operational state, market history, audit events and backtest artifacts.
+- [ ] 50. Persist complete signal → risk → trade → order → fill → position lineage.
+- [ ] 51. Define versioned API/read models.
+- [ ] 52. Build dashboard, signal drill-down, strategy monitor, portfolio, orders, fills, risk and audit views.
+- [ ] 53. Keep manual execution behind explicit authorization and risk controls.
 
-## 3. Signal and strategy pipeline
+## Phase 8 — Observability, security and deployment
+- [ ] 54. Add structured logs, correlation IDs, health/readiness and metrics.
+- [ ] 55. Enforce external secrets and least privilege.
+- [ ] 56. Containerize the validated modular monolith.
+- [ ] 57. Add AWS deployment configuration without cloud logic in the domain.
+- [ ] 58. Add backup, restore, retention and migration procedures.
 
-- [ ] Implement Signal Manager with SETUP versus TRIGGER separation.
-- [ ] Preserve the existing confluence rules while moving them behind strategy interfaces.
-- [ ] Make every candidate explainable with immutable inputs, thresholds and rejection reasons.
-- [ ] Implement one isolated Strategy Manager instance per strategy.
-- [ ] Add Strategy Registry/Portfolio Strategy Orchestrator without embedding strategy logic.
-- [ ] Implement initial Long-Term strategies: Weekly Trend Following and Weekly Breakout/Pullback.
-- [ ] Implement initial Daily strategies: MTF Trend Pullback Continuation, VWAP/Relative-Strength Continuation and Opening-Range Breakout with Trend Filter.
-- [ ] Add explicit strategy-to-portfolio assignments, independent configuration/versioning and performance attribution.
-- [ ] Prevent strategy-to-strategy state mutation and portfolio risk-budget borrowing.
-- [ ] Add deterministic signal IDs and deduplication.
-- [ ] Ensure no single indicator can create a trade.
-- [ ] Add empirical, configuration-driven tolerance handling for Fib/DMA proximity.
-- [ ] Add deterministic quality scoring and validated thresholds.
-- [ ] Make NO_TRADE a first-class result.
-
-## 4. Trade, portfolio and risk control
-
-- [ ] Implement Trade Manager and TradeIntent lifecycle.
-- [ ] Implement central Portfolio Controller.
-- [ ] Enforce separate Long-Term and Daily Trading capital/risk budgets plus account-wide hard limits.
-- [ ] Implement portfolio-specific holding-period and exit policies; long-term positions must not be liquidated by short-term signals alone.
-- [ ] Implement independent Risk Manager.
-- [ ] Add pre-trade risk decision with entry, stop, target/move room, size, max loss, slippage and portfolio impact.
-- [ ] Enforce position, concentration, correlation, liquidity, spread and daily-loss limits.
-- [ ] Add circuit breakers for consecutive losses, volatility, slippage, data/API failure and kill switch.
-- [ ] Prove strategy code cannot bypass risk controls with invariant tests.
-
-## 5. Execution
-
-- [ ] Implement Execution Manager and explicit order state machine.
-- [ ] Add idempotency keys and duplicate-order protection.
-- [ ] Add acknowledgement, rejection, partial-fill and cancel/replace handling.
-- [ ] Implement reconciliation against broker/account state.
-- [ ] Keep Mock Trade API behavior compatible with ExecutionPort.
-- [ ] Keep IBKR/Binance adapters isolated and disabled until separately authorized.
-- [ ] Test disconnect/retry/recovery behavior.
-
-## 6. Backtest and paper execution
-
-- [ ] Refactor current backtest runner to use the same domain/application pipeline as demo/live.
-- [ ] Reuse the same strategy, portfolio and risk components in replay.
-- [ ] Preserve causal event replay and deterministic results.
-- [ ] Model commissions, spread, slippage, latency, partial fills and rejects.
-- [ ] Add walk-forward and out-of-sample evaluation.
-- [ ] Report profit factor, expectancy, win rate, drawdown, exposure, turnover and rejection reasons by market/regime/setup/score.
-- [ ] Add regression fixtures for every critical safety invariant.
-
-## 7. Persistence and audit
-
-- [ ] Separate operational state, market history, audit/event history, backtest artifacts and configuration.
-- [ ] Introduce repository interfaces and keep PostgreSQL/filesystem behind adapters.
-- [ ] Persist signal -> risk decision -> trade intent -> order -> fill -> position lineage.
-- [ ] Persist configuration and strategy versions used by every decision.
-- [ ] Make significant events immutable/auditable where practical.
-
-## 8. API and UI
-
-- [ ] Define versioned API contracts from the domain/read models.
-- [ ] Dashboard: system health, scanner, signals, drill-down, strategy state, portfolio, positions, orders, fills, risk and P&L.
-- [ ] Backtest results and audit timeline.
-- [ ] Manual execution only through explicit authorization and the same risk path.
-- [ ] Emergency kill-switch controls isolated from normal strategy controls.
-- [ ] UI must never hold database or broker credentials.
-
-## 9. Observability and security
-
-- [ ] Structured JSON logging and correlation IDs.
-- [ ] Health/readiness endpoints.
-- [ ] Metrics for decisions, rejections, latency, errors, orders, fills and reconciliation.
-- [ ] Secret-manager/environment based credentials only.
-- [ ] Least privilege and separate market-data/trading permissions where possible.
-- [ ] Threat-model the API and hosted dashboard.
-
-## 10. Container/AWS readiness
-
-- [ ] Containerize validated runtime components without cloud-specific domain logic.
-- [ ] Replace local persistence details with storage ports.
-- [ ] Add managed PostgreSQL/object-storage deployment configuration.
-- [ ] Add retention, backup, restore and migration procedures.
-- [ ] Add queue/event-bus adapter only when operational scale requires it.
-- [ ] Keep the modular monolith deployable as one dedicated container.
-
-## Acceptance gates
-
-A phase is not complete merely because code exists. It must have automated tests and preserve these invariants:
-
+## Completion gates
 1. No future data enters a decision.
 2. Risk cannot be bypassed.
 3. Kill switch prevents new orders.
-4. Retries cannot create duplicate orders.
+4. Retries cannot duplicate orders.
 5. Portfolio state reconciles from fills.
-6. Backtest and demo use the same strategy/risk behavior.
+6. Backtest/paper/live-disabled paths use the same strategy/risk logic.
 7. Every decision is explainable and auditable.
 8. Live routing remains disabled until explicitly authorized.
-9. Deterministic inputs/configuration/code produce deterministic backtest results.
-10. The system prefers NO_TRADE over a low-quality trade.
+9. Same inputs/config/code produce deterministic backtests.
+10. NO_TRADE is preferred over a low-quality trade.
 
-## Immediate next milestone
-
-**Clean baseline -> domain contracts -> actor boundaries -> signal pipeline -> portfolio/risk -> execution -> unified backtest/paper path.**
-
-Do not tune strategy thresholds or add more indicators while the architectural boundaries are still being established. After boundaries are stable, validate each strategy independently and in portfolio combinations using walk-forward/out-of-sample testing before enabling it.
+**Current work: 1 → 2 → 3. Do not tune strategy thresholds until the domain boundaries are stable.**
