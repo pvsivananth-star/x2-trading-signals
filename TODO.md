@@ -63,11 +63,11 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 48. Add deterministic regression fixtures.
 
 ## Phase 7 — Persistence, API and UI
-- [ ] 49. Separate operational state, market history, audit events and backtest artifacts.
-- [ ] 50. Persist complete signal → risk → trade → order → fill → position lineage.
-- [ ] 51. Define versioned API/read models.
-- [ ] 52. Build dashboard, signal drill-down, strategy monitor, portfolio, orders, fills, risk and audit views.
-- [ ] 53. Keep manual execution behind explicit authorization and risk controls.
+- [x] 49. Separate operational state, market history, audit events and backtest artifacts.
+- [x] 50. Persist complete signal → risk → trade → order → fill → position lineage.
+- [x] 51. Define versioned API/read models.
+- [x] 52. Build dashboard, signal drill-down, strategy monitor, portfolio, orders, fills, risk and audit views.
+- [x] 53. Keep manual execution behind explicit authorization and risk controls.
 
 ## Phase 8 — Observability, security and deployment
 - [ ] 54. Add structured logs, correlation IDs, health/readiness and metrics.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 6 complete. Replay is deterministic, OOS-capable, cost-aware, and uses the shared strategy/portfolio/risk/execution contracts; live routing remains disabled.**
+**Current work: Phase 7 complete. Persistence boundaries, lineage, versioned read models, dashboard/read views, and explicitly authorized manual execution are in place; live routing remains disabled.**
