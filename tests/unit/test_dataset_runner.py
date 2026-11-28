@@ -65,6 +65,25 @@ class SessionTimingTests(unittest.TestCase):
         )
         self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
 
+    def test_cost_model_uses_etf_spread_profile_for_qqq_and_iwm(self):
+        costs = load_costs("config/costs.yaml")
+        for symbol in ("QQQ", "IWM"):
+            values, excluded = _cost_model(costs, "US_EQUITIES", False, symbol)
+            self.assertIn("spread_pct_full", excluded)
+            self.assertEqual(values["spread_pct_full"], Decimal(0))
+            self.assertNotIn("spread_pct_full_single_stocks", excluded)
+
+    def test_cost_model_keeps_single_stock_spread_separate_from_etfs(self):
+        costs = load_costs("config/costs.yaml")
+        _values, excluded = _cost_model(costs, "US_EQUITIES", False, "NVDA")
+        self.assertIn("spread_pct_full_single_stocks", excluded)
+
+    def test_cost_model_uses_symbol_specific_gold_and_oil_etf_spreads(self):
+        costs = load_costs("config/costs.yaml")
+        for symbol in ("GLD", "USO"):
+            _values, excluded = _cost_model(costs, "US_COMMODITIES", False, symbol)
+            self.assertIn("spread_pct_full_" + symbol.lower(), excluded)
+
     def test_market_phase_buckets_trend_sideways_normal_and_high_volatility(self):
         up = SimpleNamespace(trend="up", atr=Decimal("1.0"))
         down = SimpleNamespace(trend="down", atr=Decimal("1.0"))
