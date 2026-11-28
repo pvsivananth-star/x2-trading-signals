@@ -485,7 +485,6 @@ def _synthetic_warmup_ready(bars: list[Bar], profile: str, engine: ConfluenceV1)
     timeframe_cfg = getattr(engine, "strategy", {}).get("timeframes", {})
     require_context = bool(timeframe_cfg.get("require_completed_context", True))
     discovery_minutes = int(timeframe_cfg.get("discovery_mins", 30))
-    swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
     source_interval_seconds = int((bars[0].bar_end - bars[0].bar_start).total_seconds())
     if source_interval_seconds <= 0:
         return False
@@ -503,18 +502,13 @@ def _synthetic_warmup_ready(bars: list[Bar], profile: str, engine: ConfluenceV1)
     complete_context = [item for item in bars_context if item.bar_end <= last.bar_end]
     atr_15m = causal_atr(complete_15m, last.bar_end, session_timezone=session_timezone,
                          session_open=session_open, session_close=session_close)
-    swing_high, swing_low, swing_direction, swing_size_atr, swing_confirmed = causal_confirmed_swing(
-        complete_15m,
-        last.bar_end,
-        atr_15m,
-        left_bars=int(swing_cfg.get("min_candles", 3)),
-        confirmation_bars=int(swing_cfg.get("confirmation_bars", 2)),
-        min_atr_mult=Decimal(str(swing_cfg.get("min_atr_mult", "0.60"))),
-    )
-    del swing_high, swing_low, swing_direction, swing_size_atr
+    # Warmup readiness means reusable feature history exists. A confirmed swing is
+    # deliberately not required: it is a point-in-time market condition, not a persistent
+    # warmup dependency, and requiring one at the synthetic endpoint makes readiness depend
+    # on the arbitrary shape of the final synthetic bar.
     rvol_ready = snapshot.rvol is not None and snapshot.slot_rvol_samples >= slot_min_sessions
-    context_ready = not require_context or len(complete_context) >= 6
-    return rvol_ready and context_ready and atr_15m is not None and swing_confirmed
+    context_ready = not require_context or bool(complete_context)
+    return rvol_ready and context_ready and atr_15m is not None
 
 
 def _synthetic_warmup_until_ready(
