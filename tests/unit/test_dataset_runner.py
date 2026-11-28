@@ -69,7 +69,7 @@ class SessionTimingTests(unittest.TestCase):
         costs = load_costs("config/costs.yaml")
         for symbol in ("QQQ", "IWM"):
             values, excluded = _cost_model(costs, "US_EQUITIES", False, symbol)
-            self.assertIn("spread_pct_full", excluded)
+            self.assertIn("spread_pct_full_" + symbol.lower(), excluded)
             self.assertEqual(values["spread_pct_full"], Decimal(0))
             self.assertNotIn("spread_pct_full_single_stocks", excluded)
 
