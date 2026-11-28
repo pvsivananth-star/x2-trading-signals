@@ -160,17 +160,62 @@ def download_free_dataset(
             raise FileExistsError(
                 f"refusing to overwrite non-empty dataset directory: {output}; use --append"
             )
-        missing = [path.name for path in required_paths if not path.is_file()]
-        if missing:
+        # Recover a dataset interrupted by an older downloader version. A
+        # manifest can be rebuilt from the canonical CSVs without discarding bars.
+        if not instruments_path.is_file() and bars_path.is_file():
+            with bars_path.open(newline="", encoding="utf-8") as handle:
+                orphan_rows = list(csv.DictReader(handle))
+            if orphan_rows:
+                raise FileExistsError(
+                    "cannot safely append: bars.csv contains data but instruments.csv is missing"
+                )
+            with instruments_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=(
+                    "instrument_id", "canonical_symbol", "profile", "market", "tradable", "source",
+                ))
+                writer.writeheader()
+
+        if not bars_path.is_file() or not instruments_path.is_file():
             raise FileExistsError(
-                f"cannot append: existing dataset is incomplete; missing {', '.join(missing)}"
+                "cannot append: existing dataset is incomplete; expected bars.csv and instruments.csv"
             )
+
         try:
             with instruments_path.open(newline="", encoding="utf-8") as handle:
                 existing_instruments = list(csv.DictReader(handle))
-            existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, csv.Error) as exc:
-            raise ValueError(f"cannot read existing dataset metadata: {exc}") from exc
+            if manifest_path.is_file():
+                existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            else:
+                # Rebuild coverage metadata from already-written canonical bars.
+                symbol_by_id = {
+                    str(row["instrument_id"]): str(row["canonical_symbol"])
+                    for row in existing_instruments
+                }
+                recovered: dict[str, list[str]] = {}
+                with bars_path.open(newline="", encoding="utf-8") as handle:
+                    for bar in csv.DictReader(handle):
+                        symbol = symbol_by_id.get(str(bar.get("instrument_id")))
+                        if symbol:
+                            recovered.setdefault(symbol, []).append(str(bar["bar_start"]))
+                recovered_coverage = [
+                    {
+                        "symbol": symbol,
+                        "rows": len(stamps),
+                        "first_bar": min(stamps),
+                        "last_bar": max(stamps),
+                        "exchange_timezone": "unknown_recovered",
+                    }
+                    for symbol, stamps in sorted(recovered.items())
+                ]
+                existing_manifest = {
+                    "symbols_requested": list(symbol_by_id.values()),
+                    "symbols_downloaded": list(recovered),
+                    "coverage": recovered_coverage,
+                    "total_rows": sum(len(stamps) for stamps in recovered.values()),
+                    "failed_symbols": [],
+                }
+        except (OSError, json.JSONDecodeError, csv.Error, KeyError, ValueError) as exc:
+            raise ValueError(f"cannot read or recover existing dataset metadata: {exc}") from exc
         if not isinstance(existing_manifest, dict):
             raise ValueError("existing manifest must contain a JSON object")
 
