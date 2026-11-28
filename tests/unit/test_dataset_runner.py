@@ -271,6 +271,77 @@ class IntrabarExitTests(unittest.TestCase):
     def test_short_stop_hit(self):
         self.assertEqual(_intrabar_exit(self._pos(-1), _bar(1, "100", "101.5", "100", "101"))[1], "HARD_STOP")
 
+    def test_long_gap_through_stop_fills_at_bar_open(self):
+        price, reason = _intrabar_exit(self._pos(1), _bar(1, "98", "100", "97", "99"))
+        self.assertEqual((price, reason), (Decimal(98), "HARD_STOP_GAP"))
+
+    def test_short_gap_through_stop_fills_at_bar_open(self):
+        price, reason = _intrabar_exit(self._pos(-1), _bar(1, "102", "103", "100", "101"))
+        self.assertEqual((price, reason), (Decimal(102), "HARD_STOP_GAP"))
+
+    def test_strategy_config_sets_four_hour_and_stagnation_limits(self):
+        import yaml
+
+        exit_config = yaml.safe_load(
+            Path("config/strategies/confluence_pullback.yaml").read_text(encoding="utf-8")
+        )["strategy"]["exit"]
+        self.assertEqual(exit_config["max_holding_minutes"], 240)
+        self.assertEqual(exit_config["stagnation_minutes"], 60)
+        self.assertEqual(exit_config["stagnation_min_favorable_r"], 0.25)
+
+    def test_max_holding_time_closes_from_actual_fill_timestamp(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        trade = result["trades"][0]
+        self.assertEqual(trade.exit_reason, "MAX_HOLD_TIME")
+        self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 4 * 60)
+
+    def test_stagnation_exit_requires_insufficient_favourable_excursion(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            strategy = {"exit": {"max_holding_minutes": 240, "stagnation_minutes": 2,
+                                 "stagnation_min_favorable_r": "1.0"}}
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"][0].exit_reason, "STAGNATION_TIME")
+
 
 class SummaryTests(unittest.TestCase):
     def test_empty_summary(self):
