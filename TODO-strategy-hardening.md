@@ -68,7 +68,7 @@ flowchart TD
 - [x] Anchor stops to the actual fill; re-anchor ATR-extension targets to the fill and reject structural-target gaps that invalidate reward/risk. Structural market levels remain fixed rather than moving with the fill.
 - [x] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity through distinct exit reasons.
 - [x] Route next-bar market entries through `OrderSimulator`; preserve filled/partial/rejected status and scale position risk to actual filled quantity.
-- [x] Unify execution and realized cost treatment: OrderSimulator owns market-open/partial/rejected fills; the cost ledger owns spread, slippage, commission, and regulatory fees exactly once. Before accepting a fill, the runner compares gross target room against max(configured round-trip budget, known instrument cost percentage) plus the slippage buffer. Missing/estimated fields remain partial-net and are disclosed.
+- [x] Unify execution and realized cost treatment: OrderSimulator owns market-open/partial/rejected fills; the cost ledger owns spread, slippage, commission, and regulatory fees exactly once. Before accepting an entry, the runner estimates the known itemized round-trip cost percentage at the signal close using a conservative 0.68 reaction-zone size weight, then compares gross target room against max(strategy floor, market estimate, known itemized percentage) plus the slippage buffer. Missing/estimated fields remain partial-net and are disclosed.
 - [x] Add deterministic tests for next-bar gaps, entry-bar stop-outs/targets, gap-through-stop, both-levels-touched bars, and session flattening (session flatten also has a strategy-level contract test).
 
 ## 4. Trading costs and reporting integrity
@@ -78,7 +78,7 @@ flowchart TD
 - [x] Correct full-net eligibility: any excluded or estimated required cost field prevents a `fully_net` label. Per-symbol reports expose `cost_status`, excluded fields, and estimated fields.
 - [x] Do not map commodity futures to generic US ETF cost assumptions. GC=F/CL=F remain outside the baseline; GLD and USO use separate symbol-specific spread fields. Their spread values are still unavailable, so those instruments remain `partial_net` until measured.
 - [x] Keep GLD/USO ETF proxy metadata and cost-spread fields separate from futures. Their US regular-session calendar, USD/share units, 0.01 tick, and 1x share multiplier are explicit; instrument-specific spreads remain not-found until measured. Futures remain excluded pending distinct calendars, multipliers, margin, and fee profiles.
-- [ ] Ensure exact MoveRoom / realized-P&L cost parity. MoveRoom now uses the greater of the strategy round-trip floor and market-specific round-trip estimate, plus the slippage buffer; realized P&L applies the itemized cost ledger once. Exact quantity-dependent commission parity and measured spread evidence remain open.
+- [ ] Ensure exact MoveRoom / realized-P&L cost parity. MoveRoom now uses the greater of the strategy floor, market estimate, and known itemized cost percentage estimated at the signal close; realized P&L applies the itemized cost ledger once. Exact actual-fill quantity/price parity and measured spread evidence remain open.
 - [x] If slippage is estimated or unavailable, disclose it in `estimated_cost_fields` / `cost_fields_excluded` and downgrade the result to `partial_net`; known cost components are still applied.
 
 ## 5. Shared portfolio simulation
