@@ -35,7 +35,7 @@ def _snapshot(ctx: AnalyzerContext, tf: str) -> FeatureSnapshot | None:
 class TrendAnalyzer:
     def analyze(self, ctx: AnalyzerContext) -> AnalyzerResult:
         snaps={tf:_snapshot(ctx,tf) for tf in ("1W","1d","30m","15m","5m")}
-        values={tf:(s.trend if s else "unknown") for tf,s in snaps.items()}\n        for tf in ("1W", "1d"):\n            bars=[b for b in ctx.bars_by_timeframe.get(tf, ()) if b.bar_end <= ctx.timestamp]\n            if len(bars) >= 2:\n                values[tf] = "up" if bars[-1].close > bars[0].close else "down" if bars[-1].close < bars[0].close else "sideways"
+        values={tf:(s.trend if s else "unknown") for tf,s in snaps.items()}\n        for tf in ("1W", "1d"):\n            bars=[b for b in ctx.bars_by_timeframe.get(tf, ()) if b.bar_end <= ctx.timestamp]\n            if len(bars) >= 2:\n                values[tf] = "up" if bars[-1].close > bars[0].close else "down" if bars[-1].close < bars[0].close else "sideways"\n        for tf in ("1W", "1d"):\n            bars=[b for b in ctx.bars_by_timeframe.get(tf, ()) if b.bar_end <= ctx.timestamp]\n            if len(bars) >= 2:\n                values[tf] = "up" if bars[-1].close > bars[0].close else "down" if bars[-1].close < bars[0].close else "sideways"
         lt=values["1W"]; daily=values["1d"]; short=tuple(values[x] for x in ("30m","15m","5m"))
         passed=lt in {"up","down"} or any(x in {"up","down"} for x in short)
         return AnalyzerResult("trend",ctx.timestamp,{"timeframes":values,"long_term":lt,"daily":daily,"short_term":short},passed,() if passed else ("trend_unavailable",))
