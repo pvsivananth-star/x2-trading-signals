@@ -13,7 +13,7 @@ def _bars() -> list[Bar]:
     result: list[Bar] = []
     for day in (20, 23, 24):
         start = datetime(2026, 11, day, 14, 30, tzinfo=UTC)
-        for index in range(12):
+        for index in range(40):
             price = Decimal("100") + Decimal(day - 20) + Decimal(index) / Decimal("10")
             result.append(
                 Bar(
