@@ -127,6 +127,7 @@ def download_free_dataset(
     days: int = MAX_INTRADAY_DAYS,
     profile_map: dict[str, str] | None = None,
     timeout: float = 20.0,
+    append: bool = False,
 ) -> dict[str, object]:
     """Download real 5-minute bars and write the backtest's canonical CSV layout."""
     if not 1 <= days <= MAX_INTRADAY_DAYS:
@@ -151,10 +152,22 @@ def download_free_dataset(
     instrument_rows: list[dict[str, str]] = []
     total_rows = 0
 
-    with bars_path.open("w", newline="", encoding="utf-8") as bars_handle:
+    bars_mode = "a" if bars_path.exists() else "w"
+    with bars_path.open(bars_mode, newline="", encoding="utf-8") as bars_handle:
         writer = csv.DictWriter(bars_handle, fieldnames=BAR_FIELDS)
-        writer.writeheader()
-        for instrument_id, symbol in enumerate(symbols, start=1):
+        if bars_mode == "w":
+            writer.writeheader()
+        for symbol in symbols:
+            known_id = next(
+                (int(row["instrument_id"]) for row in existing_instruments
+                 if row["canonical_symbol"] == symbol),
+                None,
+            )
+            instrument_id = known_id or (
+                DEFAULT_SYMBOLS.index(symbol) + 1 if symbol in DEFAULT_SYMBOLS
+                else max((int(row["instrument_id"]) for row in existing_instruments), default=0)
+                + len(instrument_rows) + 1
+            )
             try:
                 rows, source_timezone = _fetch_symbol(symbol, start, end, timeout)
                 for row in rows:
@@ -183,13 +196,16 @@ def download_free_dataset(
                 failures.append({"symbol": symbol, "error": str(exc)})
             time.sleep(1.0)
 
+    merged_instruments = existing_instruments + instrument_rows
     with instruments_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=(
             "instrument_id", "canonical_symbol", "profile", "market", "tradable", "source",
         ))
         writer.writeheader()
-        writer.writerows(instrument_rows)
+        writer.writerows(merged_instruments)
 
+    merged_coverage = list(existing_manifest.get("coverage", [])) + coverage
+    merged_failures = list(existing_manifest.get("failed_symbols", [])) + failures
     manifest = {
         "provider": "Yahoo Finance public chart endpoint",
         "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/",
@@ -199,11 +215,11 @@ def download_free_dataset(
         "source_interval": "5m",
         "adjustment_mode": "raw",
         "prepost": False,
-        "symbols_requested": list(symbols),
-        "symbols_downloaded": [item["symbol"] for item in coverage],
-        "coverage": coverage,
-        "total_rows": total_rows,
-        "failed_symbols": failures,
+        "symbols_requested": sorted(set(existing_manifest.get("symbols_requested", [])) | set(symbols)),
+        "symbols_downloaded": [item["symbol"] for item in merged_coverage],
+        "coverage": merged_coverage,
+        "total_rows": int(existing_manifest.get("total_rows", 0)) + total_rows,
+        "failed_symbols": merged_failures,
         "limitations": [
             "Intraday history is limited to the provider's recent retention window (maximum 60 calendar days).",
             "OHLCV does not provide consolidated volume, bid/ask quotes, or trade counts; trade_count=0 is a schema placeholder.",
@@ -212,11 +228,11 @@ def download_free_dataset(
             "Review Yahoo Finance terms; yfinance documents this access as intended for personal use.",
         ],
     }
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     with (output / "download_failures.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=("symbol", "error"))
         writer.writeheader()
-        writer.writerows(failures)
+        writer.writerows(merged_failures)
     return {
         "output_dir": str(output), "symbols_requested": len(symbols),
         "symbols_downloaded": len(coverage), "symbols_failed": len(failures),
