@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
                          help="validate the dataset and do not execute the strategy")
     dataset.add_argument("--fail-on-warnings", action="store_true",
                          help="treat dataset warnings such as session gaps as critical")
+    dataset.add_argument("--synthetic-warmup-sessions", type=int, default=0,
+                         help="exclude the first N local sessions from scored decisions while retaining them for indicator warmup")
+    dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
+                         help="write rows marked is_warmup=true to this CSV path")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
@@ -147,10 +151,16 @@ def main(argv: list[str] | None = None) -> int:
 
             from app.backtest.dataset_runner import run_dataset, write_outputs
             from app.backtest.validation import validate_dataset
+            from app.backtest.dataset_runner import DEFAULT_PROFILE
+
+            if args.synthetic_warmup_sessions < 0:
+                raise SystemExit("--synthetic-warmup-sessions cannot be negative")
 
             validation = validate_dataset(
                 args.dir,
                 interval_seconds=args.interval,
+                profile_map=DEFAULT_PROFILE,
+                require_profile=True,
                 fail_on_warnings=args.fail_on_warnings,
             )
             validation_payload = validation.as_dict()
@@ -170,12 +180,26 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 0
 
+            if args.dump_synthetic_warmup is not None:
+                import csv
+                source = args.dir / "bars.csv"
+                with source.open(newline="", encoding="utf-8") as src:
+                    reader = csv.DictReader(src)
+                    rows = [row for row in reader if row.get("is_warmup", "").strip().lower() in {"true", "1", "yes"}]
+                args.dump_synthetic_warmup.parent.mkdir(parents=True, exist_ok=True)
+                with args.dump_synthetic_warmup.open("w", newline="", encoding="utf-8") as dst:
+                    writer = csv.DictWriter(dst, fieldnames=reader.fieldnames or [])
+                    if reader.fieldnames:
+                        writer.writeheader()
+                        writer.writerows(rows)
+
             result = run_dataset(
                 args.dir,
                 interval_seconds=args.interval,
                 start_equity=Decimal(args.start_equity),
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
+                warmup_sessions=args.synthetic_warmup_sessions,
             )
             result["dataset_validation"] = validation_payload
             write_outputs(result, args.out)
