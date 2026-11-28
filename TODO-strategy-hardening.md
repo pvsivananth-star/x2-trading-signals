@@ -83,12 +83,12 @@ flowchart TD
 
 ## 5. Shared portfolio simulation
 
-- [ ] Replace independent per-symbol cash/equity simulations with a shared portfolio ledger for combined runs.
-- [ ] Enforce total capital, per-trade risk, per-market allocation, correlated-cluster exposure, maximum concurrent positions, and available-cash constraints.
+- [x] Apply a deterministic shared portfolio ledger to combined-run trade candidates in chronological entry order (entry timestamp, symbol, exit time tie-break).
+- [x] Enforce total capital, per-trade risk, per-market allocation, correlated-cluster exposure, maximum concurrent positions, and available-cash constraints; initial baseline capital defaults to USD 100,000 and rejects higher values.
 - [ ] Resolve simultaneous signals deterministically and prevent multiple symbols from spending the same cash.
-- [ ] Apply position sizing only after setup weights and all portfolio constraints.
-- [ ] Report rejected/deferred signals and the exact portfolio constraint that blocked them.
-- [ ] Keep the initial portfolio capital ceiling at the approved **USD 100,000**, unless explicitly changed by the user.
+- [ ] Refactor candidate generation so setup weights and portfolio constraints determine quantity before the simulated position lifecycle. Current implementation conservatively rescales/rejects completed per-symbol candidates afterward; it does not yet feed portfolio reservations back into each symbol's signal-generation loop.
+- [x] Report portfolio-rejected trades with symbol, timestamp, requested size/notional, and exact blocking constraint.
+- [x] Keep the initial portfolio capital ceiling at the approved **USD 100,000**, unless explicitly changed by the user.
 
 ## 6. Regime and instrument scope
 
@@ -103,7 +103,7 @@ flowchart TD
 - [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, ~~event/news fail-closed behavior~~ (missing/stale/future/blocked event states covered), direction/regime filters, and size weights.
 - [ ] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason accounting.
 - [ ] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills, and costs.
-- [ ] Portfolio tests: shared cash, simultaneous signals, maximum concurrency, allocation caps, cluster exposure, and deterministic priority.
+- [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
 - [ ] Run the full existing unit test suite and record the exact command and result.
 - [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
 - [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period.
@@ -118,7 +118,7 @@ flowchart TD
 3. [x] True 30m/15m/5m causal timeframe pipeline, swing confirmation, fail-closed event-risk gate, and slot-normalized RVOL.
 4. [ ] Slot-normalized RVOL (pending); higher-timeframe diagnostics and reaction-zone sizing are implemented.
 5. [ ] Instrument-specific costs and truthful gross/partial-net/fully-net reporting.
-6. [ ] Shared portfolio capital, concurrency, and exposure constraints.
+6. [ ] Shared portfolio capital, concurrency, and exposure constraints. Core ledger and chronological candidate filtering are implemented; pre-signal sizing feedback remains open.
 7. [ ] Full regression suite, chronological out-of-sample, and walk-forward report.
 
 ## Safety boundary
