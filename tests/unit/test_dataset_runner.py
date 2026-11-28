@@ -352,10 +352,14 @@ class IntrabarExitTests(unittest.TestCase):
 
     def test_stop_wins_when_both_hit_in_one_bar(self):
         price, reason = _intrabar_exit(self._pos(1), _bar(1, "100", "103", "98", "100"))
-        self.assertEqual((price, reason), (Decimal(99), "HARD_STOP"))
+        self.assertEqual((price, reason), (Decimal(99), "HARD_STOP_BOTH_TOUCHED"))
 
     def test_short_stop_hit(self):
         self.assertEqual(_intrabar_exit(self._pos(-1), _bar(1, "100", "101.5", "100", "101"))[1], "HARD_STOP")
+
+    def test_short_both_levels_touched_is_explicitly_ambiguous(self):
+        price, reason = _intrabar_exit(self._pos(-1), _bar(1, "100", "103", "97", "100"))
+        self.assertEqual((price, reason), (Decimal(101), "HARD_STOP_BOTH_TOUCHED"))
 
     def test_long_gap_through_stop_fills_at_bar_open(self):
         price, reason = _intrabar_exit(self._pos(1), _bar(1, "98", "100", "97", "99"))
@@ -401,6 +405,7 @@ class IntrabarExitTests(unittest.TestCase):
         trade = result["trades"][0]
         self.assertEqual(trade.exit_reason, "MAX_HOLD_TIME")
         self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 3 * 60)
+        self.assertEqual(trade.holding_minutes, Decimal(3))
 
     def test_stagnation_exit_requires_insufficient_favourable_excursion(self):
         class EntryOnceEngine:
