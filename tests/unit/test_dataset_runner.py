@@ -303,6 +303,10 @@ class CostRuleTests(unittest.TestCase):
         self.assertEqual(result["trades"][0].exit_reason, "TARGET_HIT")
         self.assertEqual(result["trades"][0].exit_price, Decimal(103))
 
+    def test_run_dataset_rejects_nonconfigured_signal_interval(self):
+        with self.assertRaisesRegex(ValueError, "does not match configured"):
+            run_dataset(FIXTURE, interval_seconds=60)
+
     def test_run_dataset_does_not_duplicate_configured_core_symbols(self):
         with patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory:
             run_dataset(
