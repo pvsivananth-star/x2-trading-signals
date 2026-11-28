@@ -95,7 +95,7 @@ flowchart TD
 - [ ] Validate the initial universe explicitly: selected US equity/ETF instruments, one gold instrument, and one oil instrument.
 - [ ] Verify each instrument's session calendar, timezone, tick/price units, multiplier, and cost profile against its actual instrument type.
 - [ ] Do not interpret zero trades in an instrument as evidence of profitability or unprofitability.
-- [ ] Add regime-specific reporting for bull/trend, bear/trend, normal, sideways, and high-volatility/choppy periods.
+- [x] Add gross performance reporting for `BULL_TREND`, `BEAR_TREND`, `NORMAL`, `SIDEWAYS`, and `HIGH_VOL_CHOP`, including long/short cross-tabs. The reporting classifier is diagnostic only and does not change entry eligibility; high-vol chop uses current 5m ATR versus the prior 20 observations.
 - [ ] Treat synthetic fixtures as software tests only, never as evidence of real-market profitability.
 
 ## 7. Acceptance tests and validation
