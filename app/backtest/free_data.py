@@ -43,22 +43,32 @@ def _fetch_symbol(symbol: str, start: datetime, end: datetime, timeout: float) -
         "includePrePost": "false",
         "events": "div,splits",
     })
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='')}?{params}"
-    request = Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (compatible; X2ResearchData/1.0)",
-        "Accept": "application/json",
-    })
     last_error: Exception | None = None
     payload = None
-    for attempt in range(3):
-        try:
-            with urlopen(request, timeout=timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+    for host in ("query2.finance.yahoo.com", "query1.finance.yahoo.com"):
+        url = f"https://{host}/v8/finance/chart/{quote(symbol, safe='')}?{params}"
+        request = Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Accept": "application/json",
+        })
+        for attempt in range(2):
+            try:
+                with urlopen(request, timeout=timeout) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:300]
+                last_error = FreeDataDownloadError(f"HTTP {exc.code} from {host}: {detail}")
+                if exc.code in {429, 500, 502, 503, 504} and attempt == 0:
+                    time.sleep(2.0)
+                else:
+                    break
+            except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                last_error = exc
+                if attempt == 0:
+                    time.sleep(1.5)
+        if payload is not None:
             break
-        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            last_error = exc
-            if attempt < 2:
-                time.sleep(1.5 * (attempt + 1))
     if payload is None:
         raise FreeDataDownloadError(f"{symbol}: download failed: {last_error}")
     chart = payload.get("chart", {})
@@ -131,7 +141,8 @@ def download_free_dataset(
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"refusing to overwrite non-empty dataset directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    start = datetime.now(UTC) - timedelta(days=days)
+    # Stay inside Yahoo's rolling intraday retention boundary.
+    start = datetime.now(UTC) - timedelta(days=min(days, 59))
     end = datetime.now(UTC)
     bars_path = output / "bars.csv"
     instruments_path = output / "instruments.csv"
