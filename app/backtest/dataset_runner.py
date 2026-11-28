@@ -180,6 +180,7 @@ class Trade:
     net_pnl: Decimal | None
     r_multiple: Decimal | None
     holding_minutes: Decimal = Decimal(0)
+    regime: str = "UNKNOWN"
 
 
 @dataclass
@@ -193,6 +194,7 @@ class Position:
     risk_amount: Decimal
     entry_cost: Decimal | None
     best_favorable_r: Decimal = Decimal(0)
+    entry_regime: str = "UNKNOWN"
 
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
@@ -324,7 +326,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         ))
     trades: list[Trade] = []
     pos: Position | None = None
-    pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal] | None = None
+    pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal, str] | None = None
     exit_cfg = getattr(engine, "strategy", {}).get("exit", {})
     max_holding_minutes = int(exit_cfg.get("max_holding_minutes", 240))
     stagnation_minutes = int(exit_cfg.get("stagnation_minutes", 60))
@@ -380,7 +382,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         pos = None
                         exited_this_bar = True
         if pos is None and pending is not None:
-            side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close = pending
+            side, stop_dist, signal_target, entry_risk_pct, target_source, signal_close, entry_regime = pending
             entry_px = bar.open
             # Structural targets remain fixed market levels. ATR open-space targets preserve
             # their signal-time distance from the actual fill. Reject gap entries that destroy RR.
@@ -400,7 +402,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if qty > 0:
                 ecost = entry_costs(cost_values, qty, entry_px) if net_available else None
                 stop = entry_px - side * stop_dist
-                pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
+                pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost,
+                               entry_regime=entry_regime)
                 # The entry bar is part of the position lifecycle; never skip its stop/target range.
                 hit = _intrabar_exit(pos, bar)
                 if hit is not None:
@@ -454,7 +457,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     raise ValueError(f"invalid reaction-zone size_weight for {symbol}: {size_weight}")
                 effective_risk_pct *= size_weight
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
-                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct, target_source, signal_close)
+                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct,
+                           target_source, signal_close, regime.value)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
@@ -478,7 +482,7 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
         r = gross / pos.risk_amount if pos.risk_amount else None
     holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
-                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes)
+                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
@@ -514,6 +518,18 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
         out["net"] = None
     out["by_side"] = {side: stats([t.gross_pnl for t in trades if t.side == side])
                       for side in {t.side for t in trades}}
+    out["by_regime"] = {
+        regime: stats([t.gross_pnl for t in trades if t.regime == regime])
+        for regime in sorted({t.regime for t in trades})
+    }
+    out["by_regime_side"] = {
+        regime: {
+            side: stats([t.gross_pnl for t in trades if t.regime == regime and t.side == side])
+            for side in ("long", "short")
+            if any(t.regime == regime and t.side == side for t in trades)
+        }
+        for regime in sorted({t.regime for t in trades})
+    }
     durations = sorted(t.holding_minutes for t in trades)
     middle = len(durations) // 2
     median = (durations[middle] if len(durations) % 2
