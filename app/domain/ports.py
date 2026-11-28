@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Protocol, Sequence
-from .event_envelope import EventEnvelope
+from .event_envelope import EventEnvelope\nfrom .orders.model import Order, OrderReplacement
 
 class MarketDataPort(Protocol):
     def subscribe(self, instruments: Sequence[str]) -> None: ...
