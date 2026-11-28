@@ -47,7 +47,7 @@ flowchart TD
 - [x] Require two-bar confirmation after the swing point; confirmation is available only after both bars close.
 - [x] Use 5-minute bars for entry timing, pullback/reaction-zone qualification, and execution decisions (the runner uses its supplied signal interval; the configured production baseline is 5 minutes).
 - [ ] Add time-of-day/slot-normalized RVOL using comparable prior sessions. Do not compare an opening bar with a full-session average.
-- [ ] Make impulse-RVOL and ordinary slot-RVOL requirements consistent. An impulse branch must not accidentally bypass the baseline volume gate unless explicitly configured.
+- [ ] Add time-of-day/slot-normalized RVOL before enabling the full baseline gate. The rolling baseline RVOL floor is now enforced even when an impulse is present; impulse strength and pullback dry-up are additional gates. The comparable-prior-session slot metric remains open.
 - [ ] Keep trend and chop playbooks distinct. Do not force trend-following entries into sideways/choppy conditions.
 - [ ] Evaluate long/short performance by regime. Do not globally disable shorts based on aggregate results.
 - [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, and the existing 5-minute feature/RVOL inputs. Event-risk diagnostics remain pending with the event gate.
@@ -58,7 +58,7 @@ flowchart TD
 - [x] Add a configurable stagnation/time-stop when the trade fails to make required progress within configured bars/minutes. Keep this separate from the hard four-hour limit. Current default: 60 minutes without +0.25R maximum favourable excursion.
 - [x] Define stops relative to actual fill and re-anchor ATR-extension targets to the fill while preserving their signal-time distance. Structural targets remain fixed market levels; reject next-bar gaps that invalidate direction or minimum reward/risk.
 - [x] Apply reaction-zone `size_weight` values to final risk sizing; core defaults to 1.00 and shallow/deep/momentum weights scale the risk budget when supplied by the strategy card. Broader per-zone integration coverage remains.
-- [ ] Preserve mandatory session/pre-close flattening where applicable. Do not apply regular-session cutoffs to instruments with different sessions.
+- [x] Preserve mandatory session/pre-close flattening for the initial US equity/ETF universe. Gold and oil are explicitly restricted to US-listed ETF proxies (GLD/USO); GC/CL futures are excluded until their distinct exchange sessions, contract multipliers, margin, and fee profiles are implemented.
 - [x] Record exit reason and elapsed holding time for every trade in the trade ledger; report average, median, and maximum holding duration.
 
 ## 3. Execution simulator correctness
