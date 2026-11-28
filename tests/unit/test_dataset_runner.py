@@ -407,6 +407,61 @@ class IntrabarExitTests(unittest.TestCase):
         self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 3 * 60)
         self.assertEqual(trade.holding_minutes, Decimal(3))
 
+    def test_entry_bar_stop_is_checked_immediately_after_fill(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        bars[2] = Bar(bars[2].bar_start, bars[2].bar_end, Decimal(100), Decimal("100.1"),
+                      Decimal("99.7"), Decimal("99.8"), Decimal(100), 1)
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"][0].exit_reason, "HARD_STOP")
+        self.assertEqual(result["trades"][0].entry_time, bars[2].bar_start)
+
+    def test_max_holding_gap_uses_last_pre_deadline_close(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        offsets = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in offsets
+        ]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        trade = result["trades"][0]
+        self.assertEqual(trade.exit_reason, "MAX_HOLD_TIME_DATA_GAP")
+        self.assertLessEqual(trade.holding_minutes, Decimal(3))
+
     def test_stagnation_exit_requires_insufficient_favourable_excursion(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
