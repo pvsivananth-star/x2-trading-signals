@@ -72,7 +72,7 @@ flowchart TD
 
 ## 4. Trading costs and reporting integrity
 
-- [ ] Distinguish `gross`, `partial_net`, and `fully_net` results in every report and persisted run.
+- [x] Distinguish `gross`, `partial_net`, and `fully_net` cost coverage in per-symbol and combined summaries (no-trade summaries are labelled `no_trades`). Persisted output formatting still needs review.
 - [ ] Mark a run `fully_net` only when every required cost component for every traded instrument is present and applied (commission, applicable exchange/regulatory fees, spread, and slippage).
 - [x] Correct `net_available` so any excluded required cost field prevents a fully-net label; the runner now requires an empty exclusion list for US equity/ETF fully-net eligibility. Reports still need explicit gross/partial_net/fully_net labels.
 - [ ] Do not map commodity futures to generic US ETF cost assumptions. Use instrument/venue-specific cost profiles.
