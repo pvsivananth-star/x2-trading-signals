@@ -467,6 +467,65 @@ def _synthetic_warmup_bars(
     return warmup + bars, first.bar_start
 
 
+
+def _slot_rvol_unavailable_reason(
+    bars: list[Bar],
+    timestamp: datetime,
+    *,
+    session_timezone: str,
+    session_open: time | None,
+    session_close: time | None,
+    min_sessions: int,
+    lookback_sessions: int,
+) -> str | None:
+    """Explain why causal slot RVOL is unavailable without changing its behavior."""
+    eligible = [bar for bar in bars if bar.bar_end <= timestamp]
+    if not eligible:
+        return "no_completed_bar"
+    current = eligible[-1]
+    local_current = _local_dt(current.bar_start, session_timezone)
+    current_time = local_current.timetz().replace(tzinfo=None)
+    if session_open is not None and current_time < session_open:
+        return "outside_configured_session"
+    if session_close is not None and current_time >= session_close:
+        return "outside_configured_session"
+    if current.volume <= 0:
+        return "invalid_current_volume"
+    duration = current.bar_end - current.bar_start
+    by_session: dict[Any, Decimal] = {}
+    for bar in eligible[:-1]:
+        local_start = _local_dt(bar.bar_start, session_timezone)
+        if local_start.date() == local_current.date():
+            continue
+        if local_start.timetz().replace(tzinfo=None) != current_time:
+            continue
+        if bar.bar_end - bar.bar_start != duration:
+            continue
+        slot_time = local_start.timetz().replace(tzinfo=None)
+        if session_open is not None and slot_time < session_open:
+            continue
+        if session_close is not None and slot_time >= session_close:
+            continue
+        by_session[local_start.date()] = bar.volume
+    prior_dates = sorted(by_session, reverse=True)[:lookback_sessions]
+    volumes = [by_session[day] for day in prior_dates]
+    if len(volumes) < min_sessions:
+        return "insufficient_prior_slot_history"
+    if sum(volumes, Decimal(0)) <= 0:
+        return "invalid_prior_volume"
+    return "unknown"  # Defensive: should be unreachable if causal_slot_rvol agrees.
+
+
+def _context_30m_missing_reason(
+    complete_30m: list[Bar],
+    *,
+    minimum_buckets: int = 6,
+) -> str | None:
+    """Explain missing 30m regime context from the same completed-bar inputs used by the runner."""
+    if len(complete_30m) >= minimum_buckets:
+        return None
+    return "insufficient_completed_30m_buckets"
+
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool, order_simulator: OrderSimulator | None = None,
@@ -534,9 +593,24 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             swing_15m_size_atr=swing_size_atr,
             swing_15m_confirmed=swing_confirmed,
         ))
+        if base.rvol is None:
+            reason = _slot_rvol_unavailable_reason(
+                bars[: i + 1], bar.bar_end,
+                session_timezone=session_timezone,
+                session_open=session_open,
+                session_close=session_close,
+                min_sessions=slot_min_sessions,
+                lookback_sessions=slot_lookback,
+            ) or "unknown"
+            slot_rvol_unavailable_reasons[reason] += 1
+        context_reason = _context_30m_missing_reason(complete_30m)
+        if context_reason is not None:
+            context_30m_missing_reasons[context_reason] += 1
     trades: list[Trade] = []
     decision_action_counts: Counter[str] = Counter()
     rejection_gate_counts: Counter[str] = Counter()
+    slot_rvol_unavailable_reasons: Counter[str] = Counter()
+    context_30m_missing_reasons: Counter[str] = Counter()
 
     def record_decision(card: Any) -> None:
         decision_action_counts[str(getattr(card, "action", "unknown"))] += 1
@@ -784,11 +858,13 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 "max_slot_rvol_samples": max((item.slot_rvol_samples for item in snaps), default=0),
                 "minimum_slot_rvol_sessions_required": slot_min_sessions,
                 "slot_rvol_warmup_satisfied": max((item.slot_rvol_samples for item in snaps), default=0) >= slot_min_sessions,
+                "slot_rvol_unavailable_reasons": dict(sorted(slot_rvol_unavailable_reasons.items())),
                 "warmup_requirement": (
                     f"requires at least {slot_min_sessions + 1} trading sessions in the input "
                     "so the signal session has enough prior comparable slots"
                 ),
                 "missing_30m_context_bars": sum(1 for item in snaps if item.context_regime is None),
+                "missing_30m_context_reasons": dict(sorted(context_30m_missing_reasons.items())),
                 "unconfirmed_15m_swing_bars": sum(1 for item in snaps if not item.swing_15m_confirmed),
                 "action_counts": dict(sorted(decision_action_counts.items())),
                 "rejection_gate_counts": dict(sorted(rejection_gate_counts.items())),
