@@ -183,6 +183,7 @@ class Trade:
     holding_minutes: Decimal = Decimal(0)
     regime: str = "UNKNOWN"
     fill_status: str = "filled"
+    cost_status: str = "gross"
 
 
 @dataclass
@@ -198,6 +199,7 @@ class Position:
     best_favorable_r: Decimal = Decimal(0)
     entry_regime: str = "UNKNOWN"
     entry_fill_status: str = "filled"
+    cost_status: str = "gross"
 
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
@@ -212,21 +214,45 @@ def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
     return int((close - local_end).total_seconds() // 60)
 
 
-def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool) -> tuple[dict[str, Any], list[str]]:
+def _cost_model(costs: dict[str, Any], profile: str, allow_estimates: bool, symbol: str | None = None) -> tuple[dict[str, Any], list[str]]:
     section = COST_SECTION.get(profile, profile)
     estimates_enabled = allow_estimates or costs.get("allow_estimates") is True
     field_costs = {**costs, "allow_estimates": estimates_enabled}
     excluded: list[str] = []
     values: dict[str, Any] = {}
-    fields = COST_FIELDS.get(profile, ("commission", "spread_pct_full"))
+    fields = list(COST_FIELDS.get(profile, ("commission", "spread_pct_full")))
+    spread_field = "spread_pct_full"
+    if symbol and profile == "US_EQUITIES" and symbol != "SPY":
+        spread_field = "spread_pct_full_single_stocks"
+    elif symbol and profile == "US_COMMODITIES":
+        spread_field = f"spread_pct_full_{symbol.lower()}"
+    if "spread_pct_full" in fields:
+        fields[fields.index("spread_pct_full")] = spread_field
+    estimated: list[str] = []
     for name in fields:
         try:
             values[name] = _field(field_costs, section, name)
+            current_section = section
+            visited: set[str] = set()
+            while current_section not in visited:
+                visited.add(current_section)
+                entry = costs.get(current_section, {})
+                if name in entry:
+                    if entry[name].get("status") == "estimate":
+                        estimated.append(name)
+                    break
+                parent = entry.get("inherits")
+                if not isinstance(parent, str):
+                    break
+                current_section = parent
         except CostBlockedError:
             values[name] = Decimal(0)
             excluded.append(name)
+    if spread_field != "spread_pct_full":
+        values["spread_pct_full"] = values.pop(spread_field)
     values["_excluded"] = excluded
-    values["_slippage_on"] = estimates_enabled and "slippage_pct_per_side" not in excluded
+    values["_estimated"] = estimated
+    values["_slippage_on"] = "slippage_pct_per_side" not in excluded
     return values, excluded
 
 
