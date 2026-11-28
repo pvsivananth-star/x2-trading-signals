@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from app.backtest.bars import Bar
+from app.backtest.causality import assert_causal_window, assert_next_bar_execution
 from app.costs import CostBlockedError, _field, load_costs
 from app.features import (
     DEFAULT_SESSION_CLOSE,
@@ -262,7 +263,7 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
 
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
-               allow_estimates: bool) -> dict[str, Any]:
+               allow_estimates: bool, warmup_sessions: int = 0) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
     net_available = "commission_per_share" not in excluded and profile in _EQUITY_COST_PROFILES
     session_timezone, session_open, session_close = MARKET_SESSIONS.get(
@@ -278,7 +279,17 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     ]
     trades: list[Trade] = []
     pos: Position | None = None
-    pending: tuple[int, Decimal, Decimal, Decimal] | None = None
+    pending: tuple[int, int, Decimal, Decimal, Decimal] | None = None
+
+    # Warmup bars remain available to indicators but cannot generate scored trades.
+    session_dates = []
+    seen_sessions: set[object] = set()
+    for bar in bars:
+        local_date = _local_dt(bar.bar_end, session_timezone).date()
+        if local_date not in seen_sessions:
+            seen_sessions.add(local_date)
+            session_dates.append(local_date)
+    warmup_dates = set(session_dates[:max(0, warmup_sessions)])
 
     for i in range(len(bars)):
         bar = bars[i]
@@ -289,7 +300,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                 pos = None
         if pos is None and pending is not None:
-            side, stop_dist, target, entry_risk_pct = pending
+            decision_index, side, stop_dist, target, entry_risk_pct = pending
+            assert_next_bar_execution(bars[decision_index], bar)
             entry_px = bar.open
             qty = (risk_amount := start_equity * entry_risk_pct) / stop_dist
             if profile not in _FRACTIONAL_QTY_PROFILES:
@@ -299,6 +311,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 stop = entry_px - side * stop_dist
                 pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost)
             pending = None
+        assert_causal_window(bars[: i + 1], bar.bar_end)
         if pos is not None:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
@@ -312,7 +325,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if sig.action.startswith("exit_"):
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
-        elif pos is None and pending is None:
+        elif pos is None and pending is None and _local_dt(bar.bar_end, session_timezone).date() not in warmup_dates:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
@@ -336,7 +349,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     if policy_decision.max_risk_pct is not None else risk_pct
                 )
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
-                pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct)
+                pending = (i, side, snaps[i].atr * stop_mult, target, effective_risk_pct)
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
@@ -344,7 +357,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
     return {"symbol": symbol, "profile": profile, "trades": trades,
             "net_available": net_available, "excluded_cost_fields": excluded,
-            "start_equity": start_equity, "bars": len(bars)}
+            "start_equity": start_equity, "bars": len(bars),
+            "warmup_sessions": warmup_sessions, "warmup_dates": [str(x) for x in sorted(warmup_dates)]}
 
 
 def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reason: str,
@@ -398,6 +412,7 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
 def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(25000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
+                warmup_sessions: int = 0,
                 markets_path: str | Path = "config/markets_17.yaml",
                 costs_path: str | Path = "config/costs.yaml",
                 strategy_path: str | Path = "config/strategies/confluence_pullback.yaml") -> dict[str, Any]:
@@ -423,7 +438,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         if not bars:
             continue
         profile = profile_map[symbol]
-        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity, risk_pct, allow_estimates))
+        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity, risk_pct, allow_estimates,
+                                   warmup_sessions=warmup_sessions))
 
     all_trades = [t for r in results for t in r["trades"]]
     return {
