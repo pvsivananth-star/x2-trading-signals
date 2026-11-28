@@ -88,6 +88,7 @@ flowchart TD
 - [x] Enforce total capital, per-trade risk, per-market allocation, correlated-cluster exposure, maximum concurrent positions, and available-cash constraints; initial baseline capital defaults to USD 100,000 and rejects higher values.
 - [x] Resolve simultaneous candidate trades deterministically by entry time, symbol, then exit time; shared reservations prevent multiple symbols spending the same cash.
 - [x] Reserve cash using the greater of known itemized entry costs and the configured market round-trip cost buffer; this is a reservation only and is not added to realized P&L.
+- [x] Exclude disabled markets before market-sleeve capital preallocation and report each excluded instrument with its blocking reason.
 - [ ] Complete fully event-driven candidate generation so concurrency and cluster reservations determine quantity before each symbol lifecycle. Market-sleeve capital is now allocated to each active symbol before its lifecycle simulation; the chronological shared ledger still performs a final cross-symbol concurrency/cluster scale-or-reject pass and does not yet re-trigger deferred signals.
 - [x] Report portfolio-rejected trades with symbol, timestamp, requested size/notional, and exact blocking constraint.
 - [x] Keep the initial portfolio capital ceiling at the approved **USD 100,000**, unless explicitly changed by the user.
