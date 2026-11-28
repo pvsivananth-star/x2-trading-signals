@@ -23,7 +23,7 @@ import math
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -369,10 +369,91 @@ def _safe_event_risk(
         )
 
 
+
+def _synthetic_warmup_bars(
+    bars: list[Bar],
+    profile: str,
+    sessions: int,
+) -> tuple[list[Bar], datetime]:
+    """Create causal, deterministic history before the supplied dataset.
+
+    Supplied bars are the only bars eligible to open trades. Warmup bars exist only to satisfy
+    prior-session indicators such as slot-RVOL, ATR, 15m/30m context and swing confirmation.
+    """
+    if sessions <= 0 or not bars:
+        return bars, bars[0].bar_start if bars else datetime.now(UTC)
+
+    first = bars[0]
+    step = first.bar_end - first.bar_start
+    if step.total_seconds() <= 0:
+        raise ValueError("cannot create synthetic warmup for non-positive bar interval")
+
+    timezone, session_open, session_close = MARKET_SESSIONS.get(
+        profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+    )
+    first_local = _local_dt(first.bar_start, timezone)
+    first_session = first_local.date()
+
+    template = []
+    for bar in bars:
+        if _local_dt(bar.bar_start, timezone).date() != first_session:
+            break
+        template.append(bar)
+    if not template:
+        return bars, first.bar_start
+
+    template_open = template[0].open
+    avg_volume = sum((bar.volume for bar in template), Decimal(0)) / Decimal(len(template))
+    avg_range = sum((bar.high - bar.low for bar in template), Decimal(0)) / Decimal(len(template))
+
+    prior_dates = []
+    cursor = first_session
+    while len(prior_dates) < sessions:
+        cursor = cursor - timedelta(days=1)
+        if session_open is None or cursor.weekday() < 5:
+            prior_dates.append(cursor)
+    prior_dates.reverse()
+
+    warmup = []
+    previous_close = template_open
+    for session_index, session_date in enumerate(prior_dates):
+        if session_open is None:
+            local_start = datetime.combine(session_date, time(0, 0), tzinfo=_zone(timezone))
+            count = int(timedelta(days=1) / step)
+        else:
+            local_start = datetime.combine(session_date, session_open, tzinfo=_zone(timezone))
+            local_end = datetime.combine(session_date, session_close, tzinfo=_zone(timezone))
+            count = int((local_end - local_start) / step)
+
+        for j in range(count):
+            source = template[j % len(template)]
+            drift = Decimal("1") + Decimal(str(((session_index % 5) - 2) * 0.00012))
+            shape = source.close / template_open if template_open > 0 else Decimal(1)
+            close = template_open * shape * drift
+            if j == 0:
+                close = previous_close * (
+                    Decimal("1") + Decimal(str((session_index - sessions / 2) * 0.00008))
+                )
+            spread = max(avg_range * Decimal("0.35"), abs(close) * Decimal("0.00015"))
+            open_px = previous_close
+            high = max(open_px, close) + spread
+            low = max(Decimal("0.00000001"), min(open_px, close) - spread)
+            volume = max(
+                Decimal(1),
+                avg_volume * (Decimal("1") + Decimal(str(((j % 7) - 3) * 0.025))),
+            )
+            start = (local_start + j * step).astimezone(UTC)
+            warmup.append(Bar(start, start + step, open_px, high, low, close, volume, 0))
+            previous_close = close
+
+    return warmup + bars, first.bar_start
+
+
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
                allow_estimates: bool, order_simulator: OrderSimulator | None = None,
-               event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None) -> dict[str, Any]:
+               event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None,
+               simulation_start: datetime | None = None) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates, symbol)
     execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
     simulator = order_simulator or OrderSimulator(SimulationConfig(
@@ -455,6 +536,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
     for i in range(len(bars)):
         bar = bars[i]
+        is_supplied_data = simulation_start is None or bar.bar_start >= simulation_start
         exited_this_bar = False
         if pos is not None:
             deadline = pos.entry_time + timedelta(minutes=max_holding_minutes)
@@ -593,7 +675,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
-        elif pos is None and pending is None and not exited_this_bar:
+        elif pos is None and pending is None and not exited_this_bar and is_supplied_data:
             regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
             known_roundtrip_cost_pct = None
             if costs_applicable and snaps[i].atr and snaps[i].last_close and snaps[i].last_close > 0:
@@ -923,7 +1005,8 @@ def _apply_portfolio_constraints(
     }
 
 
-def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(100000),
+def run_dataset(directory: str | Path,
+                synthetic_warmup_sessions: int = 10, interval_seconds: int = 300, start_equity: Decimal = Decimal(100000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
                 markets_path: str | Path = "config/markets_17.yaml",
@@ -1026,13 +1109,35 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
             start_equity * allocation_pct / Decimal(active_counts[profile])
         )
 
+    if synthetic_warmup_sessions < 0:
+        raise ValueError("synthetic_warmup_sessions cannot be negative")
+
     results = []
+    warmup_summary: dict[str, Any] = {}
     for symbol, profile, bars in active_instruments:
         symbol_equity = symbol_budgets[symbol]
-        result = run_symbol(symbol, bars, profile, engine, policy, costs, symbol_equity,
-                            risk_pct, allow_estimates, event_risk_provider=event_risk_provider)
+        simulation_bars, simulation_start = _synthetic_warmup_bars(
+            bars, profile, synthetic_warmup_sessions
+        )
+        result = run_symbol(
+            symbol, simulation_bars, profile, engine, policy, costs, symbol_equity,
+            risk_pct, allow_estimates, event_risk_provider=event_risk_provider,
+            simulation_start=simulation_start,
+        )
+        result["bars"] = len(bars)
+        result["input_bars"] = len(bars)
+        result["simulation_bars_including_synthetic_warmup"] = len(simulation_bars)
+        result["synthetic_warmup_sessions"] = synthetic_warmup_sessions
+        result["synthetic_warmup_bars"] = len(simulation_bars) - len(bars)
+        result["first_supplied_bar"] = bars[0].bar_start.isoformat()
+        result["synthetic_warmup_evidence"] = "synthetic_indicator_warmup_only"
         result["start_equity"] = symbol_equity
         result["capital_allocation"] = symbol_equity
+        warmup_summary[symbol] = {
+            "synthetic_sessions": synthetic_warmup_sessions,
+            "synthetic_bars": len(simulation_bars) - len(bars),
+            "first_supplied_bar": bars[0].bar_start.isoformat(),
+        }
         results.append(result)
 
     all_trades, portfolio_rejections, portfolio_summary = _apply_portfolio_constraints(
@@ -1052,6 +1157,12 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         ),
         "dataset": str(directory),
         "interval_seconds": interval_seconds,
+        "synthetic_warmup": {
+            "enabled": synthetic_warmup_sessions > 0,
+            "sessions": synthetic_warmup_sessions,
+            "purpose": "indicator history only; entries are disabled before the first supplied bar",
+            "per_symbol": warmup_summary,
+        },
         "portfolio_capital": str(start_equity),
         "risk_pct_per_trade": float(risk_pct),
         "allow_estimates": allow_estimates,
