@@ -52,7 +52,9 @@ STRATEGY = {
         "id": "confluence_pullback_v1",
         "enabled": True,
         "allowed_regimes": ["TREND_DAY", "CHOP_DAY"],
-        "timeframes": {"discovery_mins": 30, "swing_mins": 15, "signal_mins": 5},
+        "timeframes": {"discovery_mins": 30, "swing_mins": 15, "signal_mins": 5,
+                       "require_completed_context": True, "max_context_age_mins": 30},
+        "swing": {"min_candles": 3, "min_atr_mult": 0.60, "confirmation_bars": 2},
         "move_room": {"target_atr_mult": 2.0, "stop_atr_mult": 1.0, "min_reward_to_risk": 1.5, "roundtrip_cost_pct": 0.0010, "slippage_buffer_pct": 0.0005},
     }
 }
