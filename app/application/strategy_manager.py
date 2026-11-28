@@ -99,8 +99,6 @@ class WeeklyTrendFollowing(BaseStrategy):
     def evaluate(self, context: StrategyContext) -> StrategyDecision:
         if not self.spec.enabled:
             return self._no_trade(context, "strategy_disabled")
-        weekly = context.features.get("1W")
-        daily = context.features.get("1d")
         trend = _value(context.features, "1W", "trend")
         daily_trend = _value(context.features, "1d", "trend")
         structure = _value(context.features, "1W", "structure")
@@ -121,7 +119,6 @@ class WeeklyBreakoutPullback(BaseStrategy):
     def evaluate(self, context: StrategyContext) -> StrategyDecision:
         if not self.spec.enabled:
             return self._no_trade(context, "strategy_disabled")
-        weekly = context.features.get("1W")
         close = _decimal(_value(context.features, "1W", "last_close"))
         high = _decimal(_value(context.features, "1W", "swing_high"))
         low = _decimal(_value(context.features, "1W", "swing_low"))
