@@ -757,7 +757,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
 
     def test_synthetic_fixture_reports_zero_trade_diagnostics_and_slot_warmup(self):
         self.assertEqual(self.result["evidence_class"], "synthetic_software_fixture_only")
-        for symbol, report in self.result["per_symbol"].items():
+        for report in self.result["per_symbol"].values():
             diagnostics = report["decision_diagnostics"]
             self.assertGreater(diagnostics["bars_evaluated"], 0)
             self.assertIn("rejection_gate_counts", diagnostics)
