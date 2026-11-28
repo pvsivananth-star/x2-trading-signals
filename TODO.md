@@ -56,11 +56,11 @@ Source of truth: `requirements.md` and `architecture.md`.
 - [x] 43. Test disconnect/retry/recovery.
 
 ## Phase 6 — Backtest and paper
-- [ ] 44. Route replay through the same strategy/portfolio/risk pipeline.
-- [ ] 45. Model fees, spread, slippage, latency, partial fills and rejects.
-- [ ] 46. Add walk-forward and out-of-sample evaluation.
-- [ ] 47. Report performance by portfolio, strategy, symbol, regime, setup and score.
-- [ ] 48. Add deterministic regression fixtures.
+- [x] 44. Route replay through the same strategy/portfolio/risk pipeline.
+- [x] 45. Model fees, spread, slippage, latency, partial fills and rejects.
+- [x] 46. Add walk-forward and out-of-sample evaluation.
+- [x] 47. Report performance by portfolio, strategy, symbol, regime, setup and score.
+- [x] 48. Add deterministic regression fixtures.
 
 ## Phase 7 — Persistence, API and UI
 - [ ] 49. Separate operational state, market history, audit events and backtest artifacts.
@@ -88,4 +88,4 @@ Source of truth: `requirements.md` and `architecture.md`.
 9. Same inputs/config/code produce deterministic backtests.
 10. NO_TRADE is preferred over a low-quality trade.
 
-**Current work: Phase 5 complete. Execution is fail-closed, mock/paper only, reconciliation-gated, and live routing remains disabled.**
+**Current work: Phase 6 complete. Replay is deterministic, OOS-capable, cost-aware, and uses the shared strategy/portfolio/risk/execution contracts; live routing remains disabled.**
