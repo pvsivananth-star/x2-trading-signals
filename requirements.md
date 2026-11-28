@@ -138,7 +138,57 @@ Hard circuit breakers:
 - excessive correlated exposure;
 - emergency kill switch.
 
-## 9. Trade Management
+## 9. Portfolio and Strategy Architecture
+
+The system shall support multiple independent portfolios. Each portfolio has its own objective, capital/risk budget, eligible instruments, holding period, timeframe policy, exit policy and assigned strategies.
+
+### 9.1 Long-Term Portfolio
+
+Purpose: preserve and compound capital through major market trends rather than maximize daily trade count.
+
+Decision timeframe:
+- Primary: 1W.
+- Optional confirmation: 1D.
+- Lower timeframes may be used only for execution quality, never to override the weekly regime.
+
+Initial strategy set:
+1. **Weekly Trend Following** — participate in established weekly trends using weekly structure, moving-average/DMA alignment, breakout/pullback confirmation and volatility-aware stops.
+2. **Weekly Breakout/Pullback Accumulation** — add/re-enter after validated weekly breakouts or controlled pullbacks when the major trend remains intact.
+
+Exit policy:
+- Do not liquidate the portfolio merely because a short-term chart weakens.
+- Liquidate or materially reduce only the positions affected by a validated weekly trend reversal, structural failure, thesis invalidation, liquidity deterioration or portfolio-level risk breach.
+- Support partial de-risking before full liquidation.
+- Use position-level trailing/structure exits rather than a blanket portfolio exit.
+
+The long-term portfolio must not be allowed to consume capital reserved for the Daily Trading Portfolio.
+
+### 9.2 Daily Trading Portfolio
+
+Purpose: selective intraday trading using short-range charts. The system may target approximately 2% overall daily return as an aspiration, but must never force trades, increase risk, or relax quality gates to achieve that target.
+
+Decision timeframes:
+- 30m: primary intraday trend/regime.
+- 15m: structure and confirmation.
+- 5m: setup and trigger.
+- 1m or tick data may be used only for execution refinement where available.
+
+Initial strategy set:
+1. **MTF Trend Pullback Continuation** — 30m/15m aligned trend, controlled 5m pullback into validated Fib/DMA/structure zones, followed by two-bar 5m trigger and volume confirmation.
+2. **VWAP/Relative-Strength Continuation** — trade liquid instruments aligned with market/sector direction when price reclaims/holds VWAP with relative-strength and volume confirmation.
+3. **Opening-Range Breakout with Trend Filter** — trade only liquid instruments with strong opening participation when the breakout agrees with 30m/15m regime, relative strength and volume; reject weak or extended breakouts.
+
+Strategy selection must be regime-aware. Mean-reversion behavior may be introduced later only after separate out-of-sample validation; it must not be mixed into the initial trend-following strategies.
+
+### 9.3 Strategy Isolation
+
+Every strategy is an independently versioned strategy instance with its own **Strategy Manager**. A Strategy Manager owns only one strategy's lifecycle, configuration, state, signals, metrics and decisions.
+
+A portfolio may contain multiple Strategy Managers. Strategy Managers must not directly place orders or mutate another strategy's state. All strategy outputs converge through the Trade Manager, Portfolio Controller and Risk Manager.
+
+The system must support enabling/disabling, versioning, parameterizing and backtesting each strategy independently and in portfolio combinations.
+
+## 10. Trade Management
 
 Support:
 - protective stops;
@@ -150,7 +200,7 @@ Support:
 
 The system must not rely solely on fixed profit targets.
 
-## 10. Execution Safety
+## 11. Execution Safety
 
 Execution must be separated from signal generation.
 
@@ -168,7 +218,7 @@ Support:
 
 Live execution must be disabled by default until explicitly enabled.
 
-## 11. Simulation and Backtesting
+## 12. Simulation and Backtesting
 
 Provide:
 - deterministic historical backtest engine;
@@ -199,7 +249,7 @@ Report:
 - performance by market, symbol, regime, setup and score;
 - rejection reasons.
 
-## 12. UI
+## 13. UI
 
 Provide a web UI for:
 - system health;
@@ -221,7 +271,7 @@ Provide a web UI for:
 - manual execution where explicitly enabled;
 - emergency kill switch.
 
-## 13. Cloud Readiness
+## 14. Cloud Readiness
 
 The platform must run locally first but be deployable later as a dedicated container on AWS, Azure or another container platform.
 
@@ -238,7 +288,7 @@ Requirements:
 - clean separation of domain, infrastructure and UI;
 - deterministic local development scripts.
 
-## 14. Design Principles
+## 15. Design Principles
 
 Apply established engineering principles:
 - SOLID;
@@ -256,7 +306,7 @@ Apply established engineering principles:
 - testability;
 - deterministic reproducibility.
 
-## 15. Safety Rule
+## 16. Safety Rule
 
 The system must prefer:
 
