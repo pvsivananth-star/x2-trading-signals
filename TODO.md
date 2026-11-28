@@ -4,9 +4,10 @@ Source of truth: `requirements.md` and `architecture.md`.
 
 ## Completed baseline
 
-Phases 1–8 are implemented. The current branch is **compilable and test-clean**:
+Phases 1–8 are implemented. Last confirmed local baseline before the latest Phase 9 guard changes:
 - `python -m unittest discover -s tests -v` → 177 tests passed, 3 skipped
 - `python -m app.cli --help` → working
+- Re-run tests and compile checks after the current guard changes before treating the branch as clean.
 - Live broker routing remains disabled
 
 ## Phase 9 — Backtest correctness and dataset validation
