@@ -86,7 +86,6 @@ class PortfolioLedger:
         if cluster_pct <= 0:
             return PortfolioDecision(False, Decimal(0), Decimal(0), Decimal(0), "rejected", "cluster_risk_cap_missing")
 
-        open_notional = sum((item.notional for item in self.active), Decimal(0))
         open_cash = sum((item.cash_reserved for item in self.active), Decimal(0))
         market_notional = sum((item.notional for item in self.active if item.market == market), Decimal(0))
         cluster_risk = sum((item.risk_amount for item in self.active if item.cluster == cluster), Decimal(0))
