@@ -382,6 +382,11 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     min(risk_pct, Decimal(str(policy_decision.max_risk_pct)))
                     if policy_decision.max_risk_pct is not None else risk_pct
                 )
+                # Reaction-zone sizing is part of the strategy contract, not display-only metadata.
+                size_weight = Decimal(str(sig.parameters.get("size_weight", "1")))
+                if size_weight <= 0 or size_weight > 1:
+                    raise ValueError(f"invalid reaction-zone size_weight for {symbol}: {size_weight}")
+                effective_risk_pct *= size_weight
                 stop_mult = Decimal(sig.parameters.get("stop_mult", str(engine.stop_mult)))
                 pending = (side, snaps[i].atr * stop_mult, target, effective_risk_pct)
 
