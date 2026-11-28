@@ -41,6 +41,14 @@ def _eval(engine, snap, **kwargs):
     return engine.evaluate(snapshot=snap, **base)
 
 
+    def test_move_room_uses_market_specific_cost_estimate_and_reports_it(self):
+        markets = deepcopy(MARKETS)
+        markets["markets"]["US_EQUITIES"]["est_roundtrip_cost_pct"] = 0.0025
+        engine = ConfluenceV1(deepcopy(STRATEGY), TradingPolicy(markets, "market-cost-test"))
+        card = _eval(engine, _snap())
+        self.assertEqual(card.parameters["roundtrip_cost_estimate_pct"], "0.0025")
+        self.assertEqual(card.parameters["slippage_buffer_pct"], "0.0005")
+
 class ReactionZoneTests(unittest.TestCase):
     def test_zone_boundaries(self):
         self.assertEqual(classify_reaction_zone(Decimal("0.382")), "CORE_382_618")
