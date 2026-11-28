@@ -129,45 +129,102 @@ def download_free_dataset(
     timeout: float = 20.0,
     append: bool = False,
 ) -> dict[str, object]:
-    """Download real 5-minute bars and write the backtest's canonical CSV layout."""
+    """Download real 5-minute bars and write the backtest's canonical CSV layout.
+
+    With append=True, an existing canonical dataset is loaded and extended.
+    A symbol already present in the manifest cannot be downloaded twice.
+    """
     if not 1 <= days <= MAX_INTRADAY_DAYS:
         raise ValueError(f"Yahoo 5-minute history is limited to {MAX_INTRADAY_DAYS} calendar days")
     if not symbols or len(set(symbols)) != len(symbols):
         raise ValueError("symbols must be non-empty and unique")
+
     profiles = profile_map or {}
     unknown = sorted(set(symbols) - set(profiles))
     if unknown:
         raise ValueError(f"symbols missing backtest profiles: {unknown}")
+
     output = Path(output_dir).expanduser().resolve()
-    if output.exists() and any(output.iterdir()):
-        raise FileExistsError(f"refusing to overwrite non-empty dataset directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    # Stay inside Yahoo's rolling intraday retention boundary.
-    start = datetime.now(UTC) - timedelta(days=min(days, 59))
-    end = datetime.now(UTC)
     bars_path = output / "bars.csv"
     instruments_path = output / "instruments.csv"
+    manifest_path = output / "manifest.json"
+    required_paths = (bars_path, instruments_path, manifest_path)
+    directory_has_content = any(output.iterdir())
+
+    existing_instruments: list[dict[str, str]] = []
+    existing_manifest: dict[str, object] = {}
+
+    if directory_has_content:
+        if not append:
+            raise FileExistsError(
+                f"refusing to overwrite non-empty dataset directory: {output}; use --append"
+            )
+        missing = [path.name for path in required_paths if not path.is_file()]
+        if missing:
+            raise FileExistsError(
+                f"cannot append: existing dataset is incomplete; missing {', '.join(missing)}"
+            )
+        try:
+            with instruments_path.open(newline="", encoding="utf-8") as handle:
+                existing_instruments = list(csv.DictReader(handle))
+            existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, csv.Error) as exc:
+            raise ValueError(f"cannot read existing dataset metadata: {exc}") from exc
+        if not isinstance(existing_manifest, dict):
+            raise ValueError("existing manifest must contain a JSON object")
+
+        existing_symbols = {
+            str(item.get("symbol"))
+            for item in existing_manifest.get("coverage", [])
+            if isinstance(item, dict) and item.get("symbol")
+        }
+        existing_symbols.update(
+            str(row.get("canonical_symbol"))
+            for row in existing_instruments
+            if row.get("canonical_symbol")
+        )
+        duplicates = sorted(existing_symbols.intersection(symbols))
+        if duplicates:
+            raise ValueError(
+                f"symbols already exist in dataset: {duplicates}; remove them from the download list"
+            )
+    elif append:
+        # --append is also safe for a newly-created, empty output directory.
+        existing_manifest = {}
+
+    start = datetime.now(UTC) - timedelta(days=min(days, 59))
+    end = datetime.now(UTC)
     failures: list[dict[str, str]] = []
     coverage: list[dict[str, object]] = []
     instrument_rows: list[dict[str, str]] = []
     total_rows = 0
+    existing_ids = {
+        str(row.get("canonical_symbol")): int(row["instrument_id"])
+        for row in existing_instruments
+        if row.get("canonical_symbol") and row.get("instrument_id")
+    }
+    next_custom_id = max(
+        (int(row["instrument_id"]) for row in existing_instruments if row.get("instrument_id")),
+        default=0,
+    ) + 1
 
     bars_mode = "a" if bars_path.exists() else "w"
     with bars_path.open(bars_mode, newline="", encoding="utf-8") as bars_handle:
         writer = csv.DictWriter(bars_handle, fieldnames=BAR_FIELDS)
         if bars_mode == "w":
             writer.writeheader()
+
         for symbol in symbols:
-            known_id = next(
-                (int(row["instrument_id"]) for row in existing_instruments
-                 if row["canonical_symbol"] == symbol),
-                None,
-            )
-            instrument_id = known_id or (
-                DEFAULT_SYMBOLS.index(symbol) + 1 if symbol in DEFAULT_SYMBOLS
-                else max((int(row["instrument_id"]) for row in existing_instruments), default=0)
-                + len(instrument_rows) + 1
-            )
+            instrument_id = existing_ids.get(symbol)
+            if instrument_id is None:
+                instrument_id = (
+                    DEFAULT_SYMBOLS.index(symbol) + 1
+                    if symbol in DEFAULT_SYMBOLS else next_custom_id
+                )
+                if symbol not in DEFAULT_SYMBOLS:
+                    next_custom_id += 1
+
             try:
                 rows, source_timezone = _fetch_symbol(symbol, start, end, timeout)
                 for row in rows:
@@ -188,8 +245,10 @@ def download_free_dataset(
                     "source": "yahoo_finance_chart",
                 })
                 coverage.append({
-                    "symbol": symbol, "rows": len(rows),
-                    "first_bar": rows[0]["bar_start"], "last_bar": rows[-1]["bar_start"],
+                    "symbol": symbol,
+                    "rows": len(rows),
+                    "first_bar": rows[0]["bar_start"],
+                    "last_bar": rows[-1]["bar_start"],
                     "exchange_timezone": source_timezone,
                 })
             except (FreeDataDownloadError, OSError, ValueError) as exc:
@@ -204,8 +263,16 @@ def download_free_dataset(
         writer.writeheader()
         writer.writerows(merged_instruments)
 
-    merged_coverage = list(existing_manifest.get("coverage", [])) + coverage
-    merged_failures = list(existing_manifest.get("failed_symbols", [])) + failures
+    previous_coverage = list(existing_manifest.get("coverage", []))
+    previous_failures = list(existing_manifest.get("failed_symbols", []))
+    attempted_symbols = set(symbols)
+    merged_coverage = previous_coverage + coverage
+    # Replace old failure records for symbols retried in this invocation.
+    merged_failures = [
+        item for item in previous_failures
+        if not isinstance(item, dict) or item.get("symbol") not in attempted_symbols
+    ] + failures
+    previous_requested = existing_manifest.get("symbols_requested", [])
     manifest = {
         "provider": "Yahoo Finance public chart endpoint",
         "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/",
@@ -215,7 +282,7 @@ def download_free_dataset(
         "source_interval": "5m",
         "adjustment_mode": "raw",
         "prepost": False,
-        "symbols_requested": sorted(set(existing_manifest.get("symbols_requested", [])) | set(symbols)),
+        "symbols_requested": sorted(set(previous_requested) | set(symbols)),
         "symbols_downloaded": [item["symbol"] for item in merged_coverage],
         "coverage": merged_coverage,
         "total_rows": int(existing_manifest.get("total_rows", 0)) + total_rows,
@@ -233,9 +300,14 @@ def download_free_dataset(
         writer = csv.DictWriter(handle, fieldnames=("symbol", "error"))
         writer.writeheader()
         writer.writerows(merged_failures)
+
     return {
-        "output_dir": str(output), "symbols_requested": len(symbols),
-        "symbols_downloaded": len(coverage), "symbols_failed": len(failures),
-        "rows": total_rows, "interval_seconds": INTERVAL_SECONDS,
-        "days_requested": days, "failures": failures,
+        "output_dir": str(output),
+        "symbols_requested": len(symbols),
+        "symbols_downloaded": len(coverage),
+        "symbols_failed": len(failures),
+        "rows": total_rows,
+        "interval_seconds": INTERVAL_SECONDS,
+        "days_requested": days,
+        "failures": failures,
     }
