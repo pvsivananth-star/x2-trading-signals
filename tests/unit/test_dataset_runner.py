@@ -612,6 +612,8 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(out["by_regime_side"]["TREND_DAY"]["long"]["total_pnl"], 1.0)
         self.assertEqual(out["by_regime_side"]["TREND_DAY"]["short"]["total_pnl"], -1.0)
         self.assertEqual(out["by_regime_side"]["CHOP_DAY"]["long"]["total_pnl"], -2.0)
+        self.assertEqual(out["by_exit_reason"]["TARGET_HIT"]["trades"], 3)
+        self.assertEqual(out["gross"]["expectancy"], 0.0)
 
     def test_profit_factor_and_drawdown(self):
         t = lambda pnl: Trade("X", "long", Decimal(1), datetime(2026, 1, 1, tzinfo=UTC), Decimal(1),
