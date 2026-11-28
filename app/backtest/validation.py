@@ -308,7 +308,7 @@ def validate_dataset(
             ))
         elif not mode:
             # Missing metadata is allowed for legacy/local fixtures
-            a suspicious price jump
+            # above is the actionable signal that requires adjustment review.
             # above is the actionable signal that requires adjustment review.
             pass
 
