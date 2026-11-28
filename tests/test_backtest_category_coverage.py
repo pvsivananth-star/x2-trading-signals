@@ -12,7 +12,13 @@ from types import SimpleNamespace
 import yaml
 
 from app.backtest.bars import Bar
-from app.backtest.dataset_runner import DEFAULT_PROFILE, _synthetic_warmup_bars, run_symbol
+from app.backtest.dataset_runner import (
+    DEFAULT_PROFILE,
+    _context_30m_missing_reason,
+    _slot_rvol_unavailable_reason,
+    _synthetic_warmup_bars,
+    run_symbol,
+)
 from app.backtest.preload import preload_directory
 from app.features import FeatureSnapshot, causal_slot_rvol
 from app.costs import load_costs
@@ -142,6 +148,28 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
             self.assertEqual(samples, 6)
             self.assertIsNotNone(value)
             self.assertEqual(loaded.summary["symbols_loaded"], 1)
+
+    def test_warmup_diagnostics_distinguish_insufficient_slot_history(self) -> None:
+        bars = []
+        first = datetime(2026, 11, 23, 14, 30, tzinfo=UTC)
+        for day in range(2):
+            session = first + timedelta(days=day)
+            ts = session
+            bars.append(Bar(
+                ts, ts + timedelta(minutes=5), Decimal("100"), Decimal("101"),
+                Decimal("99"), Decimal("100"), Decimal("1000"), 10
+            ))
+        reason = _slot_rvol_unavailable_reason(
+            bars, bars[-1].bar_end,
+            session_timezone="America/New_York",
+            session_open=None,
+            session_close=None,
+            min_sessions=5,
+            lookback_sessions=10,
+        )
+        self.assertEqual(reason, "insufficient_prior_slot_history")
+        self.assertEqual(_context_30m_missing_reason([]), "insufficient_completed_30m_buckets")
+        self.assertIsNone(_context_30m_missing_reason([bars[0]] * 6))
 
     def test_five_supplied_days_get_ten_synthetic_warmup_sessions(self) -> None:
         bars = []
