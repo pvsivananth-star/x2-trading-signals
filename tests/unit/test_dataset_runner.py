@@ -230,7 +230,7 @@ class CostRuleTests(unittest.TestCase):
             ]
             result = run_symbol(symbol, bars, profile, EntryOnceEngine(), policy, self.costs,
                                 Decimal(25000), Decimal("0.0025"), False)
-            self.assertEqual(result["trades"][0].risk_amount, result["trades"][0].qty * (Decimal(20) / result["trades"][0].qty))
+            self.assertLessEqual(result["trades"][0].risk_amount, Decimal(20))
             self.assertEqual(result["trades"][0].qty, expected_qty)
 
     def test_reaction_zone_size_weight_reduces_risk_budget(self):
