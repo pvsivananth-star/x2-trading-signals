@@ -74,12 +74,12 @@ flowchart TD
 ## 4. Trading costs and reporting integrity
 
 - [x] Distinguish `gross`, `partial_net`, and `fully_net` cost coverage in per-symbol and combined summaries (no-trade summaries are labelled `no_trades`). Persisted output formatting still needs review.
-- [ ] Mark a run `fully_net` only when every required cost component for every traded instrument is present and applied (commission, applicable exchange/regulatory fees, spread, and slippage).
-- [x] Correct `net_available` so any excluded required cost field prevents a fully-net label; the runner now requires an empty exclusion list for US equity/ETF fully-net eligibility. Reports still need explicit gross/partial_net/fully_net labels.
-- [ ] Do not map commodity futures to generic US ETF cost assumptions. Use instrument/venue-specific cost profiles.
+- [x] Mark trades/summaries `fully_net` only when all required cost components are present, verified, and applied; excluded or estimated fields force `partial_net` when known costs are applied.
+- [x] Correct full-net eligibility: any excluded or estimated required cost field prevents a `fully_net` label. Per-symbol reports expose `cost_status`, excluded fields, and estimated fields.
+- [x] Do not map commodity futures to generic US ETF cost assumptions. GC=F/CL=F remain outside the baseline; GLD and USO use separate symbol-specific spread fields. Their spread values are still unavailable, so those instruments remain `partial_net` until measured.
 - [ ] Keep ETF proxy assumptions separate from futures assumptions, including session calendars, tick sizes, contract multipliers, and fees.
 - [ ] Ensure MoveRoom thresholds and backtest P&L use compatible cost assumptions; avoid double-counting or omitting costs.
-- [ ] If slippage is estimated or unavailable, disclose it and downgrade the result to partial-net rather than silently treating it as zero.
+- [x] If slippage is estimated or unavailable, disclose it in `estimated_cost_fields` / `cost_fields_excluded` and downgrade the result to `partial_net`; known cost components are still applied.
 
 ## 5. Shared portfolio simulation
 
@@ -93,7 +93,7 @@ flowchart TD
 ## 6. Regime and instrument scope
 
 - [ ] Validate the initial universe explicitly: selected US equity/ETF instruments, one gold instrument, and one oil instrument.
-- [ ] Verify each instrument's session calendar, timezone, tick/price units, multiplier, and cost profile against its actual instrument type.
+- [x] Verify baseline instrument assumptions: US-listed shares/ETFs use USD, 1-share units, 1x multiplier, $0.01 tick, and the New York regular session. Futures are excluded pending their own sessions/multipliers/margin/cost profiles. Per-symbol spread evidence remains an explicit open item.
 - [ ] Do not interpret zero trades in an instrument as evidence of profitability or unprofitability.
 - [x] Add gross performance reporting for `BULL_TREND`, `BEAR_TREND`, `NORMAL`, `SIDEWAYS`, and `HIGH_VOL_CHOP`, including long/short cross-tabs. The reporting classifier is diagnostic only and does not change entry eligibility; high-vol chop uses current 5m ATR versus the prior 20 observations.
 - [ ] Treat synthetic fixtures as software tests only, never as evidence of real-market profitability.
@@ -102,7 +102,7 @@ flowchart TD
 
 - [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, ~~event/news fail-closed behavior~~ (missing/stale/future/blocked event states covered), direction/regime filters, and size weights.
 - [ ] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason accounting.
-- [ ] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills, and costs.
+- [x] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills/rejections, and cost coverage.
 - [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
 - [ ] Run the full existing unit test suite and record the exact command and result.
 - [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
