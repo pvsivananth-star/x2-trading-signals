@@ -94,7 +94,9 @@ def rollup(
                         bar_volume, trade_count, final=final,
                         partial=replay_end is not None and bar_end > replay_end))
     return bars
-\n\n
+
+
+
 def aggregate_bars(
     bars: list[Bar],
     interval_seconds: int,
