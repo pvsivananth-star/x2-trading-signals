@@ -30,6 +30,7 @@ from typing import Any
 
 from app.backtest.bars import Bar, aggregate_bars
 from app.backtest.portfolio import PortfolioLedger
+from app.backtest.preload import PreloadedDataset, preload_directory
 from app.backtest.simulator import OrderSimulator, SimulationConfig
 from app.costs import CostBlockedError, _field, load_costs
 from app.event_risk import EventRiskAssessment
@@ -922,9 +923,18 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None,
                 baseline_scope: bool = True) -> dict[str, Any]:
     directory = Path(directory)
-    instrument_symbols = instrument_symbols or _instrument_symbols(directory)
-    records = load_bar_records(directory / "bars.csv")
-    grouped = group_bars(records)
+    preloaded: PreloadedDataset | None = None
+    excluded_scope: list[dict[str, str]] = []
+    if (directory / "bars.csv").exists():
+        instrument_symbols = instrument_symbols or _instrument_symbols(directory)
+        grouped = group_bars(load_bar_records(directory / "bars.csv"))
+    else:
+        # Per-symbol CSV folder: every file is loaded and validated before any simulation starts.
+        preloaded = preload_directory(directory, interval_seconds, markets_path)
+        grouped = preloaded.grouped
+        instrument_symbols = instrument_symbols or preloaded.instrument_symbols
+        if profile_map is None and not baseline_scope:
+            profile_map = dict(preloaded.profiles)
 
     import yaml
     markets = yaml.safe_load(Path(markets_path).read_text(encoding="utf-8"))
@@ -956,6 +966,15 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         raise ValueError("portfolio capital must be positive")
     if baseline_scope and start_equity > Decimal(100000):
         raise ValueError("Phase 2 portfolio capital cannot exceed USD 100,000")
+    if preloaded is not None and baseline_scope:
+        kept: dict[int, str] = {}
+        for iid, symbol in sorted(instrument_symbols.items()):
+            if symbol in profile_map:
+                kept[iid] = symbol
+            else:
+                excluded_scope.append({"symbol": symbol, "profile": preloaded.profiles[symbol],
+                                       "reason": "outside_baseline_scope"})
+        instrument_symbols = kept
     if baseline_scope:
         for symbol in instrument_symbols.values():
             profile = profile_map.get(symbol)
@@ -966,7 +985,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
 
     costs = load_costs(costs_path)
     active_instruments = []
-    excluded_instruments: list[dict[str, str]] = []
+    excluded_instruments: list[dict[str, str]] = list(excluded_scope)
     for iid, symbol in sorted(instrument_symbols.items()):
         bars = grouped.get((iid, interval_seconds), [])
         if not bars:
@@ -1010,6 +1029,7 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
     }
     rejected_by_symbol = Counter(item["symbol"] for item in portfolio_rejections)
     return {
+        "preload": preloaded.summary if preloaded is not None else None,
         "net_definition": (
             "gross is before costs; partial_net applies available cost components but has excluded "
             "or estimated fields; fully_net is permitted only when every required cost field is verified "
