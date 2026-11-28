@@ -375,10 +375,11 @@ def _synthetic_warmup_bars(
     profile: str,
     sessions: int,
 ) -> tuple[list[Bar], datetime]:
-    """Create causal, deterministic history before the supplied dataset.
+    """Create synthetic prior sessions by bootstrapping the first supplied session.
 
-    Supplied bars are the only bars eligible to open trades. Warmup bars exist only to satisfy
-    prior-session indicators such as slot-RVOL, ATR, 15m/30m context and swing confirmation.
+    The supplied data remains the only tradable period. Warmup is derived from the supplied
+    market's actual intraday return, range and volume shape so indicator history resembles the
+    dataset instead of a flat placeholder series.
     """
     if sessions <= 0 or not bars:
         return bars, bars[0].bar_start if bars else datetime.now(UTC)
@@ -391,22 +392,18 @@ def _synthetic_warmup_bars(
     timezone, session_open, session_close = MARKET_SESSIONS.get(
         profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
     )
-    first_local = _local_dt(first.bar_start, timezone)
-    first_session = first_local.date()
+    first_session = _local_dt(first.bar_start, timezone).date()
 
-    template = []
-    for bar in bars:
-        if _local_dt(bar.bar_start, timezone).date() != first_session:
-            break
-        template.append(bar)
+    # Only the first supplied session is used to construct history. This avoids looking ahead
+    # into later test days while preserving the actual intraday behavior seen on day 1.
+    template = [
+        bar for bar in bars
+        if _local_dt(bar.bar_start, timezone).date() == first_session
+    ]
     if not template:
         return bars, first.bar_start
 
-    template_open = template[0].open
-    avg_volume = sum((bar.volume for bar in template), Decimal(0)) / Decimal(len(template))
-    avg_range = sum((bar.high - bar.low for bar in template), Decimal(0)) / Decimal(len(template))
-
-    prior_dates = []
+    prior_dates: list[Any] = []
     cursor = first_session
     while len(prior_dates) < sessions:
         cursor = cursor - timedelta(days=1)
@@ -414,8 +411,27 @@ def _synthetic_warmup_bars(
             prior_dates.append(cursor)
     prior_dates.reverse()
 
-    warmup = []
-    previous_close = template_open
+    # Build normalized intraday moves from the real first session. Replaying these moves at
+    # different price levels preserves trend/pullback/range structure without copying prices.
+    normalized: list[tuple[Decimal, Decimal, Decimal, Decimal, Decimal]] = []
+    previous = template[0].open
+    for bar in template:
+        if previous <= 0 or bar.open <= 0:
+            continue
+        open_factor = bar.open / previous
+        close_factor = bar.close / bar.open
+        high_factor = bar.high / bar.open
+        low_factor = bar.low / bar.open
+        normalized.append((open_factor, close_factor, high_factor, low_factor, bar.volume))
+        previous = bar.close
+
+    if not normalized:
+        return bars, first.bar_start
+
+    base_price = template[0].open
+    warmup: list[Bar] = []
+    previous_close = base_price
+
     for session_index, session_date in enumerate(prior_dates):
         if session_open is None:
             local_start = datetime.combine(session_date, time(0, 0), tzinfo=_zone(timezone))
@@ -425,26 +441,30 @@ def _synthetic_warmup_bars(
             local_end = datetime.combine(session_date, session_close, tzinfo=_zone(timezone))
             count = int((local_end - local_start) / step)
 
+        # Small deterministic session-level scale keeps synthetic days distinct while remaining
+        # within the realized volatility/volume envelope of the supplied first day.
+        session_price_scale = Decimal("1") + Decimal(str(((session_index % 5) - 2) * 0.0007))
+        session_volume_scale = Decimal("1") + Decimal(str(((session_index * 7) % 9 - 4) * 0.035))
+
         for j in range(count):
-            source = template[j % len(template)]
-            drift = Decimal("1") + Decimal(str(((session_index % 5) - 2) * 0.00012))
-            shape = source.close / template_open if template_open > 0 else Decimal(1)
-            close = template_open * shape * drift
-            if j == 0:
-                close = previous_close * (
-                    Decimal("1") + Decimal(str((session_index - sessions / 2) * 0.00008))
-                )
-            spread = max(avg_range * Decimal("0.35"), abs(close) * Decimal("0.00015"))
-            open_px = previous_close
-            high = max(open_px, close) + spread
-            low = max(Decimal("0.00000001"), min(open_px, close) - spread)
-            volume = max(
-                Decimal(1),
-                avg_volume * (Decimal("1") + Decimal(str(((j % 7) - 3) * 0.025))),
+            open_factor, close_factor, high_factor, low_factor, source_volume = normalized[j % len(normalized)]
+
+            open_px = previous_close * open_factor * session_price_scale
+            close_px = open_px * close_factor
+            high_px = max(open_px, close_px) * max(
+                Decimal("1"), high_factor / max(Decimal("1"), close_factor)
             )
+            low_px = min(open_px, close_px) * min(
+                Decimal("1"), low_factor / min(Decimal("1"), close_factor)
+            )
+
+            # Preserve the actual volume curve and scale the whole synthetic session modestly.
+            volume = max(Decimal(1), source_volume * session_volume_scale)
             start = (local_start + j * step).astimezone(UTC)
-            warmup.append(Bar(start, start + step, open_px, high, low, close, volume, 0))
-            previous_close = close
+            warmup.append(
+                Bar(start, start + step, open_px, high_px, low_px, close_px, volume, 0)
+            )
+            previous_close = close_px
 
     return warmup + bars, first.bar_start
 
@@ -1160,7 +1180,7 @@ def run_dataset(directory: str | Path,
         "synthetic_warmup": {
             "enabled": synthetic_warmup_sessions > 0,
             "sessions": synthetic_warmup_sessions,
-            "purpose": "indicator history only; entries are disabled before the first supplied bar",
+            "purpose": "indicator history only; entries are disabled before the first supplied bar; synthetic sessions bootstrap the first supplied session shape",
             "per_symbol": warmup_summary,
         },
         "portfolio_capital": str(start_equity),
