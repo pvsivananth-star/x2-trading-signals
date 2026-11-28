@@ -527,8 +527,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if required_net_room is not None:
                 notional = filled_qty * entry_px
                 known_roundtrip_cost = (
-                    entry_costs(cost_values, filled_qty, entry_px)
-                    + exit_costs(cost_values, filled_qty, target)
+                    entry_costs(cost_values, filled_qty, entry_px, "long" if side > 0 else "short")
+                    + exit_costs(cost_values, filled_qty, target, "long" if side > 0 else "short")
                 ) if costs_applicable else Decimal(0)
                 known_cost_pct = known_roundtrip_cost / notional if notional > 0 else Decimal(0)
                 configured_roundtrip = Decimal(str(getattr(engine, "roundtrip_cost", "0.0010")))
