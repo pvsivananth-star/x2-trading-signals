@@ -32,9 +32,9 @@ from app.regime import Regime
 FIXTURE = Path(__file__).resolve().parents[2] / "data" / "fixtures" / "synthetic_ci"
 
 
-def _bar(minute: int, o: str, h: str, l: str, c: str) -> Bar:
+def _bar(minute: int, o: str, h: str, low: str, c: str) -> Bar:
     start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC) + timedelta(minutes=minute)
-    return Bar(start, start + timedelta(minutes=1), Decimal(o), Decimal(h), Decimal(l), Decimal(c), Decimal(100), 1)
+    return Bar(start, start + timedelta(minutes=1), Decimal(o), Decimal(h), Decimal(low), Decimal(c), Decimal(100), 1)
 
 
 class SessionTimingTests(unittest.TestCase):
@@ -280,8 +280,12 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summarize([], Decimal(1000)), {"trades": 0})
 
     def test_profit_factor_and_drawdown(self):
-        t = lambda pnl: Trade("X", "long", Decimal(1), datetime(2026, 1, 1, tzinfo=UTC), Decimal(1),
-                              datetime(2026, 1, 1, tzinfo=UTC), Decimal(1), "T", Decimal(1), pnl, None, None, None)
+        def t(pnl):
+            return Trade(
+                "X", "long", Decimal(1), datetime(2026, 1, 1, tzinfo=UTC), Decimal(1),
+                datetime(2026, 1, 1, tzinfo=UTC), Decimal(1), "T", Decimal(1), pnl,
+                None, None, None,
+            )
         out = summarize([t(Decimal(30)), t(Decimal(-10)), t(Decimal(-10))], Decimal(100))["gross"]
         self.assertEqual(out["trades"], 3)
         self.assertAlmostEqual(out["profit_factor"], 1.5)
