@@ -20,13 +20,13 @@ from __future__ import annotations
 import csv
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from app.backtest.bars import Bar
+from app.backtest.bars import Bar, aggregate_bars
 from app.costs import CostBlockedError, _field, load_costs
 from app.features import (
     DEFAULT_SESSION_CLOSE,
@@ -37,6 +37,7 @@ from app.features import (
     _session_context,
     _zone,
     causal_atr,
+    causal_confirmed_swing,
     feature_snapshot,
 )
 from app.policy import TradingPolicy
@@ -280,9 +281,39 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         "session_open": session_open,
         "session_close": session_close,
     }
-    snaps: list[FeatureSnapshot] = [
-        feature_snapshot(bars[: i + 1], bars[i].bar_end, **session) for i in range(len(bars))
-    ]
+    source_interval_seconds = int((bars[0].bar_end - bars[0].bar_start).total_seconds()) if bars else 0
+    bars_15m = aggregate_bars(bars, 15 * 60, source_interval_seconds) if source_interval_seconds else []
+    bars_30m = aggregate_bars(bars, 30 * 60, source_interval_seconds) if source_interval_seconds else []
+    swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
+    snaps: list[FeatureSnapshot] = []
+    for i, bar in enumerate(bars):
+        base = feature_snapshot(bars[: i + 1], bar.bar_end, **session)
+        complete_15m = [item for item in bars_15m if item.bar_end <= bar.bar_end]
+        complete_30m = [item for item in bars_30m if item.bar_end <= bar.bar_end]
+        context_time = complete_30m[-1].bar_end if complete_30m else None
+        context_regime = (
+            causal_regime(complete_30m, bar.bar_end, **session)
+            if len(complete_30m) >= 6 else None
+        )
+        atr_15m = causal_atr(complete_15m, bar.bar_end, **session) if complete_15m else None
+        swing_high, swing_low, swing_direction, swing_size_atr, swing_confirmed = causal_confirmed_swing(
+            complete_15m,
+            bar.bar_end,
+            atr_15m,
+            left_bars=int(swing_cfg.get("min_candles", 3)),
+            confirmation_bars=int(swing_cfg.get("confirmation_bars", 2)),
+            min_atr_mult=Decimal(str(swing_cfg.get("min_atr_mult", "0.60"))),
+        )
+        snaps.append(replace(
+            base,
+            context_regime=context_regime.value if context_regime is not None else None,
+            context_timestamp=context_time,
+            swing_15m_high=swing_high,
+            swing_15m_low=swing_low,
+            swing_15m_direction=swing_direction,
+            swing_15m_size_atr=swing_size_atr,
+            swing_15m_confirmed=swing_confirmed,
+        ))
     trades: list[Trade] = []
     pos: Position | None = None
     pending: tuple[int, Decimal, Decimal, Decimal, str, Decimal] | None = None
@@ -358,7 +389,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     exited_this_bar = True
             pending = None
         if pos is not None:
-            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
+            regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
@@ -372,7 +403,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 pos = None
                 exited_this_bar = True
         elif pos is None and pending is None and not exited_this_bar:
-            regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
+            regime = Regime(snaps[i].context_regime) if snaps[i].context_regime else Regime.CHOP_DAY
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
                 stale_feed_seconds=0, stale_threshold_seconds=10,
