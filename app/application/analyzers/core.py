@@ -35,7 +35,7 @@ def _snapshot(ctx: AnalyzerContext, tf: str) -> FeatureSnapshot | None:
 class TrendAnalyzer:
     def analyze(self, ctx: AnalyzerContext) -> AnalyzerResult:
         snaps={tf:_snapshot(ctx,tf) for tf in ("1W","1d","30m","15m","5m")}
-        values={tf:(s.trend if s else "unknown") for tf,s in snaps.items()}
+        values={tf:(s.trend if s else "unknown") for tf,s in snaps.items()}\n        for tf in ("1W", "1d"):\n            bars=[b for b in ctx.bars_by_timeframe.get(tf, ()) if b.bar_end <= ctx.timestamp]\n            if len(bars) >= 2:\n                values[tf] = "up" if bars[-1].close > bars[0].close else "down" if bars[-1].close < bars[0].close else "sideways"
         lt=values["1W"]; daily=values["1d"]; short=tuple(values[x] for x in ("30m","15m","5m"))
         passed=lt in {"up","down"} or any(x in {"up","down"} for x in short)
         return AnalyzerResult("trend",ctx.timestamp,{"timeframes":values,"long_term":lt,"daily":daily,"short_term":short},passed,() if passed else ("trend_unavailable",))
@@ -45,7 +45,7 @@ class VolumeAnalyzer:
         snap=_snapshot(ctx,"5m") or _snapshot(ctx,"15m")
         if snap is None: return AnalyzerResult("volume",ctx.timestamp,{},False,("volume_unavailable",))
         r=snap.rvol; passed=r is not None and r>0
-        return AnalyzerResult("volume",ctx.timestamp,{"rvol":r,"impulse_rvol":snap.impulse_rvol,"volume":snap.last_close},passed,() if passed else ("rvol_unavailable",))
+        return AnalyzerResult("volume",ctx.timestamp,{"rvol":r,"impulse_rvol":snap.impulse_rvol},passed,() if passed else ("rvol_unavailable",))
 
 class RelativeStrengthAnalyzer:
     def analyze(self, ctx: AnalyzerContext) -> AnalyzerResult:
@@ -70,7 +70,7 @@ class DMAAnalyzer:
     """Causal moving-average alignment; returns explicit values rather than a boolean only."""
     def analyze(self, ctx: AnalyzerContext) -> AnalyzerResult:
         bars=list(ctx.bars_by_timeframe.get("30m",()))
-        if len(bars)<20: return AnalyzerResult("dma",ctx.timestamp,{},False,("dma_history_unavailable",))
+        if len(bars)<50: return AnalyzerResult("dma",ctx.timestamp,{},False,("dma_history_unavailable",))
         closes=[b.close for b in bars if b.bar_end<=ctx.timestamp]
         def sma(n:int)->Decimal|None:
             if len(closes)<n:return None
