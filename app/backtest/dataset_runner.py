@@ -55,6 +55,7 @@ from app.strategy import ConfluenceV1
 DEFAULT_PROFILE = {
     "SIM-EQ": "US_EQUITIES",
     "SIM-COIN": "CRYPTO_MAJORS",
+    "AAPL": "US_EQUITIES",
     "SPY": "US_EQUITIES",
     "NVDA": "US_EQUITIES",
     "SPX": "US_EQUITIES",
