@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path\n\nfrom .domain.runtime import RuntimeMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +29,7 @@ class Settings:
         venue_symbol = os.getenv("VENUE_SYMBOL") or None
         canonical_symbol = os.getenv("CANONICAL_SYMBOL") or None
         return cls(
-            database_url=os.getenv("DATABASE_URL") or None,
+            mode=RuntimeMode.PAPER if mode == "demo" else RuntimeMode(mode if mode != "prod" else "live_disabled"),\n            database_url=os.getenv("DATABASE_URL") or None,
             archive_root=Path(os.getenv("ARCHIVE_ROOT", "./data")),
             migrations_dir=Path(os.getenv("MIGRATIONS_DIR", "./migrations")),
             provider=provider,
