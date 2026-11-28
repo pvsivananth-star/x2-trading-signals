@@ -20,18 +20,12 @@ MANIFEST="$OUT/manifest.json"
 BARS="$OUT/bars.csv"
 INSTRUMENTS="$OUT/instruments.csv"
 
-DATASET_READY=false
-if [[ -s "$MANIFEST" && -f "$BARS" && -f "$INSTRUMENTS" ]]; then
-  DATASET_READY=true
-elif [[ -n "$(find "$OUT" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-  echo "ERROR: output directory is non-empty but not a complete dataset."
-  echo "Expected manifest.json, bars.csv and instruments.csv. Nothing was changed."
-  exit 1
-fi
+# The downloader supports --append for both an empty directory and an
+# existing dataset. It also reconstructs a missing manifest from canonical CSVs.
 
 is_downloaded() {
   local symbol="$1"
-  [[ "$DATASET_READY" == true ]] || return 1
+  [[ -s "$MANIFEST" ]] || return 1
   python - "$MANIFEST" "$symbol" <<'PY'
 import json
 import sys
@@ -68,10 +62,7 @@ for INDEX in "\${!SYMBOLS[@]}"; do
     continue
   fi
 
-  CMD=(python -m app.cli download-free-data --symbol "$SYMBOL" --days "$DAYS" --out "$OUT")
-  if [[ "$DATASET_READY" == true ]]; then
-    CMD+=(--append)
-  fi
+  CMD=(python -m app.cli download-free-data --symbol "$SYMBOL" --days "$DAYS" --out "$OUT" --append)
 
   if "\${CMD[@]}"; then
     SUCCESS+=("$SYMBOL")
@@ -81,9 +72,6 @@ for INDEX in "\${!SYMBOLS[@]}"; do
     echo "FAILED: $SYMBOL"
   fi
 
-  if [[ -s "$MANIFEST" && -f "$BARS" && -f "$INSTRUMENTS" ]]; then
-    DATASET_READY=true
-  fi
   sleep "$PAUSE_SECONDS"
 done
 
