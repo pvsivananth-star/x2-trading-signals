@@ -20,12 +20,12 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from app.backtest.bars import Bar, aggregate_bars
 from app.backtest.simulator import OrderSimulator, SimulationConfig
