@@ -447,9 +447,6 @@ class IntrabarExitTests(unittest.TestCase):
                 self.strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
                 self.entered = False
 
-            def __init__(self):
-                self.entered = False
-
             def evaluate(self, **kwargs):
                 if not self.entered and kwargs["snapshot"].atr is not None:
                     self.entered = True
