@@ -29,7 +29,7 @@ class Settings:
         venue_symbol = os.getenv("VENUE_SYMBOL") or None
         canonical_symbol = os.getenv("CANONICAL_SYMBOL") or None
         return cls(
-            mode=RuntimeMode.PAPER if mode == "demo" else RuntimeMode(mode if mode != "prod" else "live_disabled"),\n            database_url=os.getenv("DATABASE_URL") or None,
+            mode=RuntimeMode.LIVE_DISABLED if mode == "prod" else RuntimeMode(mode),\n            database_url=os.getenv("DATABASE_URL") or None,
             archive_root=Path(os.getenv("ARCHIVE_ROOT", "./data")),
             migrations_dir=Path(os.getenv("MIGRATIONS_DIR", "./migrations")),
             provider=provider,
