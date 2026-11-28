@@ -17,6 +17,7 @@ Legend: [ ] not started · [~] in progress · [x] complete
 ## 1. Domain foundation
 
 - [ ] Create explicit domain packages for instruments, market data, regimes, signals, trades, portfolio, risk, orders, fills and audit events.
+- [ ] Model Long-Term and Daily Trading portfolios as separate risk/accounting contexts with an account-wide hard-risk layer.
 - [ ] Define immutable domain entities/value objects and reason codes.
 - [ ] Define canonical event envelope with event ID, timestamp, correlation ID, causation ID, version and provenance.
 - [ ] Define domain/application ports independent of vendor SDKs and persistence.
@@ -42,6 +43,12 @@ Legend: [ ] not started · [~] in progress · [x] complete
 - [ ] Implement Signal Manager with SETUP versus TRIGGER separation.
 - [ ] Preserve the existing confluence rules while moving them behind strategy interfaces.
 - [ ] Make every candidate explainable with immutable inputs, thresholds and rejection reasons.
+- [ ] Implement one isolated Strategy Manager instance per strategy.
+- [ ] Add Strategy Registry/Portfolio Strategy Orchestrator without embedding strategy logic.
+- [ ] Implement initial Long-Term strategies: Weekly Trend Following and Weekly Breakout/Pullback.
+- [ ] Implement initial Daily strategies: MTF Trend Pullback Continuation, VWAP/Relative-Strength Continuation and Opening-Range Breakout with Trend Filter.
+- [ ] Add explicit strategy-to-portfolio assignments, independent configuration/versioning and performance attribution.
+- [ ] Prevent strategy-to-strategy state mutation and portfolio risk-budget borrowing.
 - [ ] Add deterministic signal IDs and deduplication.
 - [ ] Ensure no single indicator can create a trade.
 - [ ] Add empirical, configuration-driven tolerance handling for Fib/DMA proximity.
@@ -52,6 +59,8 @@ Legend: [ ] not started · [~] in progress · [x] complete
 
 - [ ] Implement Trade Manager and TradeIntent lifecycle.
 - [ ] Implement central Portfolio Controller.
+- [ ] Enforce separate Long-Term and Daily Trading capital/risk budgets plus account-wide hard limits.
+- [ ] Implement portfolio-specific holding-period and exit policies; long-term positions must not be liquidated by short-term signals alone.
 - [ ] Implement independent Risk Manager.
 - [ ] Add pre-trade risk decision with entry, stop, target/move room, size, max loss, slippage and portfolio impact.
 - [ ] Enforce position, concentration, correlation, liquidity, spread and daily-loss limits.
@@ -132,4 +141,4 @@ A phase is not complete merely because code exists. It must have automated tests
 
 **Clean baseline -> domain contracts -> actor boundaries -> signal pipeline -> portfolio/risk -> execution -> unified backtest/paper path.**
 
-Do not tune strategy thresholds or add more indicators while the architectural boundaries are still being established.
+Do not tune strategy thresholds or add more indicators while the architectural boundaries are still being established. After boundaries are stable, validate each strategy independently and in portfolio combinations using walk-forward/out-of-sample testing before enabling it.
