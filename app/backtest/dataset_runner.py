@@ -468,6 +468,72 @@ def _synthetic_warmup_bars(
 
 
 
+def _synthetic_warmup_ready(bars: list[Bar], profile: str, engine: ConfluenceV1) -> bool:
+    """Return whether the supplied strategy state is ready for evaluation.
+
+    Readiness is derived from the strategy's configured feature requirements. Synthetic bars
+    are inspected only as warmup input; they can never generate trades.
+    """
+    if not bars:
+        return False
+    session_timezone, session_open, session_close = MARKET_SESSIONS.get(
+        profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+    )
+    volume_cfg = getattr(engine, "strategy", {}).get("volume", {})
+    slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
+    slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
+    timeframe_cfg = getattr(engine, "strategy", {}).get("timeframes", {})
+    require_context = bool(timeframe_cfg.get("require_completed_context", True))
+    discovery_minutes = int(timeframe_cfg.get("discovery_mins", 30))
+    swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
+    source_interval_seconds = int((bars[0].bar_end - bars[0].bar_start).total_seconds())
+    if source_interval_seconds <= 0:
+        return False
+
+    last = bars[-1]
+    snapshot = feature_snapshot(
+        bars, last.bar_end, session_timezone=session_timezone,
+        session_open=session_open, session_close=session_close,
+        slot_rvol_lookback_sessions=slot_lookback,
+        slot_rvol_min_sessions=slot_min_sessions,
+    )
+    bars_15m = aggregate_bars(bars, 15 * 60, source_interval_seconds)
+    bars_context = aggregate_bars(bars, discovery_minutes * 60, source_interval_seconds)
+    complete_15m = [item for item in bars_15m if item.bar_end <= last.bar_end]
+    complete_context = [item for item in bars_context if item.bar_end <= last.bar_end]
+    atr_15m = causal_atr(complete_15m, last.bar_end, session_timezone=session_timezone,
+                         session_open=session_open, session_close=session_close)
+    swing_high, swing_low, swing_direction, swing_size_atr, swing_confirmed = causal_confirmed_swing(
+        complete_15m,
+        last.bar_end,
+        atr_15m,
+        left_bars=int(swing_cfg.get("min_candles", 3)),
+        confirmation_bars=int(swing_cfg.get("confirmation_bars", 2)),
+        min_atr_mult=Decimal(str(swing_cfg.get("min_atr_mult", "0.60"))),
+    )
+    del swing_high, swing_low, swing_direction, swing_size_atr
+    rvol_ready = snapshot.rvol is not None and snapshot.slot_rvol_samples >= slot_min_sessions
+    context_ready = not require_context or len(complete_context) >= 6
+    return rvol_ready and context_ready and atr_15m is not None and swing_confirmed
+
+
+def _synthetic_warmup_until_ready(
+    bars: list[Bar],
+    profile: str,
+    engine: ConfluenceV1,
+) -> tuple[list[Bar], datetime, int]:
+    """Generate complete synthetic sessions until the strategy declares itself warm."""
+    if not bars:
+        return bars, datetime.now(UTC), 0
+    sessions = 0
+    while True:
+        sessions += 1
+        simulation_bars, simulation_start = _synthetic_warmup_bars(bars, profile, sessions)
+        synthetic = simulation_bars[:-len(bars)] if bars else simulation_bars
+        if synthetic and _synthetic_warmup_ready(synthetic, profile, engine):
+            return simulation_bars, simulation_start, sessions
+
+
 def _slot_rvol_unavailable_reason(
     bars: list[Bar],
     timestamp: datetime,
@@ -1099,7 +1165,7 @@ def _apply_portfolio_constraints(
 
 
 def run_dataset(directory: str | Path,
-                synthetic_warmup_sessions: int = 10, interval_seconds: int = 300, start_equity: Decimal = Decimal(100000),
+                synthetic_warmup: bool = True, interval_seconds: int = 300, start_equity: Decimal = Decimal(100000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
                 markets_path: str | Path = "config/markets_17.yaml",
@@ -1203,23 +1269,24 @@ def run_dataset(directory: str | Path,
             start_equity * allocation_pct / Decimal(active_counts[profile])
         )
 
-    if synthetic_warmup_sessions < 0:
-        raise ValueError("synthetic_warmup_sessions cannot be negative")
-
     results = []
     warmup_summary: dict[str, Any] = {}
     for symbol, profile, bars in active_instruments:
         symbol_equity = symbol_budgets[symbol]
-        simulation_bars, simulation_start = _synthetic_warmup_bars(
-            bars, profile, synthetic_warmup_sessions
-        )
-        if synthetic_warmup_dir is not None and synthetic_warmup_sessions > 0:
+        if synthetic_warmup:
+            simulation_bars, simulation_start, warmup_sessions = _synthetic_warmup_until_ready(
+                bars, profile, engine
+            )
+        else:
+            simulation_bars, simulation_start, warmup_sessions = bars, bars[0].bar_start, 0
+        synthetic_bars = simulation_bars[:-len(bars)] if bars else simulation_bars
+        if synthetic_warmup_dir is not None and synthetic_bars:
             warmup_path = Path(synthetic_warmup_dir) / symbol.replace("/", "_").replace("=", "_")
             warmup_path.parent.mkdir(parents=True, exist_ok=True)
             with warmup_path.with_suffix(".csv").open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["bar_start", "bar_end", "open", "high", "low", "close", "volume", "synthetic"])
-                for warmup_bar in simulation_bars[:len(simulation_bars) - len(bars)]:
+                for warmup_bar in synthetic_bars:
                     writer.writerow([
                         warmup_bar.bar_start.isoformat(), warmup_bar.bar_end.isoformat(),
                         str(warmup_bar.open), str(warmup_bar.high), str(warmup_bar.low),
@@ -1233,15 +1300,15 @@ def run_dataset(directory: str | Path,
         result["bars"] = len(bars)
         result["input_bars"] = len(bars)
         result["simulation_bars_including_synthetic_warmup"] = len(simulation_bars)
-        result["synthetic_warmup_sessions"] = synthetic_warmup_sessions
-        result["synthetic_warmup_bars"] = len(simulation_bars) - len(bars)
+        result["synthetic_warmup_sessions"] = warmup_sessions
+        result["synthetic_warmup_bars"] = len(synthetic_bars)
         result["first_supplied_bar"] = bars[0].bar_start.isoformat()
         result["synthetic_warmup_evidence"] = "synthetic_indicator_warmup_only"
         result["start_equity"] = symbol_equity
         result["capital_allocation"] = symbol_equity
         warmup_summary[symbol] = {
-            "synthetic_sessions": synthetic_warmup_sessions,
-            "synthetic_bars": len(simulation_bars) - len(bars),
+            "synthetic_sessions": warmup_sessions,
+            "synthetic_bars": len(synthetic_bars),
             "first_supplied_bar": bars[0].bar_start.isoformat(),
         }
         results.append(result)
@@ -1264,9 +1331,9 @@ def run_dataset(directory: str | Path,
         "dataset": str(directory),
         "interval_seconds": interval_seconds,
         "synthetic_warmup": {
-            "enabled": synthetic_warmup_sessions > 0,
-            "sessions": synthetic_warmup_sessions,
-            "purpose": "indicator history only; entries are disabled before the first supplied bar; synthetic sessions bootstrap the first supplied session shape",
+            "enabled": synthetic_warmup,
+            "sessions": "until_strategy_ready" if synthetic_warmup else 0,
+            "purpose": "indicator history only; entries are disabled before the first supplied bar; synthetic sessions are generated until the configured strategy feature state is ready",
             "per_symbol": warmup_summary,
             "materialized_dir": str(synthetic_warmup_dir) if synthetic_warmup_dir is not None else None,
         },
