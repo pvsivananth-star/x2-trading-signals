@@ -16,6 +16,7 @@ from app.backtest.dataset_runner import (
     Trade,
     _commission,
     _cost_model,
+    _portfolio_entry_cost_reserve,
     _intrabar_exit,
     _safe_event_risk,
     causal_regime,
@@ -64,6 +65,16 @@ class SessionTimingTests(unittest.TestCase):
             {"SPY": "US_EQUITIES", "GLD": "US_COMMODITIES", "BTC-USD": "CRYPTO_MAJORS"},
         )
         self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
+
+    def test_portfolio_cash_reserve_uses_market_buffer_without_double_charging_pnl(self):
+        costs = load_costs("config/costs.yaml")
+        trade = Trade("SPY", "long", Decimal(100), datetime(2026, 11, 2, 14, 30, tzinfo=UTC),
+                      Decimal(100), datetime(2026, 11, 2, 14, 35, tzinfo=UTC), Decimal(101),
+                      "TARGET_HIT", Decimal(100), Decimal(100), None, None, None)
+        reserve = _portfolio_entry_cost_reserve(
+            trade, {"est_roundtrip_cost_pct": 0.001}, costs, "US_EQUITIES", False
+        )
+        self.assertEqual(reserve, Decimal("10.000"))
 
     def test_cost_model_uses_etf_spread_profile_for_qqq_and_iwm(self):
         costs = load_costs("config/costs.yaml")
