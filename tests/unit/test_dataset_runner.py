@@ -186,7 +186,8 @@ class CostRuleTests(unittest.TestCase):
         self.assertNotIn("commission_per_share", excluded)
         result = run_symbol("GLD", [], "US_COMMODITIES", None, None, self.costs,
                             Decimal(25000), Decimal("0.0025"), False)
-        self.assertTrue(result["net_available"])
+        self.assertFalse(result["net_available"])
+        self.assertTrue(result["excluded_cost_fields"])
 
     def test_whole_share_profiles_floor_but_crypto_remains_fractional(self):
         class EntryOnceEngine:
