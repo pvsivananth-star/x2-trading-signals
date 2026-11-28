@@ -386,12 +386,12 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 else:
                     prior = bars[i - 1]
                     exit_time, exit_price, reason = prior.bar_end, prior.close, "MAX_HOLD_TIME_DATA_GAP"
-                trades.append(_close(symbol, pos, exit_time, exit_price, reason, cost_values, net_available))
+                trades.append(_close(symbol, pos, exit_time, exit_price, reason, cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
             elif bar.bar_end == deadline:
                 # This bar closes exactly at the deadline, so its close is a valid time-stop fill.
-                trades.append(_close(symbol, pos, deadline, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                trades.append(_close(symbol, pos, deadline, bar.close, "MAX_HOLD_TIME", cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
             elif bar.bar_end > deadline:
@@ -399,7 +399,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 # which may include post-deadline prices; exit at the last completed close.
                 prior = bars[i - 1] if i > 0 else bar
                 trades.append(_close(symbol, pos, prior.bar_end, prior.close,
-                                     "MAX_HOLD_TIME_BAR_RESOLUTION", cost_values, net_available))
+                                     "MAX_HOLD_TIME_BAR_RESOLUTION", cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
             else:
@@ -410,14 +410,14 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 hit = _intrabar_exit(pos, bar)
                 if hit is not None:
                     price, reason = hit
-                    trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
+                    trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, costs_applicable))
                     pos = None
                     exited_this_bar = True
                 else:
                     held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
                     if (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
                             and pos.best_favorable_r < stagnation_min_favorable_r):
-                        trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
+                        trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, costs_applicable))
                         pos = None
                         exited_this_bar = True
         if pos is None and pending is not None:
@@ -463,7 +463,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             hit = _intrabar_exit(pos, bar)
             if hit is not None:
                 price, reason = hit
-                trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
+                trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
             pending = None
@@ -478,7 +478,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 position_stop=pos.stop, position_target=pos.target,
             )
             if sig.action.startswith("exit_"):
-                trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
+                trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, costs_applicable))
                 pos = None
                 exited_this_bar = True
         elif pos is None and pending is None and not exited_this_bar:
@@ -518,7 +518,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
     if pos is not None:  # close any open position at the last bar
         last = bars[-1]
-        trades.append(_close(symbol, pos, last.bar_end, last.close, "END_OF_DATA", cost_values, net_available))
+        trades.append(_close(symbol, pos, last.bar_end, last.close, "END_OF_DATA", cost_values, costs_applicable))
 
     return {"symbol": symbol, "profile": profile, "trades": trades,
             "net_available": net_available, "cost_status": coverage_status,
@@ -528,9 +528,9 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
 
 def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reason: str,
-           v: dict[str, Any], net_available: bool) -> Trade:
+           v: dict[str, Any], costs_applicable: bool) -> Trade:
     gross = (price - pos.entry_price) * pos.qty * pos.side
-    if pos.entry_cost is not None:
+    if costs_applicable and pos.entry_cost is not None:
         cost = pos.entry_cost + exit_costs(v, pos.qty, price)
         net = gross - cost
         r = net / pos.risk_amount if pos.risk_amount else None
@@ -540,7 +540,8 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
         r = gross / pos.risk_amount if pos.risk_amount else None
     holding_minutes = Decimal(str((exit_time - pos.entry_time).total_seconds())) / Decimal(60)
     return Trade(symbol, "long" if pos.side > 0 else "short", pos.qty, pos.entry_time, pos.entry_price,
-                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes, pos.entry_regime, pos.entry_fill_status, pos.cost_status)
+                 exit_time, price, reason, pos.risk_amount, gross, cost, net, r, holding_minutes,
+                 pos.entry_regime, pos.entry_fill_status, pos.cost_status)
 
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
