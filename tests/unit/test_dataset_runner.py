@@ -186,6 +186,21 @@ class CostRuleTests(unittest.TestCase):
         self.assertEqual(summarize([net], Decimal(100))["cost_status"], "fully_net")
         self.assertEqual(summarize([gross, net], Decimal(100))["cost_status"], "partial_net")
 
+    def test_symbol_specific_spread_does_not_reuse_spy_spread(self):
+        _values, excluded = _cost_model(self.costs, "US_EQUITIES", False, "AAPL")
+        self.assertIn("spread_pct_full_single_stocks", excluded)
+        _gld, gld_excluded = _cost_model(self.costs, "US_COMMODITIES", False, "GLD")
+        self.assertIn("spread_pct_full_gld", gld_excluded)
+        _uso, uso_excluded = _cost_model(self.costs, "US_COMMODITIES", False, "USO")
+        self.assertIn("spread_pct_full_uso", uso_excluded)
+
+    def test_allowed_slippage_estimate_is_still_partial_net(self):
+        result = run_symbol("SPY", [], "US_EQUITIES", None, None, self.costs,
+                            Decimal(25000), Decimal("0.0025"), True)
+        self.assertFalse(result["net_available"])
+        self.assertEqual(result["cost_status"], "partial_net")
+        self.assertIn("slippage_pct_per_side", result["estimated_cost_fields"])
+
     def test_unknown_profile_runs_with_default_session(self):
         engine = SimpleNamespace(evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
         result = run_symbol("UNKNOWN", [_bar(0, "100", "101", "99", "100")], "UNKNOWN",
@@ -600,6 +615,11 @@ class EndToEndSyntheticTests(unittest.TestCase):
         cls.out_dir = tempfile.mkdtemp()
         cls.result = run_dataset(FIXTURE, interval_seconds=300, start_equity=Decimal(25000), baseline_scope=False)
         cls.trades = cls.result.pop("_trades")
+
+    def test_shared_portfolio_budget_is_reported(self):
+        portfolio = self.result["portfolio"]
+        self.assertEqual(portfolio["capital"], "25000")
+        self.assertEqual(portfolio["candidate_trades"], portfolio["accepted_trades"] + portfolio["rejected_trades"])
 
     def test_both_symbols_run_and_crypto_net_is_blocked(self):
         self.assertEqual(set(self.result["per_symbol"]), {"SIM-EQ", "SIM-COIN"})
