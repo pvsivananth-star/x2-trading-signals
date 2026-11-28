@@ -57,6 +57,8 @@ class FeatureSnapshot:
     swing_15m_direction: str | None = None
     swing_15m_size_atr: Decimal | None = None
     swing_15m_confirmed: bool = False
+    rolling_rvol: Decimal | None = None
+    slot_rvol_samples: int = 0
 
 @dataclass(slots=True)
 class _SessionContext:
@@ -215,6 +217,61 @@ def causal_rvol(
         return Decimal(1) if current > 0 else None
     average = sum((bar.volume for bar in history), Decimal(0)) / Decimal(len(history))
     return None if average <= 0 else current / average
+
+
+
+def causal_slot_rvol(
+    bars: list[Bar],
+    timestamp: datetime,
+    *,
+    session_timezone: str = DEFAULT_SESSION_TZ,
+    session_open: time | None = DEFAULT_SESSION_OPEN,
+    session_close: time | None = DEFAULT_SESSION_CLOSE,
+    lookback_sessions: int = 10,
+    min_sessions: int = 5,
+) -> tuple[Decimal | None, int]:
+    """Compare the latest completed bar with the same wall-clock slot in prior sessions.
+
+    The current session is excluded from the baseline. A prior session contributes at most
+    one bar, and only bars with the same local start time and duration are comparable.
+    Insufficient history returns (None, sample_count); callers must fail closed rather
+    than silently substituting rolling RVOL.
+    """
+    if lookback_sessions <= 0 or min_sessions <= 0 or min_sessions > lookback_sessions:
+        raise ValueError("invalid slot RVOL session windows")
+    eligible = bars_through(bars, timestamp)
+    if not eligible:
+        return None, 0
+    current = eligible[-1]
+    local_current = _local_dt(current.bar_start, session_timezone)
+    if session_open is not None and local_current.timetz().replace(tzinfo=None) < session_open:
+        return None, 0
+    if session_close is not None and local_current.timetz().replace(tzinfo=None) >= session_close:
+        return None, 0
+    duration = current.bar_end - current.bar_start
+    by_session: dict[date, Decimal] = {}
+    for bar in eligible[:-1]:
+        local_start = _local_dt(bar.bar_start, session_timezone)
+        if local_start.date() == local_current.date():
+            continue
+        if local_start.timetz().replace(tzinfo=None) != local_current.timetz().replace(tzinfo=None):
+            continue
+        if bar.bar_end - bar.bar_start != duration:
+            continue
+        if session_open is not None and local_start.timetz().replace(tzinfo=None) < session_open:
+            continue
+        if session_close is not None and local_start.timetz().replace(tzinfo=None) >= session_close:
+            continue
+        # If duplicate records exist for a session/slot, retain the last completed record.
+        by_session[local_start.date()] = bar.volume
+    prior_dates = sorted(by_session, reverse=True)[:lookback_sessions]
+    volumes = [by_session[day] for day in prior_dates]
+    if len(volumes) < min_sessions:
+        return None, len(volumes)
+    average = sum(volumes, Decimal(0)) / Decimal(len(volumes))
+    if average <= 0:
+        return None, len(volumes)
+    return current.volume / average, len(volumes)
 
 
 def causal_swing(
@@ -530,6 +587,8 @@ def feature_snapshot(
     session_timezone: str = DEFAULT_SESSION_TZ,
     session_open: time | None = DEFAULT_SESSION_OPEN,
     session_close: time | None = DEFAULT_SESSION_CLOSE,
+    slot_rvol_lookback_sessions: int = 10,
+    slot_rvol_min_sessions: int = 5,
 ) -> FeatureSnapshot:
     context = _session_context(bars, timestamp, session_timezone, session_open, session_close)
     session = {
@@ -554,11 +613,18 @@ def feature_snapshot(
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp, **session)
     trend, structure = causal_trend_structure(bars, timestamp, **session)
     last_close, pullback_depth = causal_pullback_depth(bars, timestamp, **session)
+    slot_rvol, slot_rvol_samples = causal_slot_rvol(
+        bars, timestamp, session_timezone=session_timezone, session_open=session_open,
+        session_close=session_close, lookback_sessions=slot_rvol_lookback_sessions,
+        min_sessions=slot_rvol_min_sessions,
+    )
     return FeatureSnapshot(
         timestamp=timestamp,
         vwap=causal_vwap(bars, timestamp, **session),
         atr=causal_atr(bars, timestamp, **session),
-        rvol=causal_rvol(bars, timestamp, _eligible_bars=context.eligible),
+        rvol=slot_rvol,
+        rolling_rvol=causal_rvol(bars, timestamp, _eligible_bars=context.eligible),
+        slot_rvol_samples=slot_rvol_samples,
         swing_high=swing_high,
         swing_low=swing_low,
         fib_382=fib_382,
