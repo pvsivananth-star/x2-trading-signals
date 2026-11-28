@@ -56,6 +56,12 @@ def _eval(engine, snap, **kwargs):
         card = _eval(engine, _snap())
         self.assertEqual(card.parameters["roundtrip_cost_estimate_pct"], "0.001")
 
+    def test_move_room_uses_known_itemized_cost_percentage_when_higher(self):
+        engine = _engine()
+        card = _eval(engine, _snap(), known_roundtrip_cost_pct=Decimal("0.003"))
+        self.assertEqual(card.parameters["roundtrip_cost_estimate_pct"], "0.003")
+        self.assertEqual(card.parameters["known_roundtrip_cost_pct"], "0.003")
+
 class ReactionZoneTests(unittest.TestCase):
     def test_zone_boundaries(self):
         self.assertEqual(classify_reaction_zone(Decimal("0.382")), "CORE_382_618")
