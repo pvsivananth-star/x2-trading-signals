@@ -286,6 +286,8 @@ def causal_confirmed_swing(
         return None, None, None, None, False
     high_index, swing_high = highs[-1]
     low_index, swing_low = lows[-1]
+    if high_index == low_index:
+        return None, None, None, None, False
     size_atr = abs(swing_high - swing_low) / atr
     direction = "up" if high_index > low_index else "down"
     confirmed = size_atr >= min_atr_mult
