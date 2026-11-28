@@ -171,6 +171,19 @@ class CostRuleTests(unittest.TestCase):
         self.assertIn("spread_pct_full", values)
         self.assertEqual(excluded, ["commission", "spread_pct_full"])
 
+    def test_summary_labels_gross_partial_and_fully_net_coverage(self):
+        from app.backtest.dataset_runner import summarize
+        base = dict(symbol="SPY", side="long", qty=Decimal(1),
+                    entry_time=datetime(2026, 11, 2, 14, 30, tzinfo=UTC),
+                    entry_price=Decimal(100), exit_time=datetime(2026, 11, 2, 14, 35, tzinfo=UTC),
+                    exit_price=Decimal(101), exit_reason="TARGET_HIT", risk_amount=Decimal(1),
+                    gross_pnl=Decimal(1), cost=None, r_multiple=Decimal(1), holding_minutes=Decimal(5))
+        gross = Trade(**base, net_pnl=None)
+        net = Trade(**{**base, "cost": Decimal("0.1")}, net_pnl=Decimal("0.9"))
+        self.assertEqual(summarize([gross], Decimal(100))["cost_status"], "gross")
+        self.assertEqual(summarize([net], Decimal(100))["cost_status"], "fully_net")
+        self.assertEqual(summarize([gross, net], Decimal(100))["cost_status"], "partial_net")
+
     def test_unknown_profile_runs_with_default_session(self):
         engine = SimpleNamespace(evaluate=lambda **_kwargs: SimpleNamespace(action="hold"))
         result = run_symbol("UNKNOWN", [_bar(0, "100", "101", "99", "100")], "UNKNOWN",
