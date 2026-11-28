@@ -54,11 +54,11 @@ markets:
       NVDA: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 
   US_COMMODITIES:
-    name: "Gold & Crude Oil (COMEX/NYMEX/SCB Metals)"
+    name: "US-listed gold and crude-oil ETF proxies (GLD / USO)"
     tier: "TIER_A_TIER_B"
     allocation_pct: 0.20
     enabled: true
-    broker_route: "IBKR_OR_SCB"
+    broker_route: "IBKR"
     cluster: "COMMODITIES"
     cluster_risk_cap: 0.0035
     min_net_moveroom_pct: 0.0035
@@ -66,8 +66,10 @@ markets:
     target_mult: 3.5    # archetype: ATR target multiple (open-space)
     est_roundtrip_cost_pct: 0.0008
     slot_rvol_min: 0.95
-    core_symbols: ["GLD", "GC=F", "USO", "CL=F"]
-    excluded_symbols: ["SLV"]
+    core_symbols: ["GLD", "USO"]
+    # Futures need separate exchange sessions, contract multipliers, margin, and fee profiles.
+    # Keep them out of this ETF-proxy baseline until those profiles are implemented.
+    excluded_symbols: ["SLV", "GC=F", "CL=F"]
     symbol_overrides:
       USO: { status: "PROBATION", min_pf: 1.25, max_risk_pct: 0.0015 }
 
