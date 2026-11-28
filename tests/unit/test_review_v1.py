@@ -1,6 +1,7 @@
 """Review v1: reaction-zone, confirmed-exit, and pre-close flatten contracts for Confluence_v1."""
 
 import unittest
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -17,7 +18,7 @@ NOW = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)
 
 
 def _engine() -> ConfluenceV1:
-    return ConfluenceV1(STRATEGY, TradingPolicy(MARKETS, "policy-test"))
+    return ConfluenceV1(deepcopy(STRATEGY), TradingPolicy(MARKETS, "policy-test"))
 
 
 def _snap(**overrides) -> FeatureSnapshot:
