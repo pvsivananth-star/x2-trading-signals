@@ -72,6 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="treat dataset warnings such as session gaps as critical")
     dataset.add_argument("--synthetic-warmup-sessions", type=int, default=0,
                          help="exclude the first N local sessions from scored decisions while retaining them for indicator warmup")
+    dataset.add_argument("--min-scored-sessions", type=int, default=20,
+                         help="minimum remaining local sessions required per instrument after warmup (default: 20)")
     dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
                          help="materialize the first N derived warmup sessions into this directory")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
@@ -149,11 +151,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "backtest-dataset":
             from decimal import Decimal
 
-            from app.backtest.dataset_runner import DEFAULT_PROFILE, dump_synthetic_warmup, run_dataset, write_outputs
+            from app.backtest.dataset_runner import (
+                DEFAULT_PROFILE, dump_synthetic_warmup, inspect_scored_data, run_dataset, write_outputs,
+            )
             from app.backtest.validation import validate_dataset
 
             if args.synthetic_warmup_sessions < 0:
                 raise SystemExit("--synthetic-warmup-sessions cannot be negative")
+            if args.min_scored_sessions < 1:
+                raise SystemExit("--min-scored-sessions must be at least 1")
 
             validation = validate_dataset(
                 args.dir,
@@ -179,6 +185,21 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 0
 
+            try:
+                scored_data_coverage = inspect_scored_data(
+                    args.dir, interval_seconds=args.interval,
+                    warmup_sessions=args.synthetic_warmup_sessions,
+                    min_scored_sessions=args.min_scored_sessions, profile_map=DEFAULT_PROFILE,
+                )
+            except ValueError as exc:
+                print(json.dumps({
+                    "status": "blocked", "reason": "INSUFFICIENT_SCORED_DATA",
+                    "minimum_scored_sessions": args.min_scored_sessions,
+                    "warmup_sessions_requested": args.synthetic_warmup_sessions,
+                    "error": str(exc),
+                }, indent=2), file=sys.stderr)
+                return 2
+
             warmup_dump = None
             if args.dump_synthetic_warmup is not None:
                 if args.synthetic_warmup_sessions <= 0:
@@ -198,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
                 warmup_sessions=args.synthetic_warmup_sessions,
+                min_scored_sessions=args.min_scored_sessions,
             )
+            result["scored_data_coverage"] = scored_data_coverage
+            result["min_scored_sessions"] = args.min_scored_sessions
             result["dataset_validation"] = validation_payload
             result["warmup_sessions_requested"] = args.synthetic_warmup_sessions
             result["warmup_dump"] = warmup_dump
