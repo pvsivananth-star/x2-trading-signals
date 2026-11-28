@@ -70,11 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="validate the dataset and do not execute the strategy")
     dataset.add_argument("--fail-on-warnings", action="store_true",
                          help="treat dataset warnings such as session gaps as critical")
-    dataset.add_argument("--synthetic-warmup-sessions", type=int, default=0,
+    dataset.add_argument("--warmup-sessions", "--synthetic-warmup-sessions", dest="synthetic_warmup_sessions", type=int, default=0,
                          help="use the first N local sessions only for indicator warmup; score trades on subsequent real historical sessions")
     dataset.add_argument("--min-scored-sessions", type=int, default=20,
                          help="minimum remaining local sessions required per instrument after warmup (default: 20)")
-    dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
+    dataset.add_argument("--dump-warmup", "--dump-synthetic-warmup", dest="dump_synthetic_warmup", type=Path, default=None,
                          help="export the first N historical warmup sessions to this directory for inspection")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
