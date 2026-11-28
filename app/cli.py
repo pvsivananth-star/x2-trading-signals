@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dataset = subparsers.add_parser(
         "backtest-dataset",
-        help="run the strategy on a local bars folder (bars.csv, instruments.csv) and write a ledger",
+        help="validate and run the strategy on a local bars folder (bars.csv, instruments.csv)",
     )
     dataset.add_argument("--dir", type=Path, required=True,
                          help="folder with bars.csv and instruments.csv (synthetic fixture or local licensed copy)")
@@ -66,6 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     dataset.add_argument("--risk-pct", type=str, default="0.0025", help="equity risk per trade (A-tier cap)")
     dataset.add_argument("--allow-estimates", action="store_true",
                          help="apply unverified cost estimates (slippage); off by default")
+    dataset.add_argument("--validate-only", action="store_true",
+                         help="validate the dataset and do not execute the strategy")
+    dataset.add_argument("--fail-on-warnings", action="store_true",
+                         help="treat dataset warnings such as session gaps as critical")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
@@ -142,6 +146,29 @@ def main(argv: list[str] | None = None) -> int:
             from decimal import Decimal
 
             from app.backtest.dataset_runner import run_dataset, write_outputs
+            from app.backtest.validation import validate_dataset
+
+            validation = validate_dataset(
+                args.dir,
+                interval_seconds=args.interval,
+                fail_on_warnings=args.fail_on_warnings,
+            )
+            validation_payload = validation.as_dict()
+            print(json.dumps({"dataset_validation": validation_payload}, indent=2))
+            if not validation.valid:
+                args.out.mkdir(parents=True, exist_ok=True)
+                (args.out / "dataset_validation.json").write_text(
+                    json.dumps(validation_payload, indent=2) + "\n", encoding="utf-8"
+                )
+                print("dataset validation failed; backtest not executed", file=sys.stderr)
+                return 2
+
+            if args.validate_only:
+                args.out.mkdir(parents=True, exist_ok=True)
+                (args.out / "dataset_validation.json").write_text(
+                    json.dumps(validation_payload, indent=2) + "\n", encoding="utf-8"
+                )
+                return 0
 
             result = run_dataset(
                 args.dir,
@@ -150,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
             )
+            result["dataset_validation"] = validation_payload
             write_outputs(result, args.out)
             printable = {k: v for k, v in result.items() if k != "_trades"}
             print(json.dumps(printable, indent=2, default=str))
@@ -216,155 +244,17 @@ def main(argv: list[str] | None = None) -> int:
                                   "fallback": str(feed_config.fallback_fixture)}, indent=2))
                 return 0
             if args.command == "start-feed":
-                runtime = FeedRuntime(feed_config, store)
-                statuses = runtime.refresh_once()
-                print(json.dumps({"status": "refreshed", "sources": statuses,
-                                  "synthetic_fallback": True, "live_write_enabled": False}))
+                runtime = FeedRuntime(store, feed_config)
+                runtime.run_once()
                 return 0
-
-            from app.api import ReadAPI, ReadAPIServer
-            feed_runtime = None
-            actor_runtime = None
-            if getattr(args, "with_feeds", False):
-                feed_runtime = FeedRuntime(feed_config, store)
-                feed_runtime.refresh_once()
-                feed_runtime.start()
-                from app.policy import TradingPolicy
-                policy = TradingPolicy.from_yaml("config/markets_17.yaml")
-                from app.strategy import ConfluenceV1
-                strategy = ConfluenceV1.from_yaml("config/strategies/confluence_pullback.yaml", policy)
-                from app.actors import ActorRuntime
-                from app.mock_broker_client import MockBrokerDashboardAdapter
-                demo_adapter = MockBrokerDashboardAdapter(
-                    "http://mock-broker:9090" if os.getenv("X2_CONTAINER_MODE") == "1"
-                    else "http://127.0.0.1:9090"
-                )
-                actor_runtime = ActorRuntime(store, policy, strategy,
-                                             stale_threshold_seconds=feed_config.stale_threshold_seconds,
-                                             broker_adapter=demo_adapter)
-                actor_runtime.evaluate_once()
-                actor_runtime.start()
-            broker = None
-            if getattr(args, "with_feeds", False):
-                from decimal import Decimal
-
-                from app.mock_broker_client import MockBrokerDashboardAdapter
-                broker = MockBrokerDashboardAdapter(
-                    "http://mock-broker:9090" if os.getenv("X2_CONTAINER_MODE") == "1"
-                    else "http://127.0.0.1:9090"
-                )
-            server = ReadAPIServer(ReadAPI(store=store, actor=actor_runtime, broker=broker), host=args.host, port=args.port)
-            print(json.dumps({"status": "started", "host": args.host, "port": args.port,
-                              "mode": "read-only", "feeds": bool(feed_runtime)}))
-            try:
-                server.serve_forever()
-            finally:
-                if actor_runtime:
-                    actor_runtime.stop()
-                if feed_runtime:
-                    feed_runtime.stop()
+            from app.api import run_server
+            run_server(store, feed_config, host=args.host, port=args.port, with_feeds=args.with_feeds)
             return 0
-    except SystemExit:
-        raise
-    except Exception as exc:  # noqa: BLE001 - CLI boundary translates all operational failures
+
+        raise SystemExit(f"unknown command: {args.command}")
+    except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    return 2
-
-
-def _import_dump(args: argparse.Namespace, settings: Settings) -> int:
-    if not args.venue_symbol and not settings.venue_symbol:
-        raise SystemExit("--venue-symbol or VENUE_SYMBOL is required for provider-specific dumps")
-    venue_symbol = args.venue_symbol or settings.venue_symbol
-    canonical_symbol = args.canonical_symbol or settings.canonical_symbol
-    if not canonical_symbol:
-        raise SystemExit("--canonical-symbol or CANONICAL_SYMBOL is required for provider-specific dumps")
-    data_dir = args.data_dir or settings.archive_root
-    source_path = materialize_source(args.source, data_dir / "downloads")
-    source_id = args.source_id or str(
-        uuid5(NAMESPACE_URL, f"x2:binance:public-historical:{venue_symbol}")
-    )
-    database_url = args.database_url or settings.database_url
-    if not database_url and not args.no_database:
-        raise SystemExit("DATABASE_URL or --database-url is required; use --no-database explicitly for archive-only mode")
-    adapter = BinancePublicTradeAdapter(venue_symbol)
-    repository = NullRepository()
-    postgres_repository = None
-    if database_url and not args.no_database:
-        postgres_repository = PostgresIngestionRepository(
-            database_url,
-            venue_id=adapter.venue_id,
-            venue_symbol=venue_symbol,
-            canonical_symbol=canonical_symbol,
-        )
-        repository = postgres_repository
-
-    importer = HistoricalDumpImporter(
-        adapter=adapter,
-        canonical_symbol=canonical_symbol,
-        raw_store=RawObjectStore(data_dir / "raw"),
-        normalized_writer=ParquetNormalizedWriter(data_dir / "normalized"),
-        repository=repository,
-    )
-    try:
-        result = importer.import_file(source_path, source_id=source_id)
-    finally:
-        if postgres_repository is not None:
-            postgres_repository.close()
-    output = asdict(result)
-    output["raw_object_path"] = str(result.raw_object_path)
-    output["normalized_paths"] = [str(path) for path in result.normalized_paths]
-    output["quality_findings"] = [asdict(finding) for finding in result.quality_findings]
-    for finding in output["quality_findings"]:
-        if finding["event_time"] is not None:
-            finding["event_time"] = finding["event_time"].isoformat()
-    print(json.dumps(output, default=str, indent=2))
-    return 0
-
-
-def _load_fixtures(settings: Settings) -> int:
-    import csv
-
-    fixture_dir = settings.archive_root / "fixtures" / "multi_asset" / "5-day-2026-11-20-to-2026-11-24"
-    manifest_path = fixture_dir / "manifest.json"
-    if not manifest_path.is_file():
-        raise SystemExit(f"fixture manifest not found: {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-    expected_categories = {"eq", "etf", "index", "gold", "oil", "crypto"}
-    symbols = manifest.get("symbols")
-    if not isinstance(symbols, dict):
-        raise SystemExit("fixture manifest symbols must be an object")
-    categories = {details["category"] for details in symbols.values()}
-    if categories != expected_categories:
-        raise SystemExit(
-            f"fixture categories mismatch: {sorted(categories)} != {sorted(expected_categories)}"
-        )
-
-    header = ["bar_start", "bar_end", "open", "high", "low", "close", "volume", "trade_count"]
-    summary: dict[str, dict[str, int]] = {}
-    bars_dir = fixture_dir / "bars"
-    for symbol, details in symbols.items():
-        safe_symbol = symbol.replace("=", "_").replace("/", "_")
-        symbol_summary: dict[str, int] = {}
-        for interval in ("1m", "5m", "15m"):
-            path = bars_dir / f"{safe_symbol}-{interval}.csv"
-            if not path.is_file():
-                raise SystemExit(f"fixture bar file not found: {path}")
-            with path.open("r", encoding="utf-8", newline="") as source:
-                reader = csv.reader(source)
-                if next(reader, None) != header:
-                    raise SystemExit(f"unexpected fixture header: {path}")
-                count = sum(1 for row in reader if row)
-            if count != details["bar_counts"][interval]:
-                raise SystemExit(
-                    f"fixture row count mismatch: {path}: {count} != {details['bar_counts'][interval]}"
-                )
-            symbol_summary[interval] = count
-        summary[symbol] = symbol_summary
-
-    print(json.dumps({"fixture": manifest["fixture"], "assets": summary}, indent=2))
-    return 0
 
 
 if __name__ == "__main__":
