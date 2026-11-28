@@ -71,11 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     dataset.add_argument("--fail-on-warnings", action="store_true",
                          help="treat dataset warnings such as session gaps as critical")
     dataset.add_argument("--synthetic-warmup-sessions", type=int, default=0,
-                         help="exclude the first N local sessions from scored decisions while retaining them for indicator warmup")
+                         help="use the first N local sessions only for indicator warmup; score trades on subsequent real historical sessions")
     dataset.add_argument("--min-scored-sessions", type=int, default=20,
                          help="minimum remaining local sessions required per instrument after warmup (default: 20)")
     dataset.add_argument("--dump-synthetic-warmup", type=Path, default=None,
-                         help="materialize the first N derived warmup sessions into this directory")
+                         help="export the first N historical warmup sessions to this directory for inspection")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     free_data = subparsers.add_parser(
@@ -250,6 +250,20 @@ def main(argv: list[str] | None = None) -> int:
                     profile_map=DEFAULT_PROFILE,
                 )
 
+            def report_progress(symbol: str, phase: str, processed: int, total: int) -> None:
+                print(
+                    f"[backtest] {symbol}: {phase} bars {processed:,}/{total:,}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            print(
+                f"[backtest] starting historical replay for {len(scored_data_coverage)} instruments; "
+                f"{args.synthetic_warmup_sessions} warmup sessions, "
+                f"minimum {args.min_scored_sessions} scored sessions",
+                file=sys.stderr,
+                flush=True,
+            )
             result = run_dataset(
                 args.dir,
                 interval_seconds=args.interval,
@@ -258,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
                 allow_estimates=args.allow_estimates,
                 warmup_sessions=args.synthetic_warmup_sessions,
                 min_scored_sessions=args.min_scored_sessions,
+                progress_callback=report_progress,
             )
             result["scored_data_coverage"] = scored_data_coverage
             result["min_scored_sessions"] = args.min_scored_sessions
