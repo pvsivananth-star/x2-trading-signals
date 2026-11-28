@@ -561,6 +561,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
     slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
     snaps: list[FeatureSnapshot] = []
+    slot_rvol_unavailable_reasons: Counter[str] = Counter()
+    context_30m_missing_reasons: Counter[str] = Counter()
     for i, bar in enumerate(bars):
         base = feature_snapshot(
             bars[: i + 1], bar.bar_end, **session,
@@ -609,9 +611,6 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     trades: list[Trade] = []
     decision_action_counts: Counter[str] = Counter()
     rejection_gate_counts: Counter[str] = Counter()
-    slot_rvol_unavailable_reasons: Counter[str] = Counter()
-    context_30m_missing_reasons: Counter[str] = Counter()
-
     def record_decision(card: Any) -> None:
         decision_action_counts[str(getattr(card, "action", "unknown"))] += 1
         for gate in getattr(card, "rejected_gates", ()):
