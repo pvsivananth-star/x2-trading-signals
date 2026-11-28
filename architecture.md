@@ -31,9 +31,18 @@ Market Data Providers
     |        +--> Structure/Fibonacci Analyzer
     |        +--> DMA Analyzer
     |
-    +--> [Strategy Manager]
-    |        +--> Strategy instances
-    |        +--> Signal Manager
+    +--> [Strategy Registry / Portfolio Strategy Orchestrator]
+    |        +--> [Long-Term Portfolio]
+    |        |       +--> [Strategy Manager: Weekly Trend Following]
+    |        |       +--> [Strategy Manager: Weekly Breakout/Pullback]
+    |        |
+    |        +--> [Daily Trading Portfolio]
+    |                +--> [Strategy Manager: MTF Trend Pullback]
+    |                +--> [Strategy Manager: VWAP/Relative Strength]
+    |                +--> [Strategy Manager: Opening Range Breakout]
+    |
+    |        Each Strategy Manager owns exactly one strategy
+    |        and produces explainable SignalCandidates
     |
     v
 [Trade Manager]
@@ -85,8 +94,22 @@ Compares instrument against market, sector and peer benchmarks.
 ### Signal Manager
 Combines analyzer outputs into immutable, explainable candidate signals. It must distinguish SETUP from TRIGGER.
 
+### Strategy Registry / Portfolio Strategy Orchestrator
+Maintains the catalogue of enabled strategies and maps strategies to portfolios. It does not contain strategy logic.
+
 ### Strategy Manager
-Owns strategy lifecycle and configuration. A strategy decides whether a candidate signal represents a trade opportunity.
+There is one Strategy Manager instance per strategy. It owns exactly one strategy's lifecycle, configuration/version, state, signal generation, position/trade context, metrics and decision audit.
+
+A Strategy Manager:
+- consumes only the market/analyzer events required by its strategy;
+- produces immutable, explainable candidate signals;
+- cannot submit broker orders directly;
+- cannot mutate another Strategy Manager;
+- cannot bypass Portfolio/Risk controls;
+- can be enabled/disabled and backtested independently;
+- maintains isolated state so multiple strategies can run concurrently without cross-strategy contamination.
+
+Portfolio-level orchestration combines independent strategy outputs only after each strategy has made its own decision. Conflicting strategy recommendations must be resolved by explicit portfolio/risk rules, never by hidden strategy-to-strategy coupling.
 
 ### Trade Manager
 Converts an approved signal into a trade intent and manages trade lifecycle.
@@ -129,6 +152,36 @@ Publishes operational, risk and trade alerts.
 Persist all significant events:
 market snapshot references, signals, approvals/rejections, orders, fills, portfolio/risk decisions, configuration versions and kill-switch actions.
 
+
+## 4A. Portfolio and Strategy Allocation
+
+The platform initially defines two logically independent portfolios:
+
+### Long-Term Portfolio
+- Timeframe: 1W primary, 1D confirmation.
+- Objective: capture major trends and protect long-term capital.
+- Strategies: Weekly Trend Following; Weekly Breakout/Pullback Accumulation.
+- Exit behavior: position-specific de-risking on weekly structural deterioration; full liquidation only for validated thesis/trend failure, liquidity failure or portfolio risk breach.
+- Intraday signals must not force liquidation of long-term positions.
+
+### Daily Trading Portfolio
+- Timeframes: 30m trend, 15m structure, 5m setup/trigger.
+- Objective: selective intraday expectancy with low drawdown and high-quality trade frequency. A 2% daily return is an aspiration, not a quota.
+- Strategies: MTF Trend Pullback Continuation; VWAP/Relative-Strength Continuation; Opening-Range Breakout with Trend Filter.
+- Positions are normally flattened according to the configured session policy and may not be carried into the long-term portfolio without an explicit portfolio transfer decision.
+
+Each strategy is independently managed by one Strategy Manager instance. Portfolio membership is explicit configuration, not inferred from strategy names.
+
+Portfolio isolation requirements:
+- separate capital/risk budgets;
+- separate exposure and concentration limits;
+- separate strategy enablement;
+- separate performance attribution;
+- separate holding-period and exit policies;
+- central Portfolio Controller still enforces account-wide hard limits across both portfolios.
+
+No strategy may borrow another portfolio's risk budget without an explicit portfolio-level allocation decision.
+
 ## 4. Domain Model
 
 Core entities/value objects:
@@ -153,6 +206,9 @@ Core entities/value objects:
 - ExecutionReport
 - Strategy
 - StrategyVersion
+- StrategyManager
+- PortfolioStrategyAssignment
+- PortfolioAllocation
 - RiskLimit
 - KillSwitchState
 - BacktestRun
@@ -235,13 +291,24 @@ Any terminal/rejected state must be reconciled with broker state.
 
 Duplicate submissions must be prevented using idempotency keys.
 
+## 8.1 Strategy/Portfolio Selection Rules
+
+Strategy selection is deterministic and portfolio-scoped.
+
+- Long-term strategies evaluate weekly trend/structure and may use daily confirmation.
+- Daily strategies evaluate 30m/15m/5m context and must satisfy the existing liquidity, regime, Fib/DMA, volume and two-bar trigger gates.
+- Strategies must declare supported instruments, timeframes, regimes, holding period, entry model, exit model and risk profile.
+- The same market event may be evaluated by multiple strategies, but each Strategy Manager makes an independent decision.
+- Duplicate economic exposure across strategies is consolidated by the Portfolio Controller before risk approval.
+
 ## 8. Risk Architecture
 
 Risk checks occur independently at:
-1. strategy/trade level;
-2. portfolio level;
-3. execution level;
-4. broker/account reconciliation level.
+1. individual strategy/trade level;
+2. portfolio level (Long-Term and Daily Trading independently);
+3. account-wide level across all portfolios;
+4. execution level;
+5. broker/account reconciliation level.
 
 Risk controls include:
 - per-trade risk;
