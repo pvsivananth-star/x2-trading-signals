@@ -1,0 +1,15 @@
+services:
+  x2:
+    build: .
+    environment:
+      TRADING_MODE: demo
+      X2_CONTAINER_MODE: "1"
+      X2_API_TOKEN: ${X2_API_TOKEN:?set X2_API_TOKEN in the environment}
+      DATABASE_URL: ${DATABASE_URL:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /workspace/logs
+    restart: unless-stopped
