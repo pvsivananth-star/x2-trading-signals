@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.backtest.bars import Bar
+from app.backtest.simulator import Fill, OrderSimulator, SimulationConfig
 from app.backtest.dataset_runner import (
     COST_SECTION,
     DEFAULT_PROFILE,
@@ -427,6 +428,53 @@ class IntrabarExitTests(unittest.TestCase):
         self.assertEqual(trade.exit_reason, "MAX_HOLD_TIME")
         self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 3 * 60)
         self.assertEqual(trade.holding_minutes, Decimal(3))
+
+    def test_runner_uses_order_simulator_partial_fill_and_scales_risk(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            def __init__(self):
+                self.entered = False
+                self.strategy = {"exit": {"max_holding_minutes": 3, "stagnation_minutes": 0}}
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                    Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+                for i in range(22)]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        simulator = OrderSimulator(SimulationConfig(partial_fill_ratio=Decimal("0.5")))
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False, simulator)
+        trade = result["trades"][0]
+        self.assertEqual(trade.fill_status, "partial")
+        self.assertEqual(result["execution"]["partial_fills"], 1)
+        self.assertEqual(trade.qty, trade.risk_amount / Decimal("0.75"))
+
+    def test_runner_records_rejected_simulated_entry(self):
+        class RejectingSimulator:
+            def submit(self, bar, side, order_type, quantity):
+                return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            def __init__(self):
+                self.entered = False
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "110"})
+                return SimpleNamespace(action="hold", parameters={})
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                    Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+                for i in range(22)]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False, RejectingSimulator())
+        self.assertEqual(result["execution"]["rejected_entries"], 1)
+        self.assertEqual(result["trades"], [])
 
     def test_entry_bar_stop_is_checked_immediately_after_fill(self):
         class EntryOnceEngine:
