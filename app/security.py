@@ -15,8 +15,7 @@ class SecuritySettings:
             raise RuntimeError("live trading is disabled by architecture policy")
         token=os.getenv("X2_API_TOKEN")
         db=os.getenv("DATABASE_URL")
-        if db and ("password=" in db.lower() or ":
-            //"+":" in db):
+        if db and ("password=" in db.lower() or "://" + ":" in db):
             raise ValueError("database credentials must be supplied through external secrets, not source config")
         return cls(token,db,False,os.getenv("ALLOW_MANUAL_EXECUTION","0")=="1")
 
