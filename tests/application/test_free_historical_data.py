@@ -6,10 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.backtest.free_data import (
-    FreeDataDownloadError,
-    download_free_dataset,
-)
+from app.backtest.free_data import download_free_dataset
 from app.backtest.validation import validate_dataset
 
 
