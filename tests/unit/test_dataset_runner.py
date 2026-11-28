@@ -371,6 +371,21 @@ class CostRuleTests(unittest.TestCase):
         markets = policy_factory.call_args.args[0]["markets"]
         self.assertEqual(markets["US_EQUITIES"]["core_symbols"].count("SPY"), 1)
 
+    def test_initial_instrument_specs_match_runner_sessions(self):
+        import yaml
+        from app.backtest.dataset_runner import MARKET_SESSIONS
+        config = yaml.safe_load(Path("config/markets_17.yaml").read_text(encoding="utf-8"))["markets"]
+        for profile in ("US_EQUITIES", "US_COMMODITIES"):
+            market = config[profile]
+            timezone, session_open, session_close = MARKET_SESSIONS[profile]
+            self.assertEqual(market["session_timezone"], timezone)
+            self.assertEqual(market["regular_session"], [session_open.strftime("%H:%M"), session_close.strftime("%H:%M")])
+            self.assertGreater(market["tick_size"], 0)
+            self.assertEqual(market["contract_multiplier"], 1)
+            self.assertEqual(market["quantity_unit"], "shares")
+        self.assertEqual(config["US_COMMODITIES"]["core_symbols"], ["GLD", "USO"])
+        self.assertEqual(set(config["US_COMMODITIES"]["excluded_symbols"]), {"SLV", "GC=F", "CL=F"})
+
     def test_calibrated_market_thresholds(self):
         import yaml
 
@@ -630,6 +645,9 @@ class EndToEndSyntheticTests(unittest.TestCase):
         cls.out_dir = tempfile.mkdtemp()
         cls.result = run_dataset(FIXTURE, interval_seconds=300, start_equity=Decimal(25000), baseline_scope=False)
         cls.trades = cls.result.pop("_trades")
+
+    def test_synthetic_fixture_is_never_market_performance_evidence(self):
+        self.assertEqual(self.result["evidence_class"], "synthetic_software_fixture_only")
 
     def test_shared_portfolio_budget_is_reported(self):
         portfolio = self.result["portfolio"]
