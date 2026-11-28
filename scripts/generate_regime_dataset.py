@@ -36,7 +36,12 @@ SESSIONS = {
 }
 
 SYMBOLS = [
+    # One deterministic fixture symbol for each supported backtest category.
+    ("AAPL", "US_EQUITIES", 230.0, 0.00045),
     ("SPY", "US_EQUITIES", 585.0, 0.00035),
+    ("SPX", "US_EQUITIES", 6700.0, 0.00025),
+    ("GC=F", "US_COMMODITIES", 2650.0, 0.00040),
+    ("CL=F", "US_COMMODITIES", 65.0, 0.00065),
     ("NVDA", "US_EQUITIES", 142.0, 0.00065),
     ("GLD", "US_COMMODITIES", 252.0, 0.00030),
     ("USO", "US_COMMODITIES", 76.0, 0.00055),
