@@ -608,7 +608,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
                 markets_path: str | Path = "config/markets_17.yaml",
                 costs_path: str | Path = "config/costs.yaml",
-                strategy_path: str | Path = "config/strategies/confluence_pullback.yaml") -> dict[str, Any]:
+                strategy_path: str | Path = "config/strategies/confluence_pullback.yaml",
+                event_risk_provider: Callable[[datetime, str], EventRiskAssessment | None] | None = None) -> dict[str, Any]:
     directory = Path(directory)
     profile_map = profile_map or DEFAULT_PROFILE
     instrument_symbols = instrument_symbols or _instrument_symbols(directory)
