@@ -48,7 +48,8 @@ class FeatureSnapshot:
     structure_source_short: str | None = None
     structure_target_continuation: Decimal | None = None
     structure_source_continuation: str | None = None
-
+    impulse_rvol: Decimal | None = None
+    session_efficiency: Decimal | None = None
 
 @dataclass(slots=True)
 class _SessionContext:
@@ -158,6 +159,35 @@ def causal_atr(
         true_ranges.append(tr)
     selected = true_ranges[-period:] if len(true_ranges) >= period else true_ranges
     return sum(selected, Decimal(0)) / Decimal(len(selected))
+
+
+def causal_impulse_rvol(
+    bars: list[Bar],
+    timestamp: datetime,
+    lookback_bars: int = 10,
+    avg_window: int = 19,
+    _eligible_bars: list[Bar] | None = None,
+) -> Decimal | None:
+    """Peak RVOL among the preceding `lookback_bars` bars, excluding the current bar.
+
+    Each candidate bar's volume is divided by the average of the `avg_window` bars before it.
+    Used by the volume pump / dry-up entry rule. Causal: only bars ending at or before t.
+    """
+    eligible = _eligible_bars if _eligible_bars is not None else bars_through(bars, timestamp)
+    n = len(eligible)
+    if n < 2:
+        return None
+    best: Decimal | None = None
+    for j in range(max(0, n - 1 - lookback_bars), n - 1):
+        history = eligible[max(0, j - avg_window):j]
+        if not history:
+            continue
+        average = sum((b.volume for b in history), Decimal(0)) / Decimal(len(history))
+        if average <= 0:
+            continue
+        ratio = eligible[j].volume / average
+        best = ratio if best is None or ratio > best else best
+    return best
 
 
 def causal_rvol(
@@ -460,6 +490,13 @@ def feature_snapshot(
     continuation_target, continuation_source = causal_structure_target(
         bars, timestamp, include_session_high=False, **session
     )
+    session_bars = context.current
+    if session_bars:
+        s_disp = abs(session_bars[-1].close - next(iter(session_bars)).open)
+        s_range = max(b.high for b in session_bars) - min(b.low for b in session_bars)
+        s_eff = (s_disp / s_range) if s_range > 0 else Decimal(0)
+    else:
+        s_eff = None
     structure_target_short, structure_source_short = causal_structure_target_short(bars, timestamp, **session)
     fib_382, fib_500, fib_618 = fibonacci_zones(bars, timestamp, **session)
     trend, structure = causal_trend_structure(bars, timestamp, **session)
@@ -492,4 +529,6 @@ def feature_snapshot(
         structure_source_short=structure_source_short,
         structure_target_continuation=continuation_target,
         structure_source_continuation=continuation_source,
+        impulse_rvol=causal_impulse_rvol(bars, timestamp, _eligible_bars=context.eligible),
+        session_efficiency=s_eff,
     )

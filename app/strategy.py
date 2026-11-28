@@ -25,18 +25,40 @@ REACTION_ZONES: dict[str, tuple[Decimal, Decimal, Decimal, str | None]] = {
     "CORE_382_618": (Decimal("0.382"), Decimal("0.618"), Decimal("1.00"), None),
     "SHALLOW_VWAP_236_382": (Decimal("0.236"), Decimal("0.382"), Decimal("0.68"), "vwap_hold"),
     "DEEP_RECLAIM_618_786": (Decimal("0.618"), Decimal("0.786"), Decimal("0.68"), "reclaim_close"),
+    # Upgrade 2: shallow momentum continuation, TREND_DAY only, needs an impulse volume pump.
+    "MOMENTUM_VWAP_12_236": (Decimal("0.12"), Decimal("0.236"), Decimal("0.75"), "momentum_vwap_hold"),
 }
+
+# Volume rules (upgrade 1). Impulse pump on the push, dry-up on the pullback bar.
+IMPULSE_RVOL_MIN = Decimal("1.15")
+DRY_UP_RVOL_MAX = Decimal("1.15")
+# Volume climax exit (upgrade 1): opposing high-volume bar that crosses VWAP against the position.
+CLIMAX_RVOL_MIN = Decimal("2.20")
+VOLUME_GATES = ("rvol_below_threshold", "rvol_unavailable", "impulse_volume_not_met", "dry_up_not_met")
 
 
 def _decimal_text(value: Decimal | None) -> str:
     return "N/A" if value is None else format(value.normalize(), "f")
 
 
-def classify_reaction_zone(depth: Decimal | None) -> str | None:
-    """Return the reaction zone for a pullback depth. Core is checked first; boundaries are inclusive
-    for core, and shallow/deep use half-open ranges so adjacent zones never overlap."""
+def classify_reaction_zone(
+        depth: Decimal | None,
+        regime: Regime | None = None,
+        impulse_rvol: Decimal | None = None,
+        session_efficiency: Decimal | None = None,
+        allow_momentum_zone: bool = True,
+) -> str | None:
     if depth is None:
         return None
+    if (
+            allow_momentum_zone
+            and Decimal("0.12") <= depth < Decimal("0.236")
+            and regime is Regime.TREND_DAY
+            and impulse_rvol is not None
+            and impulse_rvol >= IMPULSE_RVOL_MIN
+            and (session_efficiency is None or session_efficiency >= Decimal("0.55"))
+    ):
+        return "MOMENTUM_VWAP_12_236"
     if Decimal("0.382") <= depth <= Decimal("0.618"):
         return "CORE_382_618"
     if Decimal("0.236") <= depth < Decimal("0.382"):
@@ -44,6 +66,7 @@ def classify_reaction_zone(depth: Decimal | None) -> str | None:
     if Decimal("0.618") < depth <= Decimal("0.786"):
         return "DEEP_RECLAIM_618_786"
     return None
+
 
 
 def _requirement_met(
@@ -60,6 +83,21 @@ def _requirement_met(
     if side == "long":
         return snapshot.last_close >= snapshot.vwap - vwap_tolerance
     return snapshot.last_close <= snapshot.vwap
+
+
+def _volume_climax(
+    snapshot: FeatureSnapshot,
+    previous: FeatureSnapshot | None,
+    side: str,
+) -> bool:
+    """Upgrade 1 exit: one bar with RVOL >= 2.20 that closes against the position across VWAP."""
+    if previous is None or snapshot.rvol is None or snapshot.rvol < CLIMAX_RVOL_MIN:
+        return False
+    if snapshot.vwap is None or snapshot.last_close is None or previous.last_close is None:
+        return False
+    if side == "long":
+        return snapshot.last_close < snapshot.vwap and snapshot.last_close < previous.last_close
+    return snapshot.last_close > snapshot.vwap and snapshot.last_close > previous.last_close
 
 
 def _pullback_depth(snapshot: FeatureSnapshot, side: str) -> Decimal | None:
@@ -251,6 +289,10 @@ class ConfluenceV1:
         levels: ProjectedLevels | None = None
         action = "hold"
         last = snapshot.last_close
+        # Upgrade 3: per-market archetype multipliers override the global ones when configured.
+        stop_mult_used = self.stop_mult
+        target_mult_used = self.target_mult
+        max_mult_used = self.max_target_mult
 
         if position_quantity != 0:
             is_long = position_quantity > 0
@@ -266,6 +308,9 @@ class ConfluenceV1:
                 last >= position_target if is_long else last <= position_target):
                 action = "exit_long" if is_long else "exit_short"
                 zone = "TARGET_HIT"
+            elif _volume_climax(snapshot, previous_snapshot, side_used):
+                action = "exit_long" if is_long else "exit_short"
+                zone = "VOLUME_CLIMAX_EXIT"
             elif (_trend_broken(snapshot, side_used, regime) and previous_snapshot is not None
                   and _trend_broken(previous_snapshot, side_used, regime)):
                 action = "exit_long" if is_long else "exit_short"
@@ -301,12 +346,25 @@ class ConfluenceV1:
                 gates.append("bullish_close_confirmation_not_met")
             if required_room is None or slot_rvol is None:
                 gates.append("market_thresholds_missing")
+            elif snapshot.impulse_rvol is not None:
+                # Upgrade 1: volume pump on the impulse, dry-up on the pullback bar.
+                if snapshot.rvol is None:
+                    gates.append("rvol_unavailable")
+                elif snapshot.impulse_rvol < IMPULSE_RVOL_MIN:
+                    gates.append("impulse_volume_not_met")
+                elif snapshot.rvol > DRY_UP_RVOL_MAX:
+                    gates.append("dry_up_not_met")
             elif snapshot.rvol is None:
                 gates.append("rvol_unavailable")
             elif snapshot.rvol < slot_rvol:
                 gates.append("rvol_below_threshold")
+            if market is not None and "stop_mult" in market:
+                stop_mult_used = Decimal(str(market["stop_mult"]))
+            if market is not None and "target_mult" in market:
+                target_mult_used = Decimal(str(market["target_mult"]))
+                max_mult_used = max(self.max_target_mult, target_mult_used)
             levels = projected_levels(
-                snapshot, self.target_mult, self.max_target_mult, self.stop_mult,
+                snapshot, target_mult_used, max_mult_used, stop_mult_used,
                 self.roundtrip_cost, self.slippage_buffer, side_used, regime,
             )
             sufficient_room = False
@@ -320,7 +378,14 @@ class ConfluenceV1:
                     sufficient_room = False
                     gates.append("insufficient_reward_to_risk")
             depth = _pullback_depth(snapshot, side_used)
-            zone = classify_reaction_zone(depth)
+            is_crypto = _market_name == "CRYPTO_MAJORS"
+            zone = classify_reaction_zone(
+                depth,
+                regime,
+                snapshot.impulse_rvol,
+                snapshot.session_efficiency,
+                allow_momentum_zone=not is_crypto,
+            )
             if zone is None:
                 gates.append("outside_reaction_zone")
             else:
@@ -330,11 +395,22 @@ class ConfluenceV1:
                     if trend_day_long and snapshot.atr is not None
                     else Decimal(0)
                 )
-                if not _requirement_met(requirement, snapshot, side_used, vwap_tolerance):
+                if requirement == "momentum_vwap_hold":
+                    # Momentum zone: hold the VWAP side AND a 1-bar hook in the trade direction.
+                    prev_close = previous_snapshot.last_close if previous_snapshot is not None else None
+                    hook = (
+                        prev_close is not None and last is not None
+                        and (last > prev_close if side_used == "long" else last < prev_close)
+                    )
+                    held = _requirement_met("vwap_hold", snapshot, side_used, vwap_tolerance)
+                    if not (held and hook):
+                        gates.append("momentum_vwap_hold_not_met")
+                        zone = None
+                elif not _requirement_met(requirement, snapshot, side_used, vwap_tolerance):
                     gates.append(f"{requirement}_not_met")
                     zone = None
-            if (zone is not None and sufficient_room and "rvol_below_threshold" not in gates
-                    and "rvol_unavailable" not in gates and vwap_aligned and bullish_close_confirmed):
+            if (zone is not None and sufficient_room and not any(g in gates for g in VOLUME_GATES)
+                    and vwap_aligned and bullish_close_confirmed):
                 action = "enter_long" if side_used == "long" else "enter_short"
 
         inputs = {
@@ -360,6 +436,9 @@ class ConfluenceV1:
             "pullback_depth": _decimal_text(_pullback_depth(snapshot, side_used) if side_used else None),
             "zone": zone or "N/A",
             "size_weight": _decimal_text(size_weight),
+            "stop_mult": _decimal_text(stop_mult_used),
+            "target_mult": _decimal_text(target_mult_used),
+            "impulse_rvol": _decimal_text(snapshot.impulse_rvol),
             "target": _decimal_text(levels.target if levels else None),
             "target_source": levels.target_source if levels else "N/A",
             "net_move_room": _decimal_text(levels.net_move_room if levels else None),
