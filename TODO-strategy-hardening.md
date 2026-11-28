@@ -48,7 +48,7 @@ flowchart TD
 - [x] Use 5-minute bars for entry timing, pullback/reaction-zone qualification, and execution decisions (the runner uses its supplied signal interval; the configured production baseline is 5 minutes).
 - [x] Add time-of-day/slot-normalized RVOL using the same exchange-local wall-clock slot in up to 10 prior completed sessions. Require at least 5 comparable sessions; exclude the current session and future bars. Insufficient history returns unavailable and the entry gate fails closed.
 - [x] Use slot-normalized RVOL for the baseline entry floor; retain rolling RVOL as a separate diagnostic and keep impulse strength/pullback dry-up as additional gates.
-- [ ] Keep trend and chop playbooks distinct. Do not force trend-following entries into sideways/choppy conditions.
+- [x] Keep trend and chop playbooks distinct: TREND_DAY retains directional pullback zones and mirrored close confirmation for long/short; CHOP_DAY is restricted to deep range-edge reclaim setups. Trend-continuation core/shallow/momentum entries are blocked in chop.
 - [x] Record gross performance by entry regime and long/short side in `by_regime` and `by_regime_side` summaries. Do not globally disable shorts based on aggregate results.
 - [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, and the existing 5-minute feature/RVOL inputs. Event-risk diagnostics remain pending with the event gate.
 
