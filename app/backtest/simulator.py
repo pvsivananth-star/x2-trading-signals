@@ -39,6 +39,10 @@ class OrderSimulator:
 
     def __init__(self, config: SimulationConfig | None = None) -> None:
         self.config = config or SimulationConfig()
+        if self.config.spread_bps < 0 or self.config.slippage_bps < 0 or self.config.fee_rate < 0:
+            raise ValueError("spread, slippage, and fee rates cannot be negative")
+        if self.config.partial_fill_ratio <= 0 or self.config.partial_fill_ratio > 1:
+            raise ValueError("partial_fill_ratio must be in (0, 1]")
 
     def submit(
         self,
@@ -55,16 +59,14 @@ class OrderSimulator:
         if order_type == "limit":
             if limit_price is None:
                 return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
-            if side == "buy" and limit_price < bar.low:
+            if side == "buy" and bar.low > limit_price:
                 return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
-            if side == "sell" and limit_price > bar.high:
+            if side == "sell" and bar.high < limit_price:
                 return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
 
         ratio = self.config.partial_fill_ratio
-        if ratio <= 0 or ratio > 1:
-            return Fill(bar.bar_start, side, Decimal(0), Decimal(0), Decimal(0), "rejected")
         filled_qty = quantity * ratio
-        reference = bar.close
+        reference = bar.open
         if side == "buy":
             base = reference * (Decimal(1) + self.config.spread_bps / Decimal(20000))
         else:
