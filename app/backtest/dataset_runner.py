@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from app.backtest.bars import Bar, aggregate_bars
+from app.backtest.simulator import OrderSimulator, SimulationConfig
 from app.costs import CostBlockedError, _field, load_costs
 from app.features import (
     DEFAULT_SESSION_CLOSE,
@@ -195,6 +196,7 @@ class Position:
     entry_cost: Decimal | None
     best_favorable_r: Decimal = Decimal(0)
     entry_regime: str = "UNKNOWN"
+    entry_fill_status: str = "filled"
 
 
 def minutes_to_close(bar_end: datetime, profile: str) -> int | None:
@@ -273,8 +275,11 @@ def _intrabar_exit(pos: Position, bar: Bar) -> tuple[Decimal, str] | None:
 
 def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1, policy: TradingPolicy,
                costs: dict[str, Any], start_equity: Decimal, risk_pct: Decimal,
-               allow_estimates: bool) -> dict[str, Any]:
+               allow_estimates: bool, order_simulator: OrderSimulator | None = None) -> dict[str, Any]:
     cost_values, excluded = _cost_model(costs, profile, allow_estimates)
+    simulator = order_simulator or OrderSimulator()
+    partial_fills = 0
+    rejected_entries = 0
     net_available = not excluded and profile in _EQUITY_COST_PROFILES
     session_timezone, session_open, session_close = MARKET_SESSIONS.get(
         profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
@@ -288,6 +293,10 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     bars_15m = aggregate_bars(bars, 15 * 60, source_interval_seconds) if source_interval_seconds else []
     bars_30m = aggregate_bars(bars, 30 * 60, source_interval_seconds) if source_interval_seconds else []
     swing_cfg = getattr(engine, "strategy", {}).get("swing", {})
+    execution_cfg = getattr(engine, "strategy", {}).get("execution", {})
+    order_simulator = OrderSimulator(SimulationConfig(
+        partial_fill_ratio=Decimal(str(execution_cfg.get("partial_fill_ratio", "1")))
+    ))
     volume_cfg = getattr(engine, "strategy", {}).get("volume", {})
     slot_lookback = int(volume_cfg.get("slot_rvol_lookback_sessions", 10))
     slot_min_sessions = int(volume_cfg.get("slot_rvol_min_sessions", 5))
@@ -396,14 +405,29 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 pending = None
                 exited_this_bar = True
                 continue
-            qty = (risk_amount := start_equity * entry_risk_pct) / stop_dist
+            qty = (risk_budget := start_equity * entry_risk_pct) / stop_dist
             if profile not in _FRACTIONAL_QTY_PROFILES:
                 qty = Decimal(math.floor(qty))
-            if qty > 0:
-                ecost = entry_costs(cost_values, qty, entry_px) if net_available else None
-                stop = entry_px - side * stop_dist
-                pos = Position(side, qty, bar.bar_start, entry_px, stop, target, risk_amount, ecost,
-                               entry_regime=entry_regime)
+            fill = simulator.submit(bar, "buy" if side > 0 else "sell", "market", qty)
+            filled_qty = fill.quantity
+            if profile not in _FRACTIONAL_QTY_PROFILES:
+                filled_qty = Decimal(math.floor(filled_qty))
+            if fill.status == "rejected" or filled_qty <= 0:
+                rejected_entries += 1
+                pending = None
+                exited_this_bar = True
+                continue
+            if fill.status == "partial":
+                partial_fills += 1
+            entry_px = fill.fill_price
+            actual_risk_amount = filled_qty * stop_dist
+            if actual_risk_amount > risk_budget:
+                raise ValueError("simulated fill exceeds the configured risk budget")
+            ecost = entry_costs(cost_values, filled_qty, entry_px) if net_available else None
+            stop = entry_px - side * stop_dist
+            pos = Position(side, filled_qty, bar.bar_start, entry_px, stop, target,
+                           actual_risk_amount, ecost, entry_regime=entry_regime,
+                           entry_fill_status=fill.status)
                 # The entry bar is part of the position lifecycle; never skip its stop/target range.
                 hit = _intrabar_exit(pos, bar)
                 if hit is not None:
@@ -466,6 +490,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
     return {"symbol": symbol, "profile": profile, "trades": trades,
             "net_available": net_available, "excluded_cost_fields": excluded,
+            "execution": {"partial_fills": partial_fills, "rejected_entries": rejected_entries},
             "start_equity": start_equity, "bars": len(bars)}
 
 
@@ -518,6 +543,8 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
         out["net"] = None
     out["by_side"] = {side: stats([t.gross_pnl for t in trades if t.side == side])
                       for side in {t.side for t in trades}}
+    out["fill_status_counts"] = {status: sum(1 for trade in trades if trade.fill_status == status)
+                                 for status in ("filled", "partial")}
     out["by_regime"] = {
         regime: stats([t.gross_pnl for t in trades if t.regime == regime])
         for regime in sorted({t.regime for t in trades})
@@ -576,7 +603,8 @@ def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity
         if not bars:
             continue
         profile = profile_map[symbol]
-        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity, risk_pct, allow_estimates))
+        results.append(run_symbol(symbol, bars, profile, engine, policy, costs, start_equity,
+                                  risk_pct, allow_estimates, order_simulator))
 
     all_trades = [t for r in results for t in r["trades"]]
     return {
