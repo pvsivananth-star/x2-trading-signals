@@ -73,6 +73,28 @@ class PortfolioLedgerTests(unittest.TestCase):
         self.assertTrue(decision.accepted)
         self.assertEqual(decision.status, "accepted")
 
+    def test_entry_costs_reduce_shared_available_cash(self):
+        ledger = PortfolioLedger(
+            Decimal(1000), {"US_EQUITIES": Decimal(1)},
+            {"US_TECH_INDEX": Decimal(1)}, max_total_open_risk_pct=Decimal(1),
+        )
+        first = ledger.reserve(
+            timestamp=self.now, exit_time=self.now + timedelta(minutes=30),
+            symbol="SPY", market="US_EQUITIES", cluster="US_TECH_INDEX",
+            requested_quantity=Decimal(9), entry_price=Decimal(100),
+            stop_distance=Decimal(1), max_risk_amount=Decimal(9),
+            entry_cost_estimate=Decimal(90),
+        )
+        self.assertTrue(first.accepted)
+        second = ledger.reserve(
+            timestamp=self.now, exit_time=self.now + timedelta(minutes=30),
+            symbol="QQQ", market="US_EQUITIES", cluster="US_TECH_INDEX",
+            requested_quantity=Decimal(1), entry_price=Decimal(20),
+            stop_distance=Decimal(1), max_risk_amount=Decimal(1),
+        )
+        self.assertFalse(second.accepted)
+        self.assertEqual(second.reason, "available_cash")
+
     def test_disabled_market_and_missing_cluster_fail_closed(self):
         disabled = self._reserve(market="NOT_ENABLED", cluster="US_TECH_INDEX")
         self.assertEqual(disabled.reason, "market_allocation_disabled")
