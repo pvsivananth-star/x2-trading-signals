@@ -78,6 +78,16 @@ class ReactionZoneTests(unittest.TestCase):
         card = _eval(_engine(), _snap(last_close=None, pullback_depth=Decimal("0.30")))
         self.assertNotEqual(card.action, "enter_long")
 
+    def test_entry_requires_fresh_completed_30m_context(self):
+        card = _eval(_engine(), _snap(context_regime=None, context_timestamp=None))
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("30m_context_unavailable_or_stale", card.rejected_gates)
+
+    def test_entry_requires_confirmed_aligned_15m_swing(self):
+        card = _eval(_engine(), _snap(swing_15m_direction="down"))
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("15m_swing_unconfirmed_or_misaligned", card.rejected_gates)
+
 
 class ExitContractTests(unittest.TestCase):
     def _down(self):
