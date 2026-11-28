@@ -50,6 +50,13 @@ class FeatureSnapshot:
     structure_source_continuation: str | None = None
     impulse_rvol: Decimal | None = None
     session_efficiency: Decimal | None = None
+    context_regime: str | None = None
+    context_timestamp: datetime | None = None
+    swing_15m_high: Decimal | None = None
+    swing_15m_low: Decimal | None = None
+    swing_15m_direction: str | None = None
+    swing_15m_size_atr: Decimal | None = None
+    swing_15m_confirmed: bool = False
 
 @dataclass(slots=True)
 class _SessionContext:
@@ -239,6 +246,50 @@ def causal_swing(
     else:
         swing_low = None
     return swing_high, swing_low
+
+
+
+def causal_confirmed_swing(
+    bars: list[Bar],
+    timestamp: datetime,
+    atr: Decimal | None,
+    *,
+    left_bars: int = 3,
+    confirmation_bars: int = 2,
+    min_atr_mult: Decimal = Decimal("0.60"),
+    lookback: int = 24,
+) -> tuple[Decimal | None, Decimal | None, str | None, Decimal | None, bool]:
+    """Return confirmed swing anchors and swing size in ATR units.
+
+    A pivot needs the configured number of completed bars on both sides. The right-side
+    bars are confirmation bars, so no pivot is exposed before they have closed.
+    Direction is up when the latest confirmed high follows the latest confirmed low.
+    """
+    if left_bars <= 0 or confirmation_bars <= 0 or lookback <= 0:
+        raise ValueError("swing windows must be positive")
+    eligible = bars_through(bars, timestamp)
+    window = eligible[-lookback:]
+    if atr is None or atr <= 0 or len(window) < left_bars + confirmation_bars + 1:
+        return None, None, None, None, False
+
+    highs: list[tuple[int, Decimal]] = []
+    lows: list[tuple[int, Decimal]] = []
+    for i in range(left_bars, len(window) - confirmation_bars):
+        pivot = window[i]
+        left = window[i - left_bars:i]
+        right = window[i + 1:i + 1 + confirmation_bars]
+        if pivot.high >= max(item.high for item in left) and pivot.high > max(item.high for item in right):
+            highs.append((i, pivot.high))
+        if pivot.low <= min(item.low for item in left) and pivot.low < min(item.low for item in right):
+            lows.append((i, pivot.low))
+    if not highs or not lows:
+        return None, None, None, None, False
+    high_index, swing_high = highs[-1]
+    low_index, swing_low = lows[-1]
+    size_atr = abs(swing_high - swing_low) / atr
+    direction = "up" if high_index > low_index else "down"
+    confirmed = size_atr >= min_atr_mult
+    return swing_high, swing_low, direction, size_atr, confirmed
 
 
 def fibonacci_zones(
