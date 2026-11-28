@@ -286,7 +286,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
     trades: list[Trade] = []
     pos: Position | None = None
     pending: tuple[int, Decimal, Decimal, Decimal] | None = None
-    exit_cfg = engine.strategy.get("exit", {})
+    exit_cfg = getattr(engine, "strategy", {}).get("exit", {})
     max_holding_minutes = int(exit_cfg.get("max_holding_minutes", 240))
     stagnation_minutes = int(exit_cfg.get("stagnation_minutes", 60))
     stagnation_min_favorable_r = Decimal(str(exit_cfg.get("stagnation_min_favorable_r", "0.25")))
