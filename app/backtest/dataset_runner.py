@@ -330,8 +330,14 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
         if pos is not None:
             deadline = pos.entry_time + timedelta(minutes=max_holding_minutes)
             if bar.bar_start >= deadline:
-                # At/after the deadline, use this bar's open; do not inspect later prices in the bar.
-                trades.append(_close(symbol, pos, bar.bar_start, bar.open, "MAX_HOLD_TIME", cost_values, net_available))
+                # If data resumes after the deadline, use the last completed pre-deadline close.
+                # This avoids inventing a fill inside a data gap or exceeding the hard time cap.
+                if bar.bar_start == deadline or i == 0:
+                    exit_time, exit_price, reason = bar.bar_start, bar.open, "MAX_HOLD_TIME"
+                else:
+                    prior = bars[i - 1]
+                    exit_time, exit_price, reason = prior.bar_end, prior.close, "MAX_HOLD_TIME_DATA_GAP"
+                trades.append(_close(symbol, pos, exit_time, exit_price, reason, cost_values, net_available))
                 pos = None
                 exited_this_bar = True
             else:
@@ -348,9 +354,11 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 else:
                     held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
                     if bar.bar_end >= deadline:
-                        # If the deadline falls inside an OHLC bar, exact execution time is unknowable.
-                        # Close at that bar's close and expose the bar-resolution limitation.
-                        trades.append(_close(symbol, pos, bar.bar_end, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
+                        # No tick path exists inside this OHLC bar. Exit at the last completed
+                        # pre-deadline close rather than fabricate a post-deadline execution.
+                        prior = bars[i - 1] if i > 0 else bar
+                        trades.append(_close(symbol, pos, prior.bar_end, prior.close,
+                                             "MAX_HOLD_TIME_BAR_RESOLUTION", cost_values, net_available))
                         pos = None
                         exited_this_bar = True
                     elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
@@ -365,7 +373,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             # their signal-time distance from the actual fill. Reject gap entries that destroy RR.
             target = (
                 entry_px + side * abs(signal_target - signal_close)
-                if target_source == "ATR_OPEN_SPACE" else signal_target
+                if target_source.startswith("ATR_") else signal_target
             )
             actual_rr = (Decimal(side) * (target - entry_px) / stop_dist) if stop_dist > 0 else Decimal(0)
             minimum_rr = Decimal(str(getattr(engine, "min_rr", "1.5")))
