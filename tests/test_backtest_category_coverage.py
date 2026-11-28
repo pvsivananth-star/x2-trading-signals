@@ -100,6 +100,20 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
                     f"{category}/{symbol} blocked by {decision.rejected_gates}",
                 )
 
+    def test_live_policy_still_blocks_backtest_only_index_fixture(self) -> None:
+        live_policy = TradingPolicy(self.markets, "live-policy-test")
+        decision = live_policy.evaluate(
+            timestamp=datetime(2026, 11, 24, 15, 0, tzinfo=UTC),
+            symbol="SPX",
+            regime=Regime.TREND_DAY,
+            stale_feed_seconds=0,
+            stale_threshold_seconds=300,
+            minutes_to_close=120,
+            live_mode=False,
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(any("explicitly excluded" in gate for gate in decision.rejected_gates))
+
     def test_seven_sessions_supply_five_prior_slot_samples(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
