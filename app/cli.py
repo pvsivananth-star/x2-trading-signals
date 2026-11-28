@@ -69,6 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     dataset.add_argument("--risk-pct", type=str, default="0.0025", help="equity risk per trade (A-tier cap)")
     dataset.add_argument("--allow-estimates", action="store_true",
                          help="apply unverified cost estimates (slippage); off by default")
+    dataset.add_argument("--synthetic-warmup-sessions", type=int, default=10,
+                         help="synthetic prior sessions used only for indicator warmup; supplied data remains the first tradable session")
     dataset.add_argument("--out", type=Path, default=Path("backtest_runs/latest"))
 
     start_api = subparsers.add_parser("start-api", help="start the localhost read-only HTTP API")
@@ -153,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
                 start_equity=Decimal(args.start_equity),
                 risk_pct=Decimal(args.risk_pct),
                 allow_estimates=args.allow_estimates,
+                synthetic_warmup_sessions=args.synthetic_warmup_sessions,
             )
             write_outputs(result, args.out)
             printable = {k: v for k, v in result.items() if k != "_trades"}
