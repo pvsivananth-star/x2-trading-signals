@@ -12,6 +12,39 @@ Primary goals:
 - Treat NO_TRADE as a first-class and preferred outcome.
 - The 2% daily return objective for a ₹25,000 account is an aspiration, never a forced quota or guarantee.
 
+## 1A. Non-Functional and Operational Requirements
+
+The system must optimize for **capital preservation, deterministic decisions, auditability and operational correctness**, not maximum trade frequency.
+
+Required guarantees:
+- Every decision is reproducible from a versioned input/configuration snapshot.
+- Every order has a complete lineage: market data -> features -> signal -> strategy decision -> trade intent -> risk decision -> order -> fills -> position.
+- All state-changing commands are idempotent and safe to retry.
+- Event processing must be ordered where causality requires it and must tolerate duplicate delivery.
+- No decision may use data newer than its causal cutoff.
+- Configuration, strategy code/version, risk-policy version and data-source provenance must be captured for every decision.
+- Failures in data, broker connectivity, persistence or reconciliation fail closed for new risk-taking.
+- Operational recovery must not create duplicate orders or silently lose fills.
+
+## 1B. Portfolio Accounting and Capital Reservation
+
+Capital is allocated explicitly to each portfolio and strategy. Risk budgets are **reservations**, not merely reporting limits.
+
+Before execution, the system must reserve the required risk/exposure budget. Reservations are released or adjusted only from authoritative order/fill/position state.
+
+The Portfolio Controller must support:
+- cash and buying-power accounting;
+- reserved versus available capital;
+- reserved versus consumed risk;
+- realized/unrealized P&L;
+- currency/FX exposure;
+- gross and net exposure;
+- cross-strategy netting and correlated exposure;
+- portfolio-to-account allocation;
+- explicit capital transfer between portfolios only through an authorized workflow.
+
+A rejected/cancelled/expired order must release its reservation deterministically.
+
 ## 2. Initial Markets
 
 Broker/execution connectivity is assumed for Interactive Brokers across its supported markets and Binance for crypto.
@@ -24,6 +57,18 @@ Initial trading universe should be deliberately narrow and liquid:
 - Crypto: BTC and ETH initially.
 
 The platform may observe additional markets but must rank and exclude instruments with inadequate liquidity, spread, volatility quality, historical edge, or execution quality.
+
+## 2A. Instrument and Trading-Eligibility Governance
+
+Each instrument must have a canonical identity and metadata including venue, currency, tick/lot size, price precision, trading hours, asset class, corporate-action status and shortability/borrow constraints where applicable.
+
+The universe service must distinguish:
+- observable;
+- eligible for research;
+- eligible for paper trading;
+- eligible for live trading.
+
+Eligibility must be based on deterministic liquidity, spread, data quality, execution quality and operational checks. Instrument onboarding/offboarding must be versioned and auditable.
 
 ## 3. Market Data
 
@@ -90,6 +135,20 @@ Example long setup:
 Trigger requires two-bar 5m confirmation, preferably with rejection/structure confirmation and volume expansion.
 
 No confirmation = NO_TRADE.
+
+## 7A. Decision Lineage and Configuration Versioning
+
+Every signal, trade intent, risk decision and order decision must reference:
+- strategy ID and immutable strategy version;
+- portfolio ID;
+- configuration/risk-policy version;
+- feature/analyzer version;
+- data-source and dataset version;
+- causal market-data cutoff;
+- correlation/causation IDs;
+- deterministic reason codes.
+
+A backtest run must persist the exact configuration and code/strategy version identifiers required to reproduce it.
 
 ## 7. Trade Quality
 
@@ -188,6 +247,19 @@ A portfolio may contain multiple Strategy Managers. Strategy Managers must not d
 
 The system must support enabling/disabling, versioning, parameterizing and backtesting each strategy independently and in portfolio combinations.
 
+## 9A. Position and Exposure Semantics
+
+Positions are authoritative account/portfolio state derived from fills, not from strategy intent.
+
+The system must define how exposure is handled when multiple strategies recommend the same instrument:
+- strategy attribution remains separate;
+- economic exposure is consolidated before portfolio/account risk checks;
+- exits cannot accidentally increase exposure;
+- opposing strategy recommendations are resolved by explicit portfolio policy;
+- long-term and daily positions remain isolated unless an explicit transfer is approved.
+
+Trade lifecycle state must distinguish intent, submitted orders, fills and resulting position state.
+
 ## 10. Trade Management
 
 Support:
@@ -199,6 +271,24 @@ Support:
 - session flattening.
 
 The system must not rely solely on fixed profit targets.
+
+## 10A. Reconciliation and Recovery
+
+Broker/exchange state is the external execution authority after order submission. The system must periodically reconcile:
+- open orders;
+- fills;
+- positions;
+- cash/buying power;
+- fees;
+- order status.
+
+On reconciliation mismatch, the system must:
+1. stop new risk-increasing orders for the affected scope;
+2. reconcile deterministically;
+3. record the discrepancy and resolution;
+4. resume only when policy permits.
+
+Startup recovery must rebuild operational state from durable state plus broker reconciliation; in-memory state must never be the sole source of truth.
 
 ## 11. Execution Safety
 
@@ -271,6 +361,19 @@ Provide a web UI for:
 - manual execution where explicitly enabled;
 - emergency kill switch.
 
+## 14A. Configuration, Secrets and Change Governance
+
+Strategy parameters, risk limits, universe membership and execution policies are configuration data with explicit versions and effective timestamps.
+
+Changes must be:
+- validated before activation;
+- auditable;
+- attributable to an operator/system identity;
+- reversible;
+- prohibited from silently changing historical backtests.
+
+Live-sensitive changes should require explicit authorization and, where configured, a two-step approval.
+
 ## 14. Cloud Readiness
 
 The platform must run locally first but be deployable later as a dedicated container on AWS, Azure or another container platform.
@@ -305,6 +408,23 @@ Apply established engineering principles:
 - least privilege;
 - testability;
 - deterministic reproducibility.
+
+## 15A. Reliability and Failure Domains
+
+The system must define behavior for:
+- stale/missing market data;
+- out-of-order events;
+- duplicate events;
+- event-bus restart;
+- database outage;
+- broker disconnect;
+- process restart during order submission;
+- partial fills during disconnect;
+- clock drift;
+- market halt/circuit breaker;
+- configuration corruption.
+
+The default response to uncertainty is to stop new risk-taking and preserve/reconcile existing state.
 
 ## 16. Safety Rule
 
