@@ -94,6 +94,67 @@ def rollup(
                         bar_volume, trade_count, final=final,
                         partial=replay_end is not None and bar_end > replay_end))
     return bars
+\n\n
+def aggregate_bars(
+    bars: list[Bar],
+    interval_seconds: int,
+    source_interval_seconds: int,
+    *,
+    timestamp: datetime | None = None,
+) -> list[Bar]:
+    """Aggregate only complete, contiguous source bars into higher-timeframe bars.
+
+    Buckets are UTC epoch-aligned. A bucket is emitted only when every expected source
+    interval is present, final, non-partial, and fully closed by the optional timestamp.
+    This deliberately fails closed across missing bars and session gaps.
+    """
+    if interval_seconds <= 0 or source_interval_seconds <= 0:
+        raise ValueError("bar intervals must be positive")
+    if interval_seconds % source_interval_seconds:
+        raise ValueError("target interval must be divisible by source interval")
+    expected = interval_seconds // source_interval_seconds
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    grouped: dict[datetime, list[Bar]] = {}
+    for bar in bars:
+        if not bar.final or bar.partial:
+            continue
+        if int((bar.bar_end - bar.bar_start).total_seconds()) != source_interval_seconds:
+            continue
+        start = bar.bar_start.astimezone(UTC)
+        elapsed = start - epoch
+        seconds = elapsed.days * 86400 + elapsed.seconds
+        bucket = epoch + timedelta(seconds=(seconds // interval_seconds) * interval_seconds)
+        bucket_end = bucket + timedelta(seconds=interval_seconds)
+        if bar.bar_start < bucket or bar.bar_end > bucket_end:
+            continue
+        if timestamp is not None and bar.bar_end > timestamp:
+            continue
+        grouped.setdefault(bucket, []).append(bar)
+
+    result: list[Bar] = []
+    for bucket, members in sorted(grouped.items()):
+        members.sort(key=lambda item: item.bar_start)
+        if len(members) != expected:
+            continue
+        if any(
+            members[i].bar_start != bucket + timedelta(seconds=i * source_interval_seconds)
+            or members[i].bar_end != bucket + timedelta(seconds=(i + 1) * source_interval_seconds)
+            for i in range(expected)
+        ):
+            continue
+        result.append(Bar(
+            bucket,
+            bucket + timedelta(seconds=interval_seconds),
+            members[0].open,
+            max(item.high for item in members),
+            min(item.low for item in members),
+            members[-1].close,
+            sum((item.volume for item in members), Decimal(0)),
+            sum(item.trade_count for item in members),
+            final=True,
+            partial=False,
+        ))
+    return result
 
 
 class SessionCalendar:
