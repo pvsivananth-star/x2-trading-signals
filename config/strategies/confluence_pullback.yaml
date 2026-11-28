@@ -16,6 +16,11 @@ strategy:
     # Compare each 5m bar with the same exchange-local wall-clock slot in prior sessions.
     slot_rvol_lookback_sessions: 10
     slot_rvol_min_sessions: 5
+  event_risk:
+    # Historical backtests may opt in when a timestamped calendar adapter is supplied.
+    # If required is true, missing/stale/blocked assessments reject new entries.
+    required: false
+    max_age_seconds: 900
   execution:
     # Cancel unfilled quantity; the shared cost model applies fees, spread and slippage.
     partial_fill_ratio: 1.0
