@@ -73,7 +73,7 @@ flowchart TD
 
 ## 4. Trading costs and reporting integrity
 
-- [x] Distinguish `gross`, `partial_net`, and `fully_net` cost coverage in per-symbol and combined summaries (no-trade summaries are labelled `no_trades`). Persisted output formatting still needs review.
+- [x] Distinguish `gross`, `partial_net`, and `fully_net` cost coverage in per-symbol and combined summaries (no-trade summaries are labelled `no_trades`); persist trade-level cost status in CSV and run-level status in JSON.
 - [x] Mark trades/summaries `fully_net` only when all required cost components are present, verified, and applied; excluded or estimated fields force `partial_net` when known costs are applied.
 - [x] Correct full-net eligibility: any excluded or estimated required cost field prevents a `fully_net` label. Per-symbol reports expose `cost_status`, excluded fields, and estimated fields.
 - [x] Do not map commodity futures to generic US ETF cost assumptions. GC=F/CL=F remain outside the baseline; GLD and USO use separate symbol-specific spread fields. Their spread values are still unavailable, so those instruments remain `partial_net` until measured.
