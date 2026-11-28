@@ -695,6 +695,10 @@ def _apply_portfolio_constraints(
         profile = profiles[trade.symbol]
         config = market_config[profile]
         stop_distance = trade.risk_amount / trade.qty if trade.qty > 0 else Decimal(0)
+        entry_cost_estimate = Decimal(0)
+        if profile in _EQUITY_COST_PROFILES:
+            sizing_cost_values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
+            entry_cost_estimate = entry_costs(sizing_cost_values, trade.qty, trade.entry_price)
         decision = ledger.reserve(
             timestamp=trade.entry_time,
             exit_time=trade.exit_time,
@@ -706,6 +710,7 @@ def _apply_portfolio_constraints(
             stop_distance=stop_distance,
             max_risk_amount=min(trade.risk_amount, capital * risk_pct),
             whole_shares=profile not in _FRACTIONAL_QTY_PROFILES,
+            entry_cost_estimate=entry_cost_estimate,
         )
         if not decision.accepted:
             rejection_counts[decision.reason or "unknown"] = rejection_counts.get(decision.reason or "unknown", 0) + 1
