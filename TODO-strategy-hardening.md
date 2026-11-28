@@ -54,17 +54,17 @@ flowchart TD
 
 ## 2. Position lifecycle and time exits
 
-- [ ] Enforce a hard maximum holding period of **4 hours from actual fill time**, not signal or order-submission time.
-- [ ] Add a configurable stagnation/time-stop when the trade fails to make required progress within configured bars/minutes. Keep this separate from the hard four-hour limit.
+- [x] Enforce a hard maximum holding period of **4 hours from actual fill time**, not signal or order-submission time. On aligned bar intervals, exit at the first bar open at/after the deadline; if a deadline falls inside an OHLC bar, close at that bar's close and retain the bar-resolution limitation.
+- [x] Add a configurable stagnation/time-stop when the trade fails to make required progress within configured bars/minutes. Keep this separate from the hard four-hour limit. Current default: 60 minutes without +0.25R maximum favourable excursion.
 - [ ] Define stop/target levels relative to the actual simulated fill and initial risk. Recalculate or reject trades when next-bar gaps invalidate intended reward/risk.
-- [ ] Apply reaction-zone `size_weight` values to final risk sizing; verify core, shallow/deep, and momentum setup weights.
+- [x] Apply reaction-zone `size_weight` values to final risk sizing; core defaults to 1.00 and shallow/deep/momentum weights scale the risk budget when supplied by the strategy card. Broader per-zone integration coverage remains.
 - [ ] Preserve mandatory session/pre-close flattening where applicable. Do not apply regular-session cutoffs to instruments with different sessions.
 - [ ] Record exit reason and elapsed holding time for every trade.
 
 ## 3. Execution simulator correctness
 
-- [ ] Check the entry bar for stop/target touches after a pending entry fills; do not skip its high/low.
-- [ ] Model adverse opening gaps through stops with realistic gap-aware fills rather than always filling exactly at the stop price.
+- [x] Check the entry bar for stop/target touches after a pending entry fills; do not skip its high/low.
+- [x] Model adverse opening gaps through stops with gap-aware fills at the bar open rather than always filling exactly at the stop price.
 - [ ] Anchor stop/target calculations to actual fill price, not only signal-bar close.
 - [ ] If stop and target are both touched within one OHLC bar and tick ordering is unavailable, retain a documented conservative assumption (stop first) and expose the ambiguity in diagnostics.
 - [ ] Model spread, slippage, fees, and partial/rejected fills consistently between signal qualification, simulated execution, and realized P&L.
@@ -112,7 +112,7 @@ flowchart TD
 
 ## 8. Implementation order
 
-1. [ ] Four-hour hard time limit and stagnation exit.
+1. [x] Four-hour hard time limit and stagnation exit.
 2. [ ] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk).
 3. [ ] True 30m/15m/5m causal timeframe pipeline and swing confirmation.
 4. [ ] Slot-normalized RVOL, direction/regime diagnostics, and reaction-zone sizing.
