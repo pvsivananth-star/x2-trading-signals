@@ -476,7 +476,10 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
 
 def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     if not trades:
-        return {"trades": 0}
+        return {"trades": 0, "cost_status": "no_trades"}
+    net_trade_count = sum(1 for trade in trades if trade.net_pnl is not None)
+    cost_status = ("fully_net" if net_trade_count == len(trades) else
+                   "partial_net" if net_trade_count else "gross")
     def stats(values: list[Decimal]) -> dict[str, Any]:
         wins = [v for v in values if v > 0]
         losses = [v for v in values if v <= 0]
@@ -497,7 +500,7 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
                 "max_drawdown_pct": float(max_dd * 100)}
     net_vals = [t.net_pnl for t in trades if t.net_pnl is not None]
     gross_vals = [t.gross_pnl for t in trades]
-    out = {"gross": stats(gross_vals)}
+    out = {"cost_status": cost_status, "gross": stats(gross_vals)}
     if net_vals and len(net_vals) == len(trades):
         out["net"] = stats(net_vals)
     else:
