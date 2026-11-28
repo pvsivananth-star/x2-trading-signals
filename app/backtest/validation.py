@@ -9,7 +9,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import defaultdict
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -156,7 +156,6 @@ def validate_dataset(
             return DatasetValidationReport(str(directory), str(bars_path), str(instruments_path), 0, 0,
                                            tuple(issues), tuple(), tuple(instruments.values()), False, 0)
 
-        fieldnames = set(reader.fieldnames or [])
         synthetic = "synthetic" in str(reader.fieldnames).lower() or (
             (directory / "manifest.json").is_file()
             and "synthetic" in (directory / "manifest.json").read_text(encoding="utf-8").lower()
