@@ -566,6 +566,32 @@ class IntrabarExitTests(unittest.TestCase):
         self.assertEqual(result["execution"]["rejected_entries"], 1)
         self.assertEqual(result["trades"], [])
 
+    def test_entry_moveroom_uses_realized_cost_ledger_budget(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            min_rr = Decimal("1.5")
+            roundtrip_cost = Decimal("0.0010")
+            slippage_buffer = Decimal("0.0005")
+            def __init__(self):
+                self.entered = False
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={"target": "100.45"})
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(),
+                            TradingPolicy.from_yaml("config/markets_17.yaml"), self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"], [])
+        self.assertEqual(result["execution"]["cost_gate_rejections"], 1)
+
     def test_entry_bar_stop_is_checked_immediately_after_fill(self):
         class EntryOnceEngine:
             stop_mult = Decimal("0.75")
