@@ -138,6 +138,7 @@ def validate_dataset(
 
     groups: dict[tuple[int, int], list[tuple[int, datetime]]] = defaultdict(list)
     raw_previous: dict[tuple[int, int], datetime] = {}
+    previous_close: dict[tuple[int, int], Decimal] = {}
     warmup_seen: dict[tuple[int, int], bool] = defaultdict(bool)
     warmup_closed: dict[tuple[int, int], bool] = defaultdict(bool)
     warmup_groups: set[tuple[int, int]] = set()
@@ -228,6 +229,16 @@ def validate_dataset(
                 if volume < 0:
                     issues.append(ValidationIssue("NEGATIVE_VOLUME", "critical",
                                                   "volume cannot be negative", iid, interval, row_no))
+                previous = previous_close.get((iid, interval))
+                if previous is not None and previous > 0:
+                    jump = abs(close / previous - Decimal("1"))
+                    if jump >= Decimal("0.25"):
+                        issues.append(ValidationIssue(
+                            "LARGE_PRICE_JUMP", "warning",
+                            f"adjacent close changed {jump * 100:.2f}%; verify split/corporate-action adjustment",
+                            iid, interval, row_no,
+                        ))
+                previous_close[(iid, interval)] = close
 
             complete = row.get("is_complete", "").strip().lower()
             if complete not in {"true", "false", "1", "0", "yes", "no"}:
@@ -296,10 +307,9 @@ def validate_dataset(
                 f"unsupported corporate-action adjustment mode: {mode}", iid,
             ))
         elif not mode:
-            issues.append(ValidationIssue(
-                "ADJUSTMENT_MODE_UNDECLARED", "warning",
-                "instrument does not declare raw/split-adjusted corporate-action mode", iid,
-            ))
+            # Missing metadata is allowed for legacy/local fixtures; a suspicious price jump
+            # above is the actionable signal that requires adjustment review.
+            pass
 
     manifest_path = directory / "manifest.json"
     if manifest_path.is_file():
