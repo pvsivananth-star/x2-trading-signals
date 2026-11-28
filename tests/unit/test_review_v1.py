@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.backtest.bars import Bar
+from app.event_risk import EventRiskAssessment
 from app.features import FeatureSnapshot, causal_pullback_depth, causal_slot_rvol
 from app.policy import TradingPolicy
 from app.regime import Regime
@@ -98,6 +99,32 @@ class ReactionZoneTests(unittest.TestCase):
         ))
         self.assertNotEqual(card.action, "enter_long")
         self.assertIn("dry_up_not_met", card.rejected_gates)
+
+    def test_required_event_gate_fails_closed_without_assessment(self):
+        engine = _engine()
+        engine.strategy["event_risk"] = {"required": True, "max_age_seconds": 900}
+        card = _eval(engine, _snap())
+        self.assertNotEqual(card.action, "enter_long")
+        self.assertIn("event_risk_unavailable_or_stale", card.rejected_gates)
+        self.assertEqual(card.inputs["event_risk_state"], "unavailable")
+
+    def test_required_event_gate_accepts_fresh_clear_assessment(self):
+        engine = _engine()
+        engine.strategy["event_risk"] = {"required": True, "max_age_seconds": 900}
+        assessment = EventRiskAssessment("clear", NOW, "no high-impact events in block window", "test-calendar")
+        card = _eval(engine, _snap(), event_risk=assessment)
+        self.assertEqual(card.action, "enter_long")
+        self.assertEqual(card.inputs["event_risk_state"], "clear")
+
+    def test_required_event_gate_rejects_blocked_and_stale_assessments(self):
+        engine = _engine()
+        engine.strategy["event_risk"] = {"required": True, "max_age_seconds": 900}
+        blocked = EventRiskAssessment("blocked", NOW, "high-impact event nearby", "test-calendar")
+        blocked_card = _eval(engine, _snap(), event_risk=blocked)
+        self.assertIn("event_risk_blocked", blocked_card.rejected_gates)
+        stale = EventRiskAssessment("clear", NOW - timedelta(minutes=20), "stale feed", "test-calendar")
+        stale_card = _eval(engine, _snap(), event_risk=stale)
+        self.assertIn("event_risk_unavailable_or_stale", stale_card.rejected_gates)
 
     def test_chop_playbook_rejects_trend_continuation_core_zone(self):
         engine = _engine()
