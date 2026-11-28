@@ -29,6 +29,7 @@ from collections.abc import Callable
 
 from app.backtest.bars import Bar, aggregate_bars
 from app.backtest.simulator import OrderSimulator, SimulationConfig
+from app.backtest.portfolio import PortfolioLedger
 from app.costs import CostBlockedError, _field, load_costs
 from app.event_risk import EventRiskAssessment
 from app.features import (
@@ -186,6 +187,7 @@ class Trade:
     regime: str = "UNKNOWN"
     fill_status: str = "filled"
     cost_status: str = "gross"
+    portfolio_status: str = "unprocessed"
 
 
 @dataclass
