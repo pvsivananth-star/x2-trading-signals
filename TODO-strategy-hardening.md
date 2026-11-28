@@ -46,8 +46,8 @@ flowchart TD
 - [x] Require minimum swing size of at least 0.60 ATR using 15-minute ATR.
 - [x] Require two-bar confirmation after the swing point; confirmation is available only after both bars close.
 - [x] Use 5-minute bars for entry timing, pullback/reaction-zone qualification, and execution decisions (the runner uses its supplied signal interval; the configured production baseline is 5 minutes).
-- [ ] Add time-of-day/slot-normalized RVOL using comparable prior sessions. Do not compare an opening bar with a full-session average.
-- [ ] Add time-of-day/slot-normalized RVOL before enabling the full baseline gate. The rolling baseline RVOL floor is now enforced even when an impulse is present; impulse strength and pullback dry-up are additional gates. The comparable-prior-session slot metric remains open.
+- [x] Add time-of-day/slot-normalized RVOL using the same exchange-local wall-clock slot in up to 10 prior completed sessions. Require at least 5 comparable sessions; exclude the current session and future bars. Insufficient history returns unavailable and the entry gate fails closed.
+- [x] Use slot-normalized RVOL for the baseline entry floor; retain rolling RVOL as a separate diagnostic and keep impulse strength/pullback dry-up as additional gates.
 - [ ] Keep trend and chop playbooks distinct. Do not force trend-following entries into sideways/choppy conditions.
 - [ ] Evaluate long/short performance by regime. Do not globally disable shorts based on aggregate results.
 - [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, and the existing 5-minute feature/RVOL inputs. Event-risk diagnostics remain pending with the event gate.
@@ -99,7 +99,7 @@ flowchart TD
 
 ## 7. Acceptance tests and validation
 
-- [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, slot RVOL, impulse-RVOL branch, event/news fail-closed behavior, direction/regime filters, and size weights.
+- [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, event/news fail-closed behavior, direction/regime filters, and size weights.
 - [ ] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason accounting.
 - [ ] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills, and costs.
 - [ ] Portfolio tests: shared cash, simultaneous signals, maximum concurrency, allocation caps, cluster exposure, and deterministic priority.
