@@ -340,6 +340,14 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 trades.append(_close(symbol, pos, exit_time, exit_price, reason, cost_values, net_available))
                 pos = None
                 exited_this_bar = True
+            elif bar.bar_end >= deadline:
+                # The deadline falls inside this OHLC bar. Do not use its high/low/close,
+                # which may include post-deadline prices; exit at the last completed close.
+                prior = bars[i - 1] if i > 0 else bar
+                trades.append(_close(symbol, pos, prior.bar_end, prior.close,
+                                     "MAX_HOLD_TIME_BAR_RESOLUTION", cost_values, net_available))
+                pos = None
+                exited_this_bar = True
             else:
                 stop_distance = abs(pos.entry_price - pos.stop)
                 favourable = (bar.high - pos.entry_price) if pos.side > 0 else (pos.entry_price - bar.low)
@@ -353,16 +361,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     exited_this_bar = True
                 else:
                     held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
-                    if bar.bar_end >= deadline:
-                        # No tick path exists inside this OHLC bar. Exit at the last completed
-                        # pre-deadline close rather than fabricate a post-deadline execution.
-                        prior = bars[i - 1] if i > 0 else bar
-                        trades.append(_close(symbol, pos, prior.bar_end, prior.close,
-                                             "MAX_HOLD_TIME_BAR_RESOLUTION", cost_values, net_available))
-                        pos = None
-                        exited_this_bar = True
-                    elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
-                          and pos.best_favorable_r < stagnation_min_favorable_r):
+                    if (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
+                            and pos.best_favorable_r < stagnation_min_favorable_r):
                         trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
                         pos = None
                         exited_this_bar = True
