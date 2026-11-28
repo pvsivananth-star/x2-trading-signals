@@ -296,7 +296,10 @@ class ConfluenceV1:
             slot_rvol = Decimal(str(market["slot_rvol_min"]))
             # Market-specific estimate feeds the pre-trade MoveRoom gate; realised costs
             # are calculated separately from config/costs.yaml and labelled by coverage.
-            roundtrip_cost_used = Decimal(str(market.get("est_roundtrip_cost_pct", self.roundtrip_cost)))
+            roundtrip_cost_used = max(
+                self.roundtrip_cost,
+                Decimal(str(market.get("est_roundtrip_cost_pct", self.roundtrip_cost))),
+            )
             slippage_buffer_used = Decimal(str(market.get("slippage_buffer_pct", self.slippage_buffer)))
 
         zone: str | None = None
