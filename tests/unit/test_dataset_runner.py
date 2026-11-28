@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.backtest.bars import Bar
-from app.backtest.simulator import Fill, OrderSimulator, SimulationConfig
 from app.backtest.dataset_runner import (
     COST_SECTION,
     DEFAULT_PROFILE,
@@ -26,6 +25,7 @@ from app.backtest.dataset_runner import (
     run_symbol,
     summarize,
 )
+from app.backtest.simulator import Fill, OrderSimulator, SimulationConfig
 from app.costs import load_costs
 from app.policy import TradingPolicy
 from app.regime import Regime
