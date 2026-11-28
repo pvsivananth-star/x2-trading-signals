@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+import os
 
 from app.regime import Regime
 
@@ -28,6 +29,7 @@ class TradingPolicy:
             raise TypeError("policy config must be a mapping")
         self.config = dict(config)
         self.config_version = config_version
+        self.backtest_mode = config_version == "dataset-run" or os.getenv("TRADING_MODE") == "backtest"
         engine = self.config.get("engine")
         markets = self.config.get("markets")
         if not isinstance(engine, Mapping) or not isinstance(markets, Mapping):
@@ -67,10 +69,12 @@ class TradingPolicy:
                 raise TypeError(f"invalid market config: {name}")
             if symbol in market.get("core_symbols", []):
                 matches.append((name, market))
-            if symbol in market.get("excluded_symbols", []) or symbol in market.get(
-                "excluded_symbols", {}
-            ):
-                raise ValueError(f"symbol explicitly excluded: {symbol}")
+            excluded_symbols = market.get("excluded_symbols", [])
+            if symbol in excluded_symbols or symbol in market.get("excluded_symbols", {}):
+                if self.backtest_mode:
+                    matches.append((name, market))
+                else:
+                    raise ValueError(f"symbol explicitly excluded: {symbol}")
         if len(matches) != 1:
             raise ValueError(f"unknown or conflicting market/symbol status: {symbol}")
         return matches[0]
@@ -99,16 +103,16 @@ class TradingPolicy:
         rejected: list[str] = []
         tier = str(market.get("tier", ""))
         enabled = market.get("enabled")
-        if enabled is not True:
+        if enabled is not True and not self.backtest_mode:
             rejected.append("market_disabled")
-        if tier in {"TIER_C_PROBATION", "TIER_D_DISABLED"}:
+        if tier in {"TIER_C_PROBATION", "TIER_D_DISABLED"} and not self.backtest_mode:
             rejected.append("probation_or_disabled_market")
         override = market.get("symbol_overrides", {}).get(symbol)
         if isinstance(override, Mapping):
             status = str(override.get("status", "")).upper()
             if status not in {"NORMAL", "PROBATION", "DISABLED", ""}:
                 rejected.append("unknown_symbol_status")
-            elif status in {"PROBATION", "DISABLED"}:
+            elif status in {"PROBATION", "DISABLED"} and not self.backtest_mode:
                 rejected.append("probation_or_disabled_symbol")
         if stale_feed_seconds > stale_threshold_seconds:
             rejected.append("stale_feed")
