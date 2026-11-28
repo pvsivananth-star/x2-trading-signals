@@ -41,7 +41,7 @@ flowchart TD
 ## 1. Entry quality and multi-timeframe causality
 
 - [x] Use completed 30-minute bars for discovery/context; never use a still-forming higher-timeframe bar. Aggregation rejects incomplete, non-final, partial, or non-contiguous source buckets.
-- [ ] Implement a fail-closed event/news-risk gate. If event-risk data is unavailable or stale, record the uncertainty and reject entries where policy requires this gate.
+- [x] Implement a fail-closed event-risk gate with a provider-neutral, timestamped assessment contract and a backtest provider callback. When `event_risk.required` is true, missing, stale, future-dated, unknown, or blocked assessments reject new entries and the decision card records state, timestamp, and reason. No external calendar/news provider is bundled; callers must supply one.
 - [x] Build 15-minute swing/structure anchors from completed 15-minute bars, not 5-minute bars relabeled as 15-minute structure.
 - [x] Require minimum swing size of at least 0.60 ATR using 15-minute ATR.
 - [x] Require two-bar confirmation after the swing point; confirmation is available only after both bars close.
@@ -50,7 +50,7 @@ flowchart TD
 - [x] Use slot-normalized RVOL for the baseline entry floor; retain rolling RVOL as a separate diagnostic and keep impulse strength/pullback dry-up as additional gates.
 - [x] Keep trend and chop playbooks distinct: TREND_DAY retains directional pullback zones and mirrored close confirmation for long/short; CHOP_DAY is restricted to deep range-edge reclaim setups. Trend-continuation core/shallow/momentum entries are blocked in chop.
 - [x] Record gross performance by entry regime and long/short side in `by_regime` and `by_regime_side` summaries. Do not globally disable shorts based on aggregate results.
-- [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, and the existing 5-minute feature/RVOL inputs. Event-risk diagnostics remain pending with the event gate.
+- [x] Record diagnostics for 30-minute context regime/time, 15-minute swing direction/size/confirmation, 5-minute slot/rolling RVOL inputs, and event-risk state/timestamp/reason.
 
 ## 2. Position lifecycle and time exits
 
@@ -100,7 +100,7 @@ flowchart TD
 
 ## 7. Acceptance tests and validation
 
-- [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, event/news fail-closed behavior, direction/regime filters, and size weights.
+- [ ] Unit tests: higher-timeframe finality, no lookahead, 15m swing threshold, two-bar confirmation, ~~slot RVOL~~ (same-slot prior-session ratio, insufficient-history fail-closed, and future-bar exclusion covered), impulse-RVOL branch, ~~event/news fail-closed behavior~~ (missing/stale/future/blocked event states covered), direction/regime filters, and size weights.
 - [ ] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason accounting.
 - [ ] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills, and costs.
 - [ ] Portfolio tests: shared cash, simultaneous signals, maximum concurrency, allocation caps, cluster exposure, and deterministic priority.
@@ -115,7 +115,7 @@ flowchart TD
 
 1. [x] Four-hour hard time limit and stagnation exit.
 2. [x] Execution simulator fixes (entry-bar checks, gap handling, fill-relative risk and gap-entry rejection).
-3. [x] True 30m/15m/5m causal timeframe pipeline and swing confirmation. Event/news gating and slot-normalized RVOL remain open under item 1.
+3. [x] True 30m/15m/5m causal timeframe pipeline, swing confirmation, fail-closed event-risk gate, and slot-normalized RVOL.
 4. [ ] Slot-normalized RVOL (pending); higher-timeframe diagnostics and reaction-zone sizing are implemented.
 5. [ ] Instrument-specific costs and truthful gross/partial-net/fully-net reporting.
 6. [ ] Shared portfolio capital, concurrency, and exposure constraints.
