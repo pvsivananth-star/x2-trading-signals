@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 from app.application.trades import TradeManager
 from app.application.portfolio_controller import PortfolioController,PortfolioLimits,PortfolioSnapshot
 from app.application.risk_manager import RiskManager,RiskLimits,RiskSnapshot
