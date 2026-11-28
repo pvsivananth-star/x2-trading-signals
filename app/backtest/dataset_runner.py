@@ -499,6 +499,15 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
         out["net"] = None
     out["by_side"] = {side: stats([t.gross_pnl for t in trades if t.side == side])
                       for side in {t.side for t in trades}}
+    durations = sorted(t.holding_minutes for t in trades)
+    middle = len(durations) // 2
+    median = (durations[middle] if len(durations) % 2
+              else (durations[middle - 1] + durations[middle]) / Decimal(2))
+    out["holding_minutes"] = {
+        "average": float(sum(durations, Decimal(0)) / Decimal(len(durations))),
+        "median": float(median),
+        "maximum": float(max(durations)),
+    }
     return out
 
 
