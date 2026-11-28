@@ -51,6 +51,31 @@ class FreeHistoricalDataTests(unittest.TestCase):
                 output, symbols=("SPY",), profile_map={"SPY": "US_EQUITIES"},
             )
 
+
+    def test_single_symbol_can_be_appended_without_overwriting_first_symbol(self) -> None:
+        output = Path(tempfile.mkdtemp()) / "dataset"
+        profiles = {"SPY": "US_EQUITIES", "NVDA": "US_EQUITIES"}
+        with patch(
+            "app.backtest.free_data._fetch_symbol",
+            return_value=(self._rows(), "America/New_York"),
+        ):
+            download_free_dataset(
+                output, symbols=("SPY",), days=30, profile_map=profiles,
+            )
+            result = download_free_dataset(
+                output, symbols=("NVDA",), days=30, profile_map=profiles, append=True,
+            )
+        self.assertEqual(result["symbols_downloaded"], 1)
+        with (output / "instruments.csv").open(newline="", encoding="utf-8") as handle:
+            instruments = list(__import__("csv").DictReader(handle))
+        self.assertEqual(
+            {row["canonical_symbol"] for row in instruments},
+            {"SPY", "NVDA"},
+        )
+        manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(manifest["symbols_downloaded"]), {"SPY", "NVDA"})
+        self.assertEqual(manifest["total_rows"], 2)
+
     def test_provider_retention_limit_is_enforced(self) -> None:
         with self.assertRaisesRegex(ValueError, "limited to 60"):
             download_free_dataset(
