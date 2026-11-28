@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import yaml
 
 from app.backtest.bars import Bar
-from app.backtest.dataset_runner import DEFAULT_PROFILE, run_symbol
+from app.backtest.dataset_runner import DEFAULT_PROFILE, _synthetic_warmup_bars, run_symbol
 from app.backtest.preload import preload_directory
 from app.features import FeatureSnapshot, causal_slot_rvol
 from app.costs import load_costs
@@ -142,6 +142,28 @@ class BacktestCategoryCoverageTest(unittest.TestCase):
             self.assertEqual(samples, 6)
             self.assertIsNotNone(value)
             self.assertEqual(loaded.summary["symbols_loaded"], 1)
+
+    def test_five_supplied_days_get_ten_synthetic_warmup_sessions(self) -> None:
+        bars = []
+        first = datetime(2026, 11, 23, 14, 30, tzinfo=UTC)
+        for day in range(5):
+            session = first + timedelta(days=day)
+            for slot in range(78):
+                ts = session + timedelta(minutes=5 * slot)
+                price = Decimal("100") + Decimal(day) + Decimal(slot) / Decimal("100")
+                bars.append(Bar(
+                    ts, ts + timedelta(minutes=5), price, price + Decimal("0.20"),
+                    price - Decimal("0.20"), price, Decimal("1000"), 10
+                ))
+
+        warmed, simulation_start = _synthetic_warmup_bars(
+            bars, "US_EQUITIES", sessions=10
+        )
+
+        self.assertEqual(simulation_start, bars[0].bar_start)
+        self.assertEqual(warmed[-len(bars):], bars)
+        self.assertEqual(len(warmed) - len(bars), 10 * 78)
+        self.assertLess(warmed[0].bar_start, bars[0].bar_start)
 
     def test_runner_can_create_a_trade_for_each_category(self) -> None:
         timestamps = [
