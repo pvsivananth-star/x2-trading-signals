@@ -4,7 +4,6 @@ from decimal import Decimal
 from app.application.backtest_replay import ReplayCosts, run_replay, walk_forward
 from app.application.strategy_manager import MTFTrendPullbackContinuation, StrategyManager, StrategySpec
 from app.backtest.bars import Bar
-from app.domain.runtime import RuntimeMode
 
 
 def bars(n=80):
