@@ -765,7 +765,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
         self.assertEqual(result["excluded_instruments"], [
             {"symbol": "SIM-EQ", "profile": "HONGKONG_HKEX", "reason": "market_disabled"}
         ])
-        self.assertNotIn("HONGKONG_HKEX", result["portfolio"]["market_allocation_pct"])
+        self.assertEqual(result["portfolio"]["market_allocation_pct"]["HONGKONG_HKEX"], "0")
 
     def test_shared_portfolio_budget_is_reported(self):
         portfolio = self.result["portfolio"]
