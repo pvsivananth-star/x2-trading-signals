@@ -17,6 +17,8 @@ from typing import Any
 
 from app.real_data import REQUIRED_COLUMNS, _parse_ts
 
+CORPORATE_ACTION_MODES = {"raw", "split_adjusted", "corporate_action_adjusted", "unadjusted"}
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
@@ -40,6 +42,7 @@ class DatasetValidationReport:
     symbols: tuple[str, ...]
     synthetic: bool
     warmup_rows: int
+    warmup_groups: int = 0
 
     @property
     def critical(self) -> tuple[ValidationIssue, ...]:
@@ -64,6 +67,7 @@ class DatasetValidationReport:
             "symbols": list(self.symbols),
             "synthetic": self.synthetic,
             "warmup_rows": self.warmup_rows,
+            "warmup_groups": self.warmup_groups,
             "valid": self.valid,
             "critical_count": len(self.critical),
             "warning_count": len(self.warnings),
@@ -89,6 +93,7 @@ def validate_dataset(
     interval_seconds: int | None = None,
     profile_map: dict[str, str] | None = None,
     fail_on_warnings: bool = False,
+    require_profile: bool = False,
 ) -> DatasetValidationReport:
     """Validate bars.csv/instruments.csv without executing a strategy."""
     directory = Path(directory).resolve()
@@ -104,6 +109,7 @@ def validate_dataset(
         issues.append(ValidationIssue("MISSING_INSTRUMENTS", "critical", f"missing {instruments_path.name}"))
 
     instruments: dict[int, str] = {}
+    instrument_meta: dict[int, dict[str, str]] = {}
     if instruments_path.is_file():
         with instruments_path.open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
@@ -121,6 +127,7 @@ def validate_dataset(
                                                       "instrument_id is not an integer", row=row_no))
                         continue
                     symbol = row["canonical_symbol"].strip()
+                    instrument_meta[iid] = {str(k): str(v).strip() for k, v in row.items() if k}
                     if not symbol:
                         issues.append(ValidationIssue("EMPTY_SYMBOL", "critical",
                                                       "canonical_symbol is empty", instrument_id=iid, row=row_no))
@@ -131,6 +138,9 @@ def validate_dataset(
 
     groups: dict[tuple[int, int], list[tuple[int, datetime]]] = defaultdict(list)
     raw_previous: dict[tuple[int, int], datetime] = {}
+    warmup_seen: dict[tuple[int, int], bool] = defaultdict(bool)
+    warmup_closed: dict[tuple[int, int], bool] = defaultdict(bool)
+    warmup_groups: set[tuple[int, int]] = set()
     rows = 0
     checked_intervals: set[int] = set()
     synthetic = False
@@ -189,6 +199,21 @@ def validate_dataset(
                                               "bar_end must be after bar_start",
                                               iid, interval, row_no))
 
+            meta = instrument_meta.get(iid, {})
+            for flag in ("tradable", "eligible"):
+                if flag in meta and meta[flag].lower() in {"false", "0", "no", "disabled"}:
+                    issues.append(ValidationIssue(
+                        "INSTRUMENT_NOT_ELIGIBLE", "critical",
+                        f"{flag} is disabled for {meta.get('canonical_symbol', iid)}",
+                        iid, interval, row_no,
+                    ))
+            if profile_map and row.get("canonical_symbol") and row["canonical_symbol"].strip() not in profile_map:
+                issues.append(ValidationIssue(
+                    "UNPROFILED_SYMBOL", "critical",
+                    f"no market profile configured for {row['canonical_symbol'].strip()}",
+                    iid, interval, row_no,
+                ))
+
             values = [_decimal(row[name], name, row_no, issues)
                       for name in ("open_price", "high_price", "low_price", "close_price", "volume")]
             if all(v is not None for v in values):
@@ -226,8 +251,19 @@ def validate_dataset(
             raw_previous[key] = start
             groups[key].append((row_no, start))
 
-            if row.get("is_warmup", "").strip().lower() in {"true", "1", "yes"}:
+            is_warmup = row.get("is_warmup", "").strip().lower() in {"true", "1", "yes"}
+            key = (iid, interval)
+            if is_warmup:
                 warmup_rows += 1
+                warmup_groups.add(key)
+                if warmup_closed[key]:
+                    issues.append(ValidationIssue(
+                        "WARMUP_AFTER_SCORED", "critical",
+                        "warmup bars must precede all scored bars", iid, interval, row_no,
+                    ))
+                warmup_seen[key] = True
+            elif warmup_seen[key]:
+                warmup_closed[key] = True
 
     # Duplicate timestamps and internal gaps are evaluated after parsing so source-order errors
     # cannot be hidden by sorting.
@@ -252,6 +288,19 @@ def validate_dataset(
                                               f"gap of {int(delta.total_seconds())} seconds between bars",
                                               iid, interval))
 
+    for iid, meta in instrument_meta.items():
+        mode = meta.get("adjustment_mode") or meta.get("corporate_action_mode")
+        if mode and mode.lower() not in CORPORATE_ACTION_MODES:
+            issues.append(ValidationIssue(
+                "INVALID_ADJUSTMENT_MODE", "critical",
+                f"unsupported corporate-action adjustment mode: {mode}", iid,
+            ))
+        elif not mode:
+            issues.append(ValidationIssue(
+                "ADJUSTMENT_MODE_UNDECLARED", "warning",
+                "instrument does not declare raw/split-adjusted corporate-action mode", iid,
+            ))
+
     manifest_path = directory / "manifest.json"
     if manifest_path.is_file():
         try:
@@ -265,7 +314,7 @@ def validate_dataset(
             issues.append(ValidationIssue("INVALID_MANIFEST", "critical", "manifest.json is not valid JSON"))
 
     symbols = tuple(sorted({s for s in instruments.values() if s}))
-    if profile_map:
+    if profile_map and require_profile:
         for symbol in symbols:
             if symbol not in profile_map:
                 issues.append(ValidationIssue("UNPROFILED_SYMBOL", "critical",
@@ -280,5 +329,5 @@ def validate_dataset(
 
     return DatasetValidationReport(
         str(directory), str(bars_path), str(instruments_path), rows, len(groups),
-        tuple(issues), tuple(sorted(checked_intervals)), symbols, synthetic, warmup_rows,
+        tuple(issues), tuple(sorted(checked_intervals)), symbols, synthetic, warmup_rows, len(warmup_groups),
     )
