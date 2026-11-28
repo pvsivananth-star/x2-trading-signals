@@ -18,6 +18,7 @@ from app.backtest.dataset_runner import (
     _cost_model,
     _intrabar_exit,
     causal_regime,
+    classify_market_phase,
     entry_costs,
     exit_costs,
     minutes_to_close,
@@ -62,6 +63,18 @@ class SessionTimingTests(unittest.TestCase):
             {"SPY": "US_EQUITIES", "GLD": "US_COMMODITIES", "BTC-USD": "CRYPTO_MAJORS"},
         )
         self.assertEqual(COST_SECTION["US_COMMODITIES"], "US_ETF")
+
+    def test_market_phase_buckets_trend_sideways_normal_and_high_volatility(self):
+        up = SimpleNamespace(trend="up", atr=Decimal("1.0"))
+        down = SimpleNamespace(trend="down", atr=Decimal("1.0"))
+        sideways = SimpleNamespace(trend="sideways", atr=Decimal("1.0"))
+        high_vol = SimpleNamespace(trend="sideways", atr=Decimal("2.0"))
+        prior = [SimpleNamespace(atr=Decimal("1.0")) for _ in range(6)]
+        self.assertEqual(classify_market_phase(Regime.TREND_DAY, up, prior), "BULL_TREND")
+        self.assertEqual(classify_market_phase(Regime.TREND_DAY, down, prior), "BEAR_TREND")
+        self.assertEqual(classify_market_phase(Regime.CHOP_DAY, sideways, prior), "SIDEWAYS")
+        self.assertEqual(classify_market_phase(Regime.CHOP_DAY, up, prior), "NORMAL")
+        self.assertEqual(classify_market_phase(Regime.CHOP_DAY, high_vol, prior), "HIGH_VOL_CHOP")
 
     def test_regime_uses_current_session_displacement_after_six_bars(self):
         start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
