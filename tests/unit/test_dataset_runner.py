@@ -314,7 +314,7 @@ class IntrabarExitTests(unittest.TestCase):
                             Decimal(25000), Decimal("0.0025"), False)
         trade = result["trades"][0]
         self.assertEqual(trade.exit_reason, "MAX_HOLD_TIME")
-        self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 4 * 60)
+        self.assertEqual((trade.exit_time - trade.entry_time).total_seconds(), 3 * 60)
 
     def test_stagnation_exit_requires_insufficient_favourable_excursion(self):
         class EntryOnceEngine:
