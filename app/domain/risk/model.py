@@ -5,10 +5,13 @@ from enum import StrEnum
 from datetime import datetime
 
 class RiskDecisionStatus(StrEnum):
-    APPROVED="APPROVED"; REJECTED="REJECTED"; RISK_OFF="RISK_OFF"
+    APPROVED="APPROVED"
+    REJECTED="REJECTED"
+    RISK_OFF="RISK_OFF"
 
 class KillSwitchState(StrEnum):
-    INACTIVE="INACTIVE"; ACTIVE="ACTIVE"
+    INACTIVE="INACTIVE"
+    ACTIVE="ACTIVE"
 
 @dataclass(frozen=True, slots=True)
 class RiskDecision:
@@ -19,7 +22,8 @@ class RiskDecision:
     reason_codes: tuple[str,...]
     reservation_id: str|None=None
     def __post_init__(self):
-        if not self.reason_codes: raise ValueError("risk decision requires reason codes")
+        if not self.reason_codes:
+            raise ValueError("risk decision requires reason codes")
 
 @dataclass(frozen=True, slots=True)
 class RiskReservation:
