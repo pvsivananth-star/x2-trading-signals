@@ -217,6 +217,33 @@ class CostRuleTests(unittest.TestCase):
             self.assertEqual(result["trades"][0].risk_amount, Decimal(20))
             self.assertEqual(result["trades"][0].qty, expected_qty)
 
+    def test_reaction_zone_size_weight_reduces_risk_budget(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={
+                        "target": "110", "size_weight": "0.68",
+                    })
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = [
+            Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100), Decimal(100), 1)
+            for i in range(22)
+        ]
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        # The policy's 0.08% cap gives $20; the shallow-zone weight scales it to $13.60.
+        self.assertEqual(result["trades"][0].risk_amount, Decimal("13.6000"))
+
     def test_run_dataset_does_not_duplicate_configured_core_symbols(self):
         with patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory:
             run_dataset(
