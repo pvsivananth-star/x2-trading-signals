@@ -3,9 +3,9 @@
 Source of truth: `requirements.md` and `architecture.md`.
 
 ## Phase 1 — Domain foundation
-- [ ] 1. Create canonical domain package boundaries.
-- [ ] 2. Model Long-Term and Daily Trading portfolios with isolated capital/risk contexts.
-- [ ] 3. Define immutable domain entities and stable reason codes.
+- [x] 1. Create canonical domain package boundaries.
+- [x] 2. Model Long-Term and Daily Trading portfolios with isolated capital/risk contexts.
+- [x] 3. Define immutable domain entities and stable reason codes.
 - [ ] 4. Define canonical event envelope: event_id, timestamp, correlation_id, causation_id, version, provenance.
 - [ ] 5. Define ports for market data, execution, account, history, clock, calendar, event bus, event store and notifications.
 - [ ] 6. Define runtime modes: backtest, paper/demo and live-disabled.
