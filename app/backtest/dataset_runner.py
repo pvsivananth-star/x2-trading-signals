@@ -565,8 +565,9 @@ def dump_synthetic_warmup(
     instruments = directory / "instruments.csv"
     (output / "instruments.csv").write_text(instruments.read_text(encoding="utf-8"), encoding="utf-8")
     manifest = {
-        "fixture": "synthetic_warmup",
-        "synthetic": True,
+        "fixture": "historical_warmup",
+        "synthetic": False,
+        "data_origin": "real_market_history",
         "source_dataset": str(directory.resolve()),
         "source_bars": str(source.resolve()),
         "interval_seconds": interval_seconds,
