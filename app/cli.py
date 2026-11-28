@@ -84,8 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     free_data.add_argument("--symbols", default=None,
                            help="comma-separated symbols; defaults to the configured 16-market universe")
-    free_data.add_argument("--days", type=int, default=60,
-                           help="calendar days of 5-minute history (provider maximum: 60)")
+    free_data.add_argument("--symbol", default=None,
+                           help="download exactly one ticker (use a dedicated output directory)")
+    free_data.add_argument("--days", type=int, default=59,
+                           help="calendar days of 5-minute history (safe default: 59; provider limit: 60)")
     free_data.add_argument("--out", type=Path, default=Path("../back-test-copyright/free-market-data"),
                            help="output directory outside the repository")
 
@@ -163,9 +165,13 @@ def main(argv: list[str] | None = None) -> int:
             from app.backtest.dataset_runner import DEFAULT_PROFILE
             from app.backtest.free_data import DEFAULT_SYMBOLS, download_free_dataset
 
-            symbols = tuple(
-                value.strip().upper() for value in args.symbols.split(",") if value.strip()
-            ) if args.symbols else DEFAULT_SYMBOLS
+            if args.symbol and args.symbols:
+                raise ValueError("use either --symbol or --symbols, not both")
+            symbols = (
+                (args.symbol.strip().upper(),) if args.symbol
+                else tuple(value.strip().upper() for value in args.symbols.split(",") if value.strip())
+                if args.symbols else DEFAULT_SYMBOLS
+            )
             result = download_free_dataset(
                 args.out, symbols=symbols, days=args.days, profile_map=DEFAULT_PROFILE,
             )
