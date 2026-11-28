@@ -244,6 +244,65 @@ class CostRuleTests(unittest.TestCase):
         # The policy's 0.08% cap gives $20; the shallow-zone weight scales it to $13.60.
         self.assertEqual(result["trades"][0].risk_amount, Decimal("13.6000"))
 
+    def test_next_bar_gap_rejects_entry_when_structural_reward_risk_collapses(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            min_rr = Decimal("1.5")
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={
+                        "target": "101.9", "target_source": "SWING_HIGH",
+                    })
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = []
+        for i in range(22):
+            o, h, l, c = Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100)
+            if i == 2:
+                o, h, l, c = Decimal("101.8"), Decimal("101.9"), Decimal("101.7"), Decimal("101.8")
+            bars.append(Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                            o, h, l, c, Decimal(100), 1))
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"], [])
+
+    def test_atr_open_space_target_distance_is_reanchored_to_fill(self):
+        class EntryOnceEngine:
+            stop_mult = Decimal("0.75")
+            min_rr = Decimal("1.5")
+
+            def __init__(self):
+                self.entered = False
+
+            def evaluate(self, **kwargs):
+                if not self.entered and kwargs["snapshot"].atr is not None:
+                    self.entered = True
+                    return SimpleNamespace(action="enter_long", parameters={
+                        "target": "102", "target_source": "ATR_OPEN_SPACE",
+                    })
+                return SimpleNamespace(action="hold", parameters={})
+
+        start = datetime(2026, 11, 2, 14, 30, tzinfo=UTC)
+        bars = []
+        for i in range(22):
+            o, h, l, c = Decimal(100), Decimal("100.1"), Decimal("99.9"), Decimal(100)
+            if i == 2:
+                o, h, l, c = Decimal(101), Decimal("103.1"), Decimal("100.9"), Decimal(101)
+            bars.append(Bar(start + timedelta(minutes=i), start + timedelta(minutes=i + 1),
+                            o, h, l, c, Decimal(100), 1))
+        policy = TradingPolicy.from_yaml("config/markets_17.yaml")
+        result = run_symbol("SPY", bars, "US_EQUITIES", EntryOnceEngine(), policy, self.costs,
+                            Decimal(25000), Decimal("0.0025"), False)
+        self.assertEqual(result["trades"][0].exit_reason, "TARGET_HIT")
+        self.assertEqual(result["trades"][0].exit_price, Decimal(103))
+
     def test_run_dataset_does_not_duplicate_configured_core_symbols(self):
         with patch("app.backtest.dataset_runner.TradingPolicy", wraps=TradingPolicy) as policy_factory:
             run_dataset(
