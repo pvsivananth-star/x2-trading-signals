@@ -531,8 +531,13 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     + exit_costs(cost_values, filled_qty, target, "long" if side > 0 else "short")
                 ) if costs_applicable else Decimal(0)
                 known_cost_pct = known_roundtrip_cost / notional if notional > 0 else Decimal(0)
-                configured_roundtrip = Decimal(str(getattr(engine, "roundtrip_cost", "0.0010")))
-                slippage_buffer = Decimal(str(getattr(engine, "slippage_buffer", "0.0005")))
+                configured_roundtrip = max(
+                    Decimal(str(getattr(engine, "roundtrip_cost", "0.0010"))),
+                    Decimal(str(market_config.get("est_roundtrip_cost_pct", "0"))),
+                )
+                slippage_buffer = Decimal(str(
+                    market_config.get("slippage_buffer_pct", getattr(engine, "slippage_buffer", "0.0005"))
+                ))
                 effective_cost_budget = max(configured_roundtrip, known_cost_pct) + slippage_buffer
                 gross_room = Decimal(side) * (target - entry_px) / entry_px if entry_px > 0 else Decimal(0)
                 if gross_room - effective_cost_budget < required_net_room:
