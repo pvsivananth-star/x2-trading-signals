@@ -295,6 +295,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
 
     for i in range(len(bars)):
         bar = bars[i]
+        exited_this_bar = False
         if pos is not None:
             stop_distance = abs(pos.entry_price - pos.stop)
             favourable = (bar.high - pos.entry_price) if pos.side > 0 else (pos.entry_price - bar.low)
@@ -305,15 +306,18 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                 price, reason = hit
                 trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                 pos = None
+                exited_this_bar = True
             else:
                 held_minutes = (bar.bar_end - pos.entry_time).total_seconds() / 60
                 if held_minutes >= max_holding_minutes:
                     trades.append(_close(symbol, pos, bar.bar_end, bar.close, "MAX_HOLD_TIME", cost_values, net_available))
                     pos = None
+                    exited_this_bar = True
                 elif (stagnation_minutes > 0 and held_minutes >= stagnation_minutes
                       and pos.best_favorable_r < stagnation_min_favorable_r):
                     trades.append(_close(symbol, pos, bar.bar_end, bar.close, "STAGNATION_TIME", cost_values, net_available))
                     pos = None
+                    exited_this_bar = True
         if pos is None and pending is not None:
             side, stop_dist, target, entry_risk_pct = pending
             entry_px = bar.open
@@ -330,6 +334,7 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                     price, reason = hit
                     trades.append(_close(symbol, pos, bar.bar_end, price, reason, cost_values, net_available))
                     pos = None
+                    exited_this_bar = True
             pending = None
         if pos is not None:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
@@ -344,7 +349,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             if sig.action.startswith("exit_"):
                 trades.append(_close(symbol, pos, bar.bar_end, bar.close, sig.selected_fib_zone or "SIGNAL", cost_values, net_available))
                 pos = None
-        elif pos is None and pending is None:
+                exited_this_bar = True
+        elif pos is None and pending is None and not exited_this_bar:
             regime = causal_regime(bars[: i + 1], bar.bar_end, **session)
             sig = engine.evaluate(
                 timestamp=bar.bar_end, symbol=symbol, snapshot=snaps[i], regime=regime,
