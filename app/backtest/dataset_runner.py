@@ -301,20 +301,27 @@ def _commission(v: dict[str, Any], qty: Decimal, notional: Decimal) -> Decimal:
     return min(per_side, v["commission_max_pct_of_trade"] * notional)
 
 
-def entry_costs(v: dict[str, Any], qty: Decimal, price: Decimal) -> Decimal:
+def entry_costs(v: dict[str, Any], qty: Decimal, price: Decimal, side: str = "long") -> Decimal:
+    if side not in {"long", "short"}:
+        raise ValueError("side must be long or short")
     notional = qty * price
     cost = _commission(v, qty, notional) + v["finra_cat_per_share"] * qty + v["clearing_nscc_dtc_per_share"] * qty
     cost += v["spread_pct_full"] * notional
     if v["_slippage_on"]:
         cost += v["slippage_pct_per_side"] * notional
     cost += v["exchange_fee_per_share"] * qty
+    if side == "short":
+        cost += v["sec_fee_sell_rate"] * notional + v["finra_taf_sell_per_share"] * qty
     return cost
 
 
-def exit_costs(v: dict[str, Any], qty: Decimal, price: Decimal) -> Decimal:
+def exit_costs(v: dict[str, Any], qty: Decimal, price: Decimal, side: str = "long") -> Decimal:
+    if side not in {"long", "short"}:
+        raise ValueError("side must be long or short")
     notional = qty * price
     cost = _commission(v, qty, notional) + v["finra_cat_per_share"] * qty + v["clearing_nscc_dtc_per_share"] * qty
-    cost += v["sec_fee_sell_rate"] * notional + v["finra_taf_sell_per_share"] * qty
+    if side == "long":
+        cost += v["sec_fee_sell_rate"] * notional + v["finra_taf_sell_per_share"] * qty
     if v["_slippage_on"]:
         cost += v["slippage_pct_per_side"] * notional
     cost += v["exchange_fee_per_share"] * qty
@@ -536,7 +543,8 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
             actual_risk_amount = filled_qty * stop_dist
             if actual_risk_amount > risk_budget:
                 raise ValueError("simulated fill exceeds the configured risk budget")
-            ecost = entry_costs(cost_values, filled_qty, entry_px) if costs_applicable else None
+            trade_side = "long" if side > 0 else "short"
+            ecost = entry_costs(cost_values, filled_qty, entry_px, trade_side) if costs_applicable else None
             stop = entry_px - side * stop_dist
             pos = Position(side, filled_qty, bar.bar_start, entry_px, stop, target,
                            actual_risk_amount, ecost, entry_regime=entry_regime,
@@ -591,9 +599,10 @@ def run_symbol(symbol: str, bars: list[Bar], profile: str, engine: ConfluenceV1,
                         estimated_qty = Decimal(math.floor(estimated_qty))
                     if estimated_qty > 0:
                         estimated_notional = estimated_qty * snaps[i].last_close
+                        estimated_side = "long" if snaps[i].trend == "up" else "short"
                         known_cost = (
-                            entry_costs(cost_values, estimated_qty, snaps[i].last_close)
-                            + exit_costs(cost_values, estimated_qty, snaps[i].last_close)
+                            entry_costs(cost_values, estimated_qty, snaps[i].last_close, estimated_side)
+                            + exit_costs(cost_values, estimated_qty, snaps[i].last_close, estimated_side)
                         )
                         known_roundtrip_cost_pct = known_cost / estimated_notional
                 except ValueError:
@@ -649,7 +658,8 @@ def _close(symbol: str, pos: Position, exit_time: datetime, price: Decimal, reas
            v: dict[str, Any], costs_applicable: bool) -> Trade:
     gross = (price - pos.entry_price) * pos.qty * pos.side
     if costs_applicable and pos.entry_cost is not None:
-        cost = pos.entry_cost + exit_costs(v, pos.qty, price)
+        trade_side = "long" if pos.side > 0 else "short"
+        cost = pos.entry_cost + exit_costs(v, pos.qty, price, trade_side)
         net = gross - cost
         r = net / pos.risk_amount if pos.risk_amount else None
     else:
@@ -755,7 +765,7 @@ def _portfolio_entry_cost_reserve(
     known_entry_cost = Decimal(0)
     if profile in _EQUITY_COST_PROFILES:
         values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
-        known_entry_cost = entry_costs(values, trade.qty, trade.entry_price)
+        known_entry_cost = entry_costs(values, trade.qty, trade.entry_price, trade.side)
     market_buffer_pct = Decimal(str(market.get("est_roundtrip_cost_pct", 0)))
     estimated_buffer = trade.qty * trade.entry_price * market_buffer_pct
     return max(known_entry_cost, estimated_buffer)
@@ -837,8 +847,8 @@ def _apply_portfolio_constraints(
             cost_values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
             if profile in _EQUITY_COST_PROFILES:
                 cost = (
-                    entry_costs(cost_values, decision.quantity, trade.entry_price)
-                    + exit_costs(cost_values, decision.quantity, trade.exit_price)
+                    entry_costs(cost_values, decision.quantity, trade.entry_price, trade.side)
+                    + exit_costs(cost_values, decision.quantity, trade.exit_price, trade.side)
                 )
                 net = gross - cost
             else:
