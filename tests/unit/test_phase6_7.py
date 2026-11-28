@@ -240,7 +240,7 @@ class Phase67Tests(unittest.TestCase):
             minutes_to_close=120,
         )
         self.assertNotEqual(no_confirmation.action, "enter_long")
-        self.assertIn("bullish_close_confirmation_not_met", no_confirmation.rejected_gates)
+        self.assertIn("directional_close_confirmation_not_met", no_confirmation.rejected_gates)
 
     def test_false_positive_filters(self):
         policy = TradingPolicy(MARKETS, "policy-test")
