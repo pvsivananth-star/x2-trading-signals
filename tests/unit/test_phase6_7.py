@@ -190,7 +190,10 @@ class Phase67Tests(unittest.TestCase):
         up = FeatureSnapshot(now, Decimal(100), Decimal(2), Decimal("1.5"),
                              Decimal(105), Decimal(95), Decimal(100), Decimal(101),
                              Decimal(102), "up", "higher-highs-higher-lows", Decimal("0.008"),
-                             last_close=Decimal(101), pullback_depth=Decimal("0.5"))
+                             last_close=Decimal(101), pullback_depth=Decimal("0.5"),
+                             context_regime="TREND_DAY", context_timestamp=now,
+                             swing_15m_direction="up", swing_15m_size_atr=Decimal("5"),
+                             swing_15m_confirmed=True)
         buy = engine.evaluate(timestamp=now, symbol="BTC-USD", snapshot=up,
                               regime=Regime.TREND_DAY, stale_feed_seconds=1,
                               stale_threshold_seconds=10, minutes_to_close=120,
@@ -327,7 +330,7 @@ class Phase67Tests(unittest.TestCase):
             Decimal(100),
             Decimal(105),
             Decimal(95),
-            Decimal(100),
+            Decimal(102),
             Decimal(10),
             1,
         )
@@ -337,9 +340,14 @@ class Phase67Tests(unittest.TestCase):
         partial = simulator.submit(bar, "buy", "market", Decimal(10))
         self.assertEqual(partial.status, "partial")
         self.assertEqual(partial.quantity, Decimal(5))
+        self.assertEqual(partial.fill_price, Decimal(100))  # next-bar open, not close
         self.assertEqual(
             simulator.submit(bar, "buy", "limit", Decimal(1), Decimal(90)).status, "rejected"
         )
+        buy_limit = simulator.submit(bar, "buy", "limit", Decimal(1), Decimal(99))
+        sell_limit = simulator.submit(bar, "sell", "limit", Decimal(1), Decimal(101))
+        self.assertEqual(buy_limit.fill_price, Decimal(99))
+        self.assertEqual(sell_limit.fill_price, Decimal(101))
         self.assertEqual(simulator.submit(bar, "bogus", "market", Decimal(1)).status, "rejected")
 
     def test_golden_metrics_and_deterministic_replay(self):
