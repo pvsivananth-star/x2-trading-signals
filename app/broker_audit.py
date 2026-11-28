@@ -55,17 +55,23 @@ class MemoryBrokerAuditRepository:
     def save_audit(self, event: Mapping[str, object]) -> None: self._append("_audit", event)
 
     def quotes(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._quotes)
+        with self._lock:
+            return tuple(self._quotes)
     def trades(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._trades)
+        with self._lock:
+            return tuple(self._trades)
     def orders(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._orders)
+        with self._lock:
+            return tuple(self._orders)
     def fills(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._fills)
+        with self._lock:
+            return tuple(self._fills)
     def positions(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._positions)
+        with self._lock:
+            return tuple(self._positions)
     def audit(self) -> tuple[dict[str, object], ...]:
-        with self._lock: return tuple(self._audit)
+        with self._lock:
+            return tuple(self._audit)
 
 
 class PostgresBrokerAuditRepository:
