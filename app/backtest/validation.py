@@ -287,7 +287,8 @@ def validate_dataset(
                                               iid, interval, row_no))
             seen.add(start)
         ordered = sorted(starts)
-        for prev, current in zip(ordered, ordered[1:]):
+        for prev, current in zip(ordered, ordered[1:
+            ]):
             delta = current - prev
             if delta < timedelta(seconds=interval):
                 continue
@@ -306,7 +307,8 @@ def validate_dataset(
                 f"unsupported corporate-action adjustment mode: {mode}", iid,
             ))
         elif not mode:
-            # Missing metadata is allowed for legacy/local fixtures; a suspicious price jump
+            # Missing metadata is allowed for legacy/local fixtures
+            a suspicious price jump
             # above is the actionable signal that requires adjustment review.
             pass
 
