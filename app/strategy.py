@@ -255,6 +255,7 @@ class ConfluenceV1:
         position_stop: Decimal | None = None,
         position_target: Decimal | None = None,
         event_risk: EventRiskAssessment | None = None,
+        known_roundtrip_cost_pct: Decimal | None = None,
     ) -> DecisionCard:
         policy = self.policy.evaluate(
             timestamp=timestamp,
@@ -299,6 +300,7 @@ class ConfluenceV1:
             roundtrip_cost_used = max(
                 self.roundtrip_cost,
                 Decimal(str(market.get("est_roundtrip_cost_pct", self.roundtrip_cost))),
+                known_roundtrip_cost_pct or Decimal(0),
             )
             slippage_buffer_used = Decimal(str(market.get("slippage_buffer_pct", self.slippage_buffer)))
 
@@ -472,6 +474,7 @@ class ConfluenceV1:
             "rolling_rvol": str(snapshot.rolling_rvol),
             "slot_rvol_samples": snapshot.slot_rvol_samples,
             "roundtrip_cost_estimate_pct": str(roundtrip_cost_used),
+            "known_roundtrip_cost_pct": str(known_roundtrip_cost_pct) if known_roundtrip_cost_pct is not None else "N/A",
             "slippage_buffer_pct": str(slippage_buffer_used),
             "atr": str(snapshot.atr),
             "vwap": str(snapshot.vwap),
@@ -512,6 +515,7 @@ class ConfluenceV1:
             "move_room": _decimal_text(levels.net_move_room if levels else None),
             "move_room_threshold": _decimal_text(required_room),
             "roundtrip_cost_estimate_pct": _decimal_text(roundtrip_cost_used),
+            "known_roundtrip_cost_pct": _decimal_text(known_roundtrip_cost_pct),
             "slippage_buffer_pct": _decimal_text(slippage_buffer_used),
             "reward_to_risk": _decimal_text(levels.reward_to_risk if levels else None),
             "max_risk_pct": "N/A" if policy.max_risk_pct is None else str(policy.max_risk_pct),
