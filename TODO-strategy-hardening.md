@@ -105,7 +105,7 @@ flowchart TD
 - [x] Lifecycle tests: exact four-hour maximum measured from fill, stagnation exit, session flatten, and exit-reason/holding-duration accounting are covered.
 - [x] Execution tests: gap-aware entries/stops, fill-relative stop/target, entry-bar checks, both-levels-touched ambiguity, partial fills/rejections, and cost coverage.
 - [x] Portfolio tests: shared cash/market allocation, cluster exposure, maximum concurrency, expiry release, disabled markets, and fail-closed missing cluster configuration. Combined-run determinism is also tested; simultaneous candidate ordering is deterministic by timestamp then symbol.
-- [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 233 tests passed, 3 skipped on each version. `python -m compileall -q app tests` and `ruff check app tests` also passed (CI run 46140308684).
+- [x] Full suite on Python 3.12 and 3.13: `python -m unittest discover -s tests -v` — 234 tests passed, 3 skipped on each version (CI run 46140493871). `python -m compileall -q app tests` and `ruff check app tests` also passed.
 - [ ] Re-run bull, bear, normal, sideways, great-choppy, and combined datasets with identical assumptions; compare gross and net results separately.
 - [ ] Run chronological out-of-sample and walk-forward evaluation. Do not tune against the test period.
 - [x] Report trade count, win rate, gross PF, net PF (only where cost coverage permits), expectancy, drawdown, average/median/maximum holding time, exit-reason distribution, and per-symbol/per-market-phase/per-regime/per-direction breakdown.
