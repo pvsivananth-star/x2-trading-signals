@@ -8,7 +8,8 @@ from app.domain.trades.model import TradeIntent
 @dataclass(frozen=True, slots=True)
 class TradeManager:
     def create_intent(self, decision: StrategyDecision, *, quantity: Decimal, now, limit_price=None, stop_price=None, target_price=None) -> TradeIntent:
-        if not decision.trade_candidate: raise ValueError("only TRIGGER decisions can create trade intents")
+        if not decision.trade_candidate:
+            raise ValueError("only TRIGGER decisions can create trade intents")
         side="BUY" if decision.side.value=="LONG" else "SELL"
         return TradeIntent(
             intent_id=f"TI-{decision.signal.signal_id}",
