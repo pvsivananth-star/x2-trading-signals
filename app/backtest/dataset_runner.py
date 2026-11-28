@@ -706,6 +706,28 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
 
 
 
+def _portfolio_entry_cost_reserve(
+    trade: Trade,
+    market: dict[str, Any],
+    costs: dict[str, Any],
+    profile: str,
+    allow_estimates: bool,
+) -> Decimal:
+    """Reserve cash using the larger of known entry costs and the market cost buffer.
+
+    The configured round-trip percentage is deliberately used as a conservative cash
+    reservation buffer (not a P&L charge); realized P&L continues to use the itemized
+    cost ledger so the estimate is never double-counted.
+    """
+    known_entry_cost = Decimal(0)
+    if profile in _EQUITY_COST_PROFILES:
+        values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
+        known_entry_cost = entry_costs(values, trade.qty, trade.entry_price)
+    market_buffer_pct = Decimal(str(market.get("est_roundtrip_cost_pct", 0)))
+    estimated_buffer = trade.qty * trade.entry_price * market_buffer_pct
+    return max(known_entry_cost, estimated_buffer)
+
+
 def _apply_portfolio_constraints(
     results: list[dict[str, Any]],
     markets: dict[str, Any],
@@ -745,10 +767,9 @@ def _apply_portfolio_constraints(
         profile = profiles[trade.symbol]
         config = market_config[profile]
         stop_distance = trade.risk_amount / trade.qty if trade.qty > 0 else Decimal(0)
-        entry_cost_estimate = Decimal(0)
-        if profile in _EQUITY_COST_PROFILES:
-            sizing_cost_values, _excluded = _cost_model(costs, profile, allow_estimates, trade.symbol)
-            entry_cost_estimate = entry_costs(sizing_cost_values, trade.qty, trade.entry_price)
+        entry_cost_estimate = _portfolio_entry_cost_reserve(
+            trade, config, costs, profile, allow_estimates
+        )
         decision = ledger.reserve(
             timestamp=trade.entry_time,
             exit_time=trade.exit_time,
@@ -808,6 +829,7 @@ def _apply_portfolio_constraints(
         "rejected_trades": len(rejected),
         "rejection_counts": rejection_counts,
         "simultaneous_priority": "entry_time_then_symbol_then_exit_time",
+        "cash_cost_reserve": "max(itemized known entry costs, market estimated round-trip cost percentage); reservation only, not an additional P&L charge",
     }
 
 
