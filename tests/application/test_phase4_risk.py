@@ -10,7 +10,8 @@ from app.application.signals import Signal,SignalSide,SignalStage
 from app.application.strategy_manager import StrategyDecision
 
 def decision():
- t=datetime(2026,1,1,tzinfo=UTC); s=Signal.build(symbol="X",timestamp=t,causal_cutoff=t,stage=SignalStage.TRIGGER,side=SignalSide.LONG,portfolio_id="daily_trading",strategy_id="s",strategy_version="1",config_version="c",score=90,reason_codes=("ACCEPTED",),evidence={"x":1},provenance={})
+ t=datetime(2026,1,1,tzinfo=UTC)
+ s=Signal.build(symbol="X",timestamp=t,causal_cutoff=t,stage=SignalStage.TRIGGER,side=SignalSide.LONG,portfolio_id="daily_trading",strategy_id="s",strategy_version="1",config_version="c",score=90,reason_codes=("ACCEPTED",),evidence={"x":1},provenance={})
  return StrategyDecision("s","1","daily_trading","X",t,SignalStage.TRIGGER,SignalSide.LONG,90,("ACCEPTED",),(),s)
 def test_trade_intent_only_from_trigger():
  i=TradeManager().create_intent(decision(),quantity=Decimal("10"),now=datetime(2026,1,1,tzinfo=UTC))
@@ -25,6 +26,10 @@ def test_risk_kill_switch_rejects():
  d=r.evaluate(i,risk_amount=10,snapshot=RiskSnapshot(kill_switch=KillSwitchState.ACTIVE),now=datetime(2026,1,1,tzinfo=UTC),decision_id="d")
  assert d.status.value=="RISK_OFF"
 def test_breaker_release_fails_closed():
- b=CircuitBreaker(); b.activate(reason="test",operator="x")
- try: b.release(operator="x"); assert False
- except RuntimeError: pass
+ b=CircuitBreaker()
+ b.activate(reason="test",operator="x")
+ try:
+     b.release(operator="x")
+      assert False
+ except RuntimeError:
+     pass
