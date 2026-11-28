@@ -28,6 +28,8 @@ def _eval(snap, **kw):
     engine = ConfluenceV1(STRATEGY, TradingPolicy(MARKETS, "policy-test"))
     args = {"timestamp": NOW, "symbol": "AAPL", "snapshot": snap, "regime": Regime.TREND_DAY,
             "stale_feed_seconds": 1, "stale_threshold_seconds": 10, "minutes_to_close": 120}
+    if snap.trend == "down" and snap.last_close is not None:
+        args["previous_snapshot"] = replace(snap, last_close=snap.last_close + Decimal("0.1"))
     args.update(kw)
     return engine.evaluate(**args)
 
