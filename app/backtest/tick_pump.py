@@ -28,13 +28,16 @@ class TickPumpRuntime:
 
     def __init__(self, store: FeedStore, actor: ActorRuntime, broker: DemoBroker,
                  *, warmup_fraction: float = 0.25, interval_seconds: float = 1.0,
-                 quantity_per_trade: Decimal = Decimal(1), regime: Regime = Regime.TREND_DAY) -> None:
+                 quantity_per_trade: Decimal = Decimal(1), regime: Regime = Regime.TREND_DAY,
+                 minimum_warmup_sessions: int = 6) -> None:
         if not 0 < warmup_fraction < 1:
             raise ValueError("warmup_fraction must be between 0 and 1")
         if interval_seconds < 0:
             raise ValueError("interval_seconds cannot be negative")
         if quantity_per_trade <= 0:
             raise ValueError("quantity_per_trade must be positive")
+        if minimum_warmup_sessions < 2:
+            raise ValueError("minimum_warmup_sessions must be at least 2")
         self.store = store
         self.actor = actor
         self.broker = broker
@@ -42,6 +45,7 @@ class TickPumpRuntime:
         self.interval_seconds = interval_seconds
         self.quantity_per_trade = quantity_per_trade
         self.regime = regime
+        self.minimum_warmup_sessions = minimum_warmup_sessions
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._decisions: list[object] = []
@@ -69,11 +73,34 @@ class TickPumpRuntime:
             raise RuntimeError("no fixture tick streams available")
 
         per_stream_limit = max_ticks
-        warmup_counts = {
-            symbol: int(len(candles) * self.warmup_fraction)
-            for symbol, candles in streams.items()
-        }
-        warmup_ticks = min(warmup_counts.values())
+        warmup_counts: dict[str, int] = {}
+        for symbol, candles in streams.items():
+            session_dates = []
+            seen_dates = set()
+            for candle in candles:
+                session_date = candle.bar_start.date()
+                if session_date not in seen_dates:
+                    seen_dates.add(session_date)
+                    session_dates.append(session_date)
+            if len(session_dates) < self.minimum_warmup_sessions:
+                raise RuntimeError(
+                    f"{symbol}: backtest requires at least {self.minimum_warmup_sessions} "
+                    f"input sessions for slot-RVOL warmup; found {len(session_dates)}"
+                )
+            session_count = 0
+            required_count = 0
+            for index, candle in enumerate(candles):
+                if candle.bar_start.date() not in seen_dates:
+                    continue
+                if index == 0 or candle.bar_start.date() != candles[index - 1].bar_start.date():
+                    session_count += 1
+                if session_count >= self.minimum_warmup_sessions:
+                    required_count = index + 1
+                    break
+            fraction_count = int(len(candles) * self.warmup_fraction)
+            warmup_counts[symbol] = max(required_count, fraction_count)
+
+        warmup_ticks = sum(warmup_counts.values())
 
         pump_buffers: dict[str, list[Candle]] = {}
         ticks_processed = 0
@@ -88,11 +115,15 @@ class TickPumpRuntime:
         first_cards = self.actor.evaluate_once()
         self._record_decisions(first_cards)
 
-        for index in range(warmup_ticks, min(len(candles) for candles in streams.values())):
+        available_ticks = min(
+            len(candles) - warmup_counts[symbol] for symbol, candles in streams.items()
+        )
+        for offset in range(max(0, available_ticks)):
             if per_stream_limit is not None and ticks_processed >= per_stream_limit:
                 break
             tick_card_count = 0
             for symbol, candles in streams.items():
+                index = warmup_counts[symbol] + offset
                 if index >= len(candles):
                     continue
                 source = candles[index]
