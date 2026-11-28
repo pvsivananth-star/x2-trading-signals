@@ -413,6 +413,68 @@ def summarize(trades: list[Trade], start_equity: Decimal) -> dict[str, Any]:
     return out
 
 
+class InsufficientScoredDataError(ValueError):
+    """Raised when warmup leaves too little historical data for a valid replay."""
+
+
+def inspect_scored_data(
+    directory: str | Path,
+    *,
+    interval_seconds: int = 300,
+    warmup_sessions: int = 0,
+    min_scored_sessions: int = 20,
+    profile_map: dict[str, str] | None = None,
+    instrument_symbols: dict[int, str] | None = None,
+) -> dict[str, dict[str, int | str]]:
+    """Return per-symbol session coverage and fail if scored history is insufficient."""
+    if warmup_sessions < 0:
+        raise ValueError("warmup_sessions cannot be negative")
+    if min_scored_sessions < 1:
+        raise ValueError("min_scored_sessions must be at least 1")
+
+    directory = Path(directory)
+    profile_map = profile_map or DEFAULT_PROFILE
+    instrument_symbols = instrument_symbols or _instrument_symbols(directory)
+    grouped = group_bars(load_bar_records(directory / "bars.csv"))
+    coverage: dict[str, dict[str, int | str]] = {}
+    failures: list[str] = []
+
+    for iid, symbol in sorted(instrument_symbols.items()):
+        bars = grouped.get((iid, interval_seconds), [])
+        profile = profile_map.get(symbol)
+        if profile is None:
+            raise ValueError(f"no market profile configured for {symbol}")
+        timezone, _, _ = MARKET_SESSIONS.get(
+            profile, (DEFAULT_SESSION_TZ, DEFAULT_SESSION_OPEN, DEFAULT_SESSION_CLOSE)
+        )
+        dates = sorted({_local_dt(bar.bar_end, timezone).date() for bar in bars})
+        available = len(dates)
+        scored = max(0, available - warmup_sessions)
+        coverage[symbol] = {
+            "available_sessions": available,
+            "warmup_sessions_requested": warmup_sessions,
+            "scored_sessions": scored,
+            "minimum_scored_sessions": min_scored_sessions,
+        }
+        if warmup_sessions >= available:
+            failures.append(
+                f"{symbol}: requested {warmup_sessions} warmup sessions but only "
+                f"{available} are available (at least {warmup_sessions + 1} required)"
+            )
+        elif scored < min_scored_sessions:
+            failures.append(
+                f"{symbol}: {scored} scored sessions remain after {warmup_sessions} "
+                f"warmup sessions; minimum is {min_scored_sessions}"
+            )
+
+    if failures:
+        raise InsufficientScoredDataError(
+            "insufficient scored data; backtest blocked: " + "; ".join(failures) +
+            ". Use a longer historical dataset or reduce warmup/minimums only when justified."
+        )
+    return coverage
+
+
 def dump_synthetic_warmup(
     directory: str | Path,
     output_dir: str | Path,
@@ -426,7 +488,6 @@ def dump_synthetic_warmup(
         raise ValueError("warmup_sessions cannot be negative")
     directory = Path(directory)
     output = Path(output_dir)
-    output.mkdir(parents=True, exist_ok=True)
     profile_map = profile_map or DEFAULT_PROFILE
 
     source = directory / "bars.csv"
@@ -458,6 +519,11 @@ def dump_synthetic_warmup(
             if dt not in seen:
                 seen.add(dt)
                 session_dates.append(dt)
+        if warmup_sessions > len(session_dates):
+            raise InsufficientScoredDataError(
+                f"{symbol}: requested {warmup_sessions} warmup sessions but only "
+                f"{len(session_dates)} are available; refusing to silently truncate warmup"
+            )
         warm_dates = set(session_dates[:warmup_sessions])
         applied_by_symbol[symbol] = [str(x) for x in session_dates[:warmup_sessions]]
         for row in symbol_rows:
@@ -467,6 +533,7 @@ def dump_synthetic_warmup(
                 copied["is_warmup"] = "true"
                 selected.append(copied)
 
+    output.mkdir(parents=True, exist_ok=True)
     if "is_warmup" not in fieldnames:
         fieldnames.append("is_warmup")
     with (output / "bars.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -499,13 +566,18 @@ def dump_synthetic_warmup(
 def run_dataset(directory: str | Path, interval_seconds: int = 300, start_equity: Decimal = Decimal(25000),
                 risk_pct: Decimal = Decimal("0.0025"), allow_estimates: bool = False,
                 profile_map: dict[str, str] | None = None, instrument_symbols: dict[int, str] | None = None,
-                warmup_sessions: int = 0,
+                warmup_sessions: int = 0, min_scored_sessions: int = 20,
                 markets_path: str | Path = "config/markets_17.yaml",
                 costs_path: str | Path = "config/costs.yaml",
                 strategy_path: str | Path = "config/strategies/confluence_pullback.yaml") -> dict[str, Any]:
     directory = Path(directory)
     profile_map = profile_map or DEFAULT_PROFILE
     instrument_symbols = instrument_symbols or _instrument_symbols(directory)
+    inspect_scored_data(
+        directory, interval_seconds=interval_seconds, warmup_sessions=warmup_sessions,
+        min_scored_sessions=min_scored_sessions, profile_map=profile_map,
+        instrument_symbols=instrument_symbols,
+    )
     records = load_bar_records(directory / "bars.csv")
     grouped = group_bars(records)
 
