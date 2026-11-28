@@ -8,7 +8,9 @@ def test_health_is_fail_closed():
     assert health_status(data_healthy=True,broker_healthy=False,reconciled=True).status=="degraded"
 
 def test_metrics_and_logging_are_structured():
-    m=Metrics(); m.inc("orders",2); m.set("risk",1)
+    m=Metrics()
+    m.inc("orders",2)
+    m.set("risk",1)
     assert m.snapshot()["counters"]["orders"]==2
     configure_logging("WARNING")
     assert logging.getLogger().level==logging.WARNING
